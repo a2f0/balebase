@@ -101,9 +101,9 @@ export function inboxApi(transport: Transport) {
     disconnectMailbox: (id: string) =>
       transport.call(endpoints.disconnect, { params: { id } }),
     /** A folder's emails and the address that delivers to the inbox. */
-    list(folder: InboxFolder = "inbox", mailbox?: string) {
+    list(folder: InboxFolder = "inbox", mailbox?: string, email?: string) {
       return transport.call(endpoints.list, {
-        query: { ...folderQuery(folder), mailbox },
+        query: { ...folderQuery(folder), mailbox, email },
       });
     },
     async get(id: string, folder: InboxFolder = "inbox") {

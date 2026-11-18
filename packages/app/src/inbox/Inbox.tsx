@@ -19,7 +19,6 @@ import type {
   InboundEmailLink,
   InboundEmailSummary,
   InboxFolder,
-  Mailbox,
 } from "@balebase/validators/inbox";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityFeed } from "../activity/ActivityFeed";
@@ -65,7 +64,7 @@ function useInboxModel() {
       ? requested
       : "inbox";
   });
-  const [mailbox, setMailbox] = useState("");
+  const [mailbox, setMailbox] = useState<string>();
   const messages = useInboxMessages(folder, mailbox);
   const actions = useInboxActions(messages);
   function selectFolder(nextFolder: InboxFolder) {
@@ -76,10 +75,12 @@ function useInboxModel() {
   return { actions, folder, messages, selectFolder, mailbox, setMailbox };
 }
 
-function useInboxMessages(folder: InboxFolder, mailbox: string) {
-  const [mailboxes, setMailboxes] = useState<Mailbox[]>([]);
-  const [emails, setEmails] = useState<InboundEmailSummary[]>([]);
-  const [inboundAddress, setInboundAddress] = useState<string>();
+function useInboxMessages(folder: InboxFolder, mailbox: string | undefined) {
+  const [listing, setListing] =
+    useState<Awaited<ReturnType<typeof api.inbox.list>>>();
+  const selectedMailbox = listing?.mailboxes?.find(
+    (box) => box.id === listing.mailboxId,
+  );
   const [selectedId, setSelectedId] = useState<string>();
   const [loadingList, setLoadingList] = useState(true);
   const [error, setError] = useState<string>();
@@ -91,17 +92,16 @@ function useInboxMessages(folder: InboxFolder, mailbox: string) {
     setLoadingList(true);
     setError(undefined);
     try {
-      const listing = await api.inbox.list(folder, mailbox || undefined);
+      const listing = await api.inbox.list(
+        folder,
+        mailbox || undefined,
+        mailbox === undefined ? openedByLink : undefined,
+      );
       if (request !== listRequest.current) return;
       const nextEmails = listing.emails;
       const requested = pending.current;
       pending.current = undefined;
-      setEmails(nextEmails);
-      const selected = listing.mailboxes?.find((box) => box.id === mailbox);
-      setInboundAddress(
-        selected && !selected.connected ? undefined : listing.address,
-      );
-      setMailboxes(listing.mailboxes ?? []);
+      setListing(listing);
       setSelectedId((current) =>
         selectEmailId(nextEmails, current, requested, openedByLink),
       );
@@ -114,8 +114,7 @@ function useInboxMessages(folder: InboxFolder, mailbox: string) {
   }, [folder, mailbox, openedByLink, pending]);
 
   useEffect(() => {
-    setEmails([]);
-    setInboundAddress(undefined);
+    setListing(undefined);
     setSelectedId(undefined);
     void refresh();
     return () => {
@@ -132,10 +131,12 @@ function useInboxMessages(folder: InboxFolder, mailbox: string) {
   );
   return {
     detail: message.data,
-    emails,
+    emails: listing?.emails ?? [],
     error: error ?? message.error,
-    inboundAddress,
-    mailboxes,
+    inboundAddress:
+      selectedMailbox?.connected === false ? undefined : listing?.address,
+    mailboxes: listing?.mailboxes ?? [],
+    listedMailbox: listing?.mailboxId ?? "",
     loadingList,
     loadingMessage: Boolean(selectedId) && message.loading,
     refresh,
@@ -259,7 +260,7 @@ function InboxView({
               Mailbox
               <select
                 className="input"
-                value={model.mailbox}
+                value={model.mailbox ?? messages.listedMailbox}
                 onChange={(event) => model.setMailbox(event.target.value)}
               >
                 <option value="">Default inbox</option>

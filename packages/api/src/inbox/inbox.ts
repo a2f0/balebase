@@ -64,9 +64,18 @@ inbox.get("/", async (context) => {
   if (!folder) return invalidFolder(context);
   const organizationId = context.get("organizationId");
   const mailboxes = await listMailboxes(context.env.DB, organizationId);
-  const mailboxId = context.req.query("mailbox");
+  const linkedEmail = context.req.query("email");
+  const mailboxId =
+    context.req.query("mailbox") ??
+    (linkedEmail
+      ? await context.env.DB.prepare(
+          "SELECT mailbox_id FROM inbound_emails WHERE organization_id = ? AND id = ?",
+        )
+          .bind(organizationId, linkedEmail)
+          .first<string>("mailbox_id")
+      : null);
   const selected = mailboxes.find((box) => box.id === mailboxId);
-  if (mailboxId !== undefined && !selected)
+  if (mailboxId !== null && !selected)
     return context.json({ error: "Inbox not found." }, 404);
   const folderFilter = emailFolderFilter(folder);
   const ordering =
@@ -96,6 +105,7 @@ inbox.get("/", async (context) => {
 
   return respond(context, inboxRoutes.list, {
     mailboxes,
+    mailboxId: selected?.id ?? null,
     address:
       selected?.address ??
       organizationInboxAddress(

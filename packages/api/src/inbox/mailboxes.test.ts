@@ -176,6 +176,19 @@ describe("verified inbound domains", () => {
       emails: { id: string }[];
     };
     expect(listing.emails).toHaveLength(2);
+    expect(
+      await (await f.request(`/?email=${listing.emails[0]?.id}`)).json(),
+    ).toMatchObject({ mailboxId: id, address: "legal@tearleads.com" });
+    expect(
+      await (
+        await f.request(
+          `/?email=${listing.emails[0]?.id}`,
+          "GET",
+          undefined,
+          "other",
+        )
+      ).json(),
+    ).toMatchObject({ mailboxId: null, emails: [] });
     expect(await (await f.request("/")).json()).toMatchObject({
       emails: [{ to: `upload+${f.org}@inbox.balebase.com` }],
     });

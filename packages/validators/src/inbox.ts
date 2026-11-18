@@ -179,11 +179,15 @@ export const inboxRoutes = {
   list: route({
     method: "GET",
     path: "/api/inbox",
-    query: InboxFolderQuerySchema.extend({ mailbox: z.string().optional() }),
+    query: InboxFolderQuerySchema.extend({
+      mailbox: RecordIdSchema.optional(),
+      email: RecordIdSchema.optional(),
+    }),
     response: z.object({
       /** The address that delivers mail to this organization's inbox. */
       address: z.string(),
       emails: z.array(InboundEmailSummarySchema),
+      mailboxId: z.string().nullable(),
       mailboxes: z.array(MailboxSchema),
     }),
   }),

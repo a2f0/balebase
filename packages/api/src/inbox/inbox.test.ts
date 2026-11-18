@@ -155,6 +155,7 @@ describe("inbox", () => {
     const listBody: unknown = await list.json();
     expect(listBody).toEqual({
       mailboxes: [],
+      mailboxId: null,
       address: `upload+${organizationId}@inbox.balebase.com`,
       emails: [
         {
