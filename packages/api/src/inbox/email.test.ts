@@ -165,11 +165,12 @@ function createDatabase() {
       const statement = {
         bind: (...nextValues: unknown[]) => {
           values = nextValues;
-          if (!query.includes("SELECT id FROM organization")) {
+          if (query.includes("INSERT INTO inbound_")) {
             statements.push({ query, values });
           }
           return statement;
         },
+        run: async () => ({}),
         first: async () =>
           values[0] === organizationId ? { id: organizationId } : null,
       };

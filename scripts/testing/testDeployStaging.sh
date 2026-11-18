@@ -200,3 +200,22 @@ fi
 [[ ! -s "$MOCK_LOG" ]] || { echo 'Staging ran commands after rejecting a live publishable key' >&2; exit 1; }
 
 echo 'Staging deployment isolation checks passed.'
+
+# The customer-forwarding release can precede the platform cutover. Once an
+# operator opts in, two active addresses in the wrong tenant must still fail.
+cp "$REPO_ROOT/scripts/deploy/verifyInboundEmail.sh" "$FIXTURE/scripts/deploy/"
+verify_bindings() {
+  DEPLOY_TIER=staging PATH="$FIXTURE/bin:$PATH" bash "$FIXTURE/scripts/deploy/verifyInboundEmail.sh" --bindings-only
+}
+cat > "$FIXTURE/bin/bunx" <<'STUB'
+#!/usr/bin/env bash
+if [[ "$*" != *'d1 execute DB --remote'* || "$*" != *'wrangler.staging.jsonc'* ]]; then exit 2; fi
+echo "[{\"results\":[{\"recipients\":2,\"organizations\":1,\"organization_id\":\"${TEST_RECIPIENT_ORG:?}\"}]}]"
+STUB
+verify_bindings
+echo 'TF_VAR_platform_mailbox_organization_id=balebase-workspace' >> "$STAGING_APP_ENV"
+if TEST_RECIPIENT_ORG=other-workspace verify_bindings; then
+  echo 'Platform inbox verification accepted the wrong workspace' >&2
+  exit 1
+fi
+TEST_RECIPIENT_ORG=balebase-workspace verify_bindings

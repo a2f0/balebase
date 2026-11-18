@@ -72,25 +72,29 @@ resource "cloudflare_email_routing_rule" "inbound" {
 # existing resource, and the zone's existing SPF record stays in place.
 # These are the exchanges and priorities assigned to the zone's upload inbox.
 resource "cloudflare_dns_record" "platform_mx" {
-  for_each = {
+  for_each = var.platform_mailbox_organization_id != "" ? {
     "route1.mx.cloudflare.net" = 87
     "route2.mx.cloudflare.net" = 43
     "route3.mx.cloudflare.net" = 21
-  }
+  } : {}
   zone_id  = data.cloudflare_zone.main.id
   name     = var.domain
   type     = "MX"
   content  = each.key
   priority = each.value
   ttl      = 1
+
+  # Activate the Worker rules before mail for the apex starts arriving.
+  depends_on = [cloudflare_email_routing_rule.mailboxes]
 }
 
 resource "cloudflare_email_routing_rule" "mailboxes" {
-  for_each = toset([
-    "inbox@${var.inbound_email_subdomain}",
-    "legal@${var.domain}",
-    "privacy@${var.domain}",
-  ])
+  for_each = toset(concat(
+    ["inbox@${var.inbound_email_subdomain}"],
+    var.platform_mailbox_organization_id == "" ? [] : [
+      "legal@${var.domain}", "privacy@${var.domain}"
+    ]
+  ))
   zone_id = data.cloudflare_zone.main.id
   name    = "Deliver ${each.value} to ${var.api_worker_name}"
   enabled = true
@@ -104,7 +108,7 @@ resource "cloudflare_email_routing_rule" "mailboxes" {
     type  = "worker"
     value = [var.api_worker_name]
   }]
-  depends_on = [cloudflare_email_routing_dns.inbound, cloudflare_dns_record.platform_mx]
+  depends_on = [cloudflare_email_routing_dns.inbound]
 }
 
 locals {

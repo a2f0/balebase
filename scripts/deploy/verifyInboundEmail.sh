@@ -32,17 +32,18 @@ else
 fi
 
 # Cloudflare can route both addresses while D1 still rejects their envelopes.
-# Only read aggregate counts so deployment logs contain no mailbox contents.
+# Only compare aggregate counts and the destination organization ID.
 check_bindings() {
   local sql
-  sql="SELECT count(*) AS recipients, count(DISTINCT box.organization_id) AS organizations
+  if [[ -z "${TF_VAR_platform_mailbox_organization_id:-}" ]]; then return 0; fi
+  sql="SELECT count(*) AS recipients, count(DISTINCT box.organization_id) AS organizations, min(box.organization_id) AS organization_id
     FROM inbound_mailboxes box JOIN organization org ON org.id = box.organization_id
     WHERE box.disconnected_at IS NULL AND org.deletedAt IS NULL
       AND box.address IN ('legal@$PLATFORM_DOMAIN', 'privacy@$PLATFORM_DOMAIN')"
   if ! (
     cd "$SCRIPT_DIR/../../packages/api"
     bunx --bun --no-install wrangler d1 execute DB --remote --config "$api_config" --command "$sql" --json
-  ) | jq -e '.[0].results[0] | .recipients == 2 and .organizations == 1' >/dev/null; then
+  ) | jq -e --arg expected "$TF_VAR_platform_mailbox_organization_id" '.[0].results[0] | .recipients == 2 and .organizations == 1 and .organization_id == $expected' >/dev/null; then
     echo "ERROR: Connect both legal@$PLATFORM_DOMAIN and privacy@$PLATFORM_DOMAIN in the Balebase workspace, then rerun email verification." >&2
     exit 1
   fi
@@ -88,13 +89,17 @@ check_mx() {
   fi
 }
 check_mx "$INBOUND_DOMAIN"
-if [[ "$PLATFORM_DOMAIN" != "$INBOUND_DOMAIN" ]]; then check_mx "$PLATFORM_DOMAIN"; fi
+if [[ -n "${TF_VAR_platform_mailbox_organization_id:-}" && "$PLATFORM_DOMAIN" != "$INBOUND_DOMAIN" ]]; then check_mx "$PLATFORM_DOMAIN"; fi
 
 rules_response="$(
   cloudflare_get "$email_token" "$API_BASE/zones/$zone_id/email/routing/rules"
 )"
 
-for address in "upload@$INBOUND_DOMAIN" "inbox@$INBOUND_DOMAIN" "legal@$PLATFORM_DOMAIN" "privacy@$PLATFORM_DOMAIN"; do
+addresses=("upload@$INBOUND_DOMAIN" "inbox@$INBOUND_DOMAIN")
+if [[ -n "${TF_VAR_platform_mailbox_organization_id:-}" ]]; then
+  addresses+=("legal@$PLATFORM_DOMAIN" "privacy@$PLATFORM_DOMAIN")
+fi
+for address in "${addresses[@]}"; do
   matching_rules="$(
     jq --arg address "$address" --arg worker "$WORKER_NAME" \
       '[.result[]? |
@@ -126,5 +131,7 @@ fi
 check_bindings
 
 echo "PASS: $INBOUND_DOMAIN has its three Cloudflare Email Routing MX records."
-echo "PASS: Uploads, forwarded inboxes, and platform legal addresses route to $WORKER_NAME."
-echo "PASS: Both platform addresses have active inboxes in the same organization."
+echo "PASS: ${addresses[*]} route to $WORKER_NAME."
+if [[ -n "${TF_VAR_platform_mailbox_organization_id:-}" ]]; then
+  echo "PASS: Both platform addresses have active inboxes in the configured Balebase organization."
+fi

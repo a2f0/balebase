@@ -235,6 +235,30 @@ describe("verified inbound domains", () => {
     expect(f.storage.stored.size).toBe(0);
   });
 
+  it("keeps committed R2 bytes when D1 loses its batch response", async () => {
+    const f = fixture();
+    const bound = await f.bind("privacy@balebase.com", "root");
+    const { forwardingAddress } = (await bound.json()) as {
+      forwardingAddress: string;
+    };
+    f.bindings.DB = toD1(f.database, {
+      afterQuery(event) {
+        if (
+          event.method === "batch" &&
+          event.sql.includes("INSERT INTO inbound_emails")
+        )
+          throw new Error("Lost D1 response");
+      },
+    });
+    expect(await f.deliver(forwardingAddress)).toBeUndefined();
+    expect(
+      f.database.query("SELECT id FROM inbound_emails").all(),
+    ).toHaveLength(1);
+    expect(
+      f.database.query("SELECT id FROM deleted_object_cleanup").all(),
+    ).toHaveLength(0);
+    expect(f.storage.stored.size).toBe(1);
+  });
   it.each(["inbox.balebase.com", "inbox-staging.balebase.com"])(
     "protects platform and legacy addresses on %s",
     async (domain) => {

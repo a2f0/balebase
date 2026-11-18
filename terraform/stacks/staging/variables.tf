@@ -86,3 +86,9 @@ variable "api_worker_name" {
   type        = string
   default     = "balebase-api-staging"
 }
+
+variable "platform_mailbox_organization_id" {
+  description = "Organization whose legal and privacy inboxes are ready. Set per tier after creating the inboxes."
+  type        = string
+  default     = ""
+}

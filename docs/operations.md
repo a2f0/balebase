@@ -159,10 +159,13 @@ the same two local parts at `inbox-staging.balebase.com`, and stage customer
 forwarding to the alias on that host. Apply migration 0105 and deploy the
 Worker before enabling the new routing rules. Review the production Terraform
 plan for apex MX changes and run `bun run deploy:email:verify` after applying.
-The verifier checks that both platform addresses have connected inboxes in the
-same active organization. Production checks the bindings before applying
-apex MX. On first setup, deploy the Worker and UI, connect both addresses,
-then run `bun run deploy:domains` to finish the cutover. Send
+The first deploy sets up uploads and customer forwarding. To enable the
+platform recipients, connect both addresses in the Balebase organization and
+set `TF_VAR_platform_mailbox_organization_id` to that organization's ID in
+the tier's deployment environment. Keep this value set while routing should
+remain active. Production checks both bindings against that ID before applying
+the rules, then publishes apex MX. Run `bun run deploy:domains` to finish
+the production cutover. Send
 one external message per platform address and confirm each lands in its
 designated inbox before announcing the addresses.
 

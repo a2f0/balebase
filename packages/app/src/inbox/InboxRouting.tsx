@@ -6,14 +6,16 @@ import { useAction } from "../shared/useAction";
 import { useLoad } from "../shared/useLoad";
 
 export function InboxRouting({ onChange }: { onChange: () => Promise<void> }) {
-  const [open, setOpen] = useState(false);
+  const [visited, setVisited] = useState(false);
   return (
     <details
       className="card"
-      onToggle={(event) => setOpen(event.currentTarget.open)}
+      onToggle={(event) => {
+        if (event.currentTarget.open) setVisited(true);
+      }}
     >
       <summary>Manage inbox addresses</summary>
-      {open && <RoutingSettings onChange={onChange} />}
+      {visited && <RoutingSettings onChange={onChange} />}
     </details>
   );
 }

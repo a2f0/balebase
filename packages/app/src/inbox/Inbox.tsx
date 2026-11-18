@@ -141,9 +141,10 @@ function useInboxMessages(folder: InboxFolder, mailbox: string | undefined) {
  * the query is removed so later reloads open the inbox normally.
  */
 function useLinkedEmailId() {
-  const [openedByLink] = useState(
-    () => new URLSearchParams(window.location.search).get("email") ?? undefined,
-  );
+  const [openedByLink] = useState(() => {
+    const id = new URLSearchParams(window.location.search).get("email");
+    return id && id.length <= 100 ? id : undefined;
+  });
   const pending = useRef(openedByLink);
   useEffect(() => {
     if (window.location.search) {

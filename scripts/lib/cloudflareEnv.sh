@@ -54,7 +54,7 @@ load_cloudflare_tier_env() {
 
   if [[ "$tier" == "staging" ]]; then
     unset TF_VAR_cloudflare_api_token TF_VAR_cloudflare_account_id \
-      CLOUDFLARE_EMAIL_API_TOKEN
+      CLOUDFLARE_EMAIL_API_TOKEN TF_VAR_platform_mailbox_organization_id
   fi
   load_tier_env "$tier" "$repo_root"
   validate_cloudflare_env

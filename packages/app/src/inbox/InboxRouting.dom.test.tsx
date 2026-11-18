@@ -127,6 +127,16 @@ it("refreshes the current mailbox when a routing save settles after a switch", a
     "tearleads.com",
   );
   await click("Add domain");
+  for (const open of [false, true]) {
+    await act(async () => {
+      details.open = open;
+      details.dispatchEvent(new dom.Event("toggle") as never);
+    });
+  }
+  expect(
+    container.querySelector<HTMLButtonElement>('button[type="submit"]')
+      ?.disabled,
+  ).toBe(true);
   await fill(container.querySelector("select"), "legal");
   await act(async () => save.resolve(Response.json({ id: "d" })));
   await settle();
