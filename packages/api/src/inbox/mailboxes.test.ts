@@ -114,6 +114,7 @@ function fixture(inboundDomain = "inbox.balebase.com", afterPut?: () => void) {
 describe("verified inbound domains", () => {
   it("verifies only the requesting organization's exact TXT value without reserving pending names", async () => {
     const f = fixture();
+    expect((await f.request("/?folder=")).status).toBe(200);
     const other = await f.claim("other");
     const owner = await f.claim();
     expect(await f.claim()).toEqual(owner);

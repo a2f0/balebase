@@ -36,7 +36,7 @@ import { useClipboard } from "../shared/useClipboard";
 import { useLoad } from "../shared/useLoad";
 import { AttachmentPreviewTile } from "./AttachmentPreview";
 import { EmailLinks } from "./EmailLinks";
-import { InboxRouting } from "./InboxRouting";
+import { InboxRouting, useRoutingRefresh } from "./InboxRouting";
 import { selectEmailId } from "./inboxSelection";
 import { previewKindFor } from "./previewKind";
 
@@ -92,6 +92,7 @@ function useInboxMessages(folder: InboxFolder, mailbox: string | undefined) {
     ),
     "Could not load the inbox.",
   );
+  useRoutingRefresh(list.reload);
   const listing =
     list.data?.folder === folder && list.data.mailbox === mailbox
       ? list.data.listing
@@ -252,7 +253,7 @@ function InboxView({
           </Toast>
         )}
         <div className="stack">
-          {context.canManage && <InboxRouting onChange={messages.refresh} />}
+          {context.canManage && <InboxRouting />}
           {messages.mailboxes.length > 0 && (
             <label className="field">
               Mailbox

@@ -31,6 +31,12 @@ else
   WORKER_NAME="balebase-api"
 fi
 
+cloudflare_get() {
+  local token="$1"
+  shift
+  curl -fsS "$@" -H "Authorization: Bearer $token"
+}
+
 # Cloudflare can route both addresses while D1 still rejects their envelopes.
 # Only compare aggregate counts and the destination organization ID.
 check_bindings() {
@@ -47,17 +53,15 @@ check_bindings() {
     echo "ERROR: Connect both legal@$PLATFORM_DOMAIN and privacy@$PLATFORM_DOMAIN in the Balebase workspace, then rerun email verification." >&2
     exit 1
   fi
+  if ! cloudflare_get "$account_token" "$API_BASE/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$WORKER_NAME/settings" |
+    jq -e --arg expected "$TF_VAR_platform_mailbox_organization_id" '.success == true and any(.result.bindings[]?; .name == "PLATFORM_MAILBOX_ORGANIZATION_ID" and .type == "plain_text" and .text == $expected)' >/dev/null; then
+    echo "ERROR: Deploy $WORKER_NAME with the configured platform inbox organization before enabling its email routes." >&2
+    exit 1
+  fi
 }
-if [[ "${1:-}" == "--bindings-only" ]]; then
-  check_bindings
+if [[ "${1:-}" == "--bindings-only" && -z "${TF_VAR_platform_mailbox_organization_id:-}" ]]; then
   exit 0
 fi
-
-cloudflare_get() {
-  local token="$1"
-  shift
-  curl -fsS "$@" -H "Authorization: Bearer $token"
-}
 
 zone_response="$(cloudflare_get "$email_token" "$API_BASE/zones?name=$ZONE_NAME")"
 zone_id="$(jq -r '.result[0].id // empty' <<<"$zone_response")"
@@ -71,23 +75,29 @@ fi
 # and public resolvers negatively cache a subdomain that was checked before it
 # existed, so read the zone's live MX records with the account token.
 check_mx() {
-  local domain="$1" mx_response
+  local domain="$1" mode="${2:-live}" mx_response
   mx_response="$(
     cloudflare_get "$account_token" --get "$API_BASE/zones/$zone_id/dns_records" \
       --data-urlencode "type=MX" \
       --data-urlencode "name=$domain"
   )"
 
-  if ! jq -e \
-    '(.success == true) and
-     (([.result[]? |
-        select(.content | test("mx\\.cloudflare\\.net\\.?$"))] |
-       length) == 3)' \
-    >/dev/null <<<"$mx_response"; then
-    echo "ERROR: Email Routing MX records are not live for $domain." >&2
+  if ! jq -e --arg mode "$mode" '
+      ["route1.mx.cloudflare.net","route2.mx.cloudflare.net","route3.mx.cloudflare.net"] as $expected |
+      [.result[]?.content | ascii_downcase | rtrimstr(".")] as $actual |
+      .success == true and (.result_info.total_count // ($actual | length)) == ($actual | length) and
+      (if $mode == "before" then (($actual - $expected) | length) == 0
+       else ($actual | sort) == $expected end)' >/dev/null <<<"$mx_response"; then
+    echo "ERROR: Unexpected Email Routing MX records for $domain ($mode)." >&2
     exit 1
   fi
 }
+if [[ "${1:-}" == "--bindings-only" ]]; then
+  check_bindings
+  check_mx "$PLATFORM_DOMAIN" before
+  exit 0
+fi
+
 check_mx "$INBOUND_DOMAIN"
 if [[ -n "${TF_VAR_platform_mailbox_organization_id:-}" && "$PLATFORM_DOMAIN" != "$INBOUND_DOMAIN" ]]; then check_mx "$PLATFORM_DOMAIN"; fi
 

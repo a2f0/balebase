@@ -62,7 +62,7 @@ interface InboundEmailAttachmentRow {
 inbox.get("/", async (context) => {
   const query = readQuery(context, inboxRoutes.list, "Invalid inbox query.");
   if (query instanceof Response) return query;
-  const folder = query.folder ?? "inbox";
+  const folder = query.folder || "inbox";
   const organizationId = context.get("organizationId");
   const mailboxes = await listMailboxes(context.env.DB, organizationId);
   const linkedEmail = query.email;

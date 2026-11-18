@@ -1,11 +1,25 @@
 import { Button, confirmDialog, Toast } from "@balebase/ui/react";
 import type { DomainClaim } from "@balebase/validators/inbox";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "../shared/apiClient";
 import { useAction } from "../shared/useAction";
 import { useLoad } from "../shared/useLoad";
 
-export function InboxRouting({ onChange }: { onChange: () => Promise<void> }) {
+// A mutation can finish after its panel unmounts. Mounted views reload their
+// current workspace rather than receiving data from the old request.
+const routingChanged = new EventTarget();
+
+export function useRoutingRefresh(reload: () => Promise<unknown>) {
+  useEffect(() => {
+    const refresh = () => {
+      void reload();
+    };
+    routingChanged.addEventListener("change", refresh);
+    return () => routingChanged.removeEventListener("change", refresh);
+  }, [reload]);
+}
+
+export function InboxRouting() {
   const [visited, setVisited] = useState(false);
   return (
     <details
@@ -15,21 +29,22 @@ export function InboxRouting({ onChange }: { onChange: () => Promise<void> }) {
       }}
     >
       <summary>Manage inbox addresses</summary>
-      {visited && <RoutingSettings onChange={onChange} />}
+      {visited && <RoutingSettings />}
     </details>
   );
 }
 
-function RoutingSettings({ onChange }: { onChange: () => Promise<void> }) {
+function RoutingSettings() {
   const settings = useLoad(
     api.inbox.routing,
     "Could not load inbox addresses.",
   );
+  useRoutingRefresh(settings.reload);
   const action = useAction("Could not update inbox addresses.");
   async function change(mutate: () => Promise<unknown>) {
     return action.run(async () => {
       await mutate();
-      await Promise.all([settings.reload(), onChange()]);
+      routingChanged.dispatchEvent(new Event("change"));
     });
   }
   const busy = settings.loading || action.busy;

@@ -212,10 +212,30 @@ cat > "$FIXTURE/bin/bunx" <<'STUB'
 if [[ "$*" != *'d1 execute DB --remote'* || "$*" != *'wrangler.staging.jsonc'* ]]; then exit 2; fi
 echo "[{\"results\":[{\"recipients\":2,\"organizations\":1,\"organization_id\":\"${TEST_RECIPIENT_ORG:?}\"}]}]"
 STUB
+cat > "$FIXTURE/bin/curl" <<'STUB'
+#!/usr/bin/env bash
+case "$*" in
+  *'zones?name=balebase.com'*) echo '{"result":[{"id":"fixture-zone"}]}' ;;
+  *'workers/scripts/balebase-api-staging/settings'*)
+    jq -n --arg org "${TEST_WORKER_ORG:-balebase-workspace}" '{success:true,result:{bindings:[{type:"plain_text",name:"PLATFORM_MAILBOX_ORGANIZATION_ID",text:$org}]}}' ;;
+  *'zones/fixture-zone/dns_records'*)
+    jq -n --arg target "${TEST_MX_TARGET:-route1.mx.cloudflare.net}" '{success:true,result:[{content:$target},{content:"route2.mx.cloudflare.net"},{content:"route3.mx.cloudflare.net"}]}' ;;
+  *) exit 2 ;;
+esac
+STUB
+chmod +x "$FIXTURE/bin/curl"
 verify_bindings
 echo 'TF_VAR_platform_mailbox_organization_id=balebase-workspace' >> "$STAGING_APP_ENV"
 if TEST_RECIPIENT_ORG=other-workspace verify_bindings; then
   echo 'Platform inbox verification accepted the wrong workspace' >&2
+  exit 1
+fi
+if TEST_WORKER_ORG=other-workspace TEST_RECIPIENT_ORG=balebase-workspace verify_bindings; then
+  echo 'Platform inbox verification accepted the wrong deployed Worker configuration' >&2
+  exit 1
+fi
+if TEST_MX_TARGET=mx.other-provider.test TEST_RECIPIENT_ORG=balebase-workspace verify_bindings; then
+  echo 'Platform inbox verification accepted mixed MX providers' >&2
   exit 1
 fi
 TEST_RECIPIENT_ORG=balebase-workspace verify_bindings

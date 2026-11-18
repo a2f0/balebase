@@ -180,6 +180,7 @@ export const inboxRoutes = {
     method: "GET",
     path: "/api/inbox",
     query: InboxFolderQuerySchema.extend({
+      folder: InboxFolderSchema.or(z.literal("")).optional(),
       mailbox: RecordIdSchema.optional(),
       email: RecordIdSchema.optional(),
     }),

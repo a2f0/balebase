@@ -164,9 +164,10 @@ platform recipients, connect both addresses in the Balebase organization and
 set `TF_VAR_platform_mailbox_organization_id` to that organization's ID in
 the tier's deployment environment. Keep this value set while routing should
 remain active. Redeploy the API to bind native delivery to this workspace.
-The Terraform wrapper checks both bindings against that ID before applying
-the rules, then publishes apex MX. Run `bun run deploy:domains` to finish
-the production cutover. Send
+Run `bun run deploy:domains` to finish the production cutover. The Terraform
+wrapper checks both inbox bindings and the deployed Worker against the
+configured organization ID. It checks for existing MX destinations from
+other providers before enabling the rules and publishing the apex MX. Send
 one external message per platform address and confirm each lands in its
 designated inbox before announcing the addresses.
 
