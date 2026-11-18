@@ -10,6 +10,7 @@ const uncontracted = new Set([
   "POST /api/auth/organization/leave",
   "POST /api/billing/webhook",
   "POST /internal/inbound-smtp/recipient",
+  "POST /internal/inbound-smtp/validate",
   "POST /internal/inbound-smtp/deliver",
   "POST /api/checkr/webhook",
 ]);
