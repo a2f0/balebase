@@ -1,4 +1,5 @@
 """Balebase inbound SMTP. The only delivery transport is the tier's HTTPS Worker."""
+import argparse
 import asyncio
 from email.utils import formatdate
 import ipaddress
@@ -8,7 +9,6 @@ import logging
 import os
 import sqlite3
 import ssl
-import sys
 from pathlib import Path
 from urllib.parse import urlsplit
 from uuid import UUID
@@ -67,14 +67,18 @@ class Receiver:
         if status != 200:
             return "451 4.3.0 Recipient verification unavailable"
         try:
-            mailbox = str(UUID(json.loads(data)["mailboxId"]))
+            binding = json.loads(data)
+            mailbox = str(UUID(binding["mailboxId"]))
+            org = binding["organizationId"]
+            if not isinstance(org, str) or not org:
+                raise ValueError("Missing recipient workspace")
         except (ValueError, TypeError, KeyError):
             return "451 4.3.0 Invalid verification response"
         if not hasattr(envelope, "bindings"):
             envelope.bindings = {}
         if address not in envelope.bindings:
             envelope.rcpt_tos.append(address)
-            envelope.bindings[address] = mailbox
+            envelope.bindings[address] = (mailbox, org)
         return "250 2.1.5 Recipient accepted"
 
     async def handle_DATA(self, server, session, envelope):
@@ -137,7 +141,15 @@ async def main(spool):
 if __name__ == "__main__":
     os.umask(0o077)
     spool = Spool(Path(os.environ.get("STATE_DIRECTORY", "/var/lib/balebase-smtp")) / "spool.sqlite")
-    if sys.argv[1:] == ["status"]:
+    parser = argparse.ArgumentParser()
+    commands = parser.add_subparsers(dest="command")
+    commands.add_parser("status")
+    discard = commands.add_parser("discard-held", help="Permanently discard held recipient copies for one workspace")
+    discard.add_argument("--organization", required=True)
+    args = parser.parse_args()
+    if args.command == "discard-held":
+        print(json.dumps({"discarded": spool.discard_held(args.organization)}))
+    elif args.command == "status":
         print(json.dumps(spool.counts()))
     else:
         asyncio.run(main(spool))

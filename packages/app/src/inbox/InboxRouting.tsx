@@ -174,25 +174,25 @@ function DomainRecord({
         {claim.domain} ·{" "}
         {claim.status === "verified" ? "Verified" : "Awaiting verification"}
       </strong>
+      <p>
+        {claim.status === "pending"
+          ? "Add this TXT record at your DNS provider, then verify ownership."
+          : "Keep the TXT record published while using direct MX. A missing record temporarily stops direct delivery."}
+      </p>
+      <dl>
+        <dt>Record name</dt>
+        <dd>
+          <code>{claim.recordName}</code>
+        </dd>
+        <dt>TXT value</dt>
+        <dd>
+          <code>{claim.recordValue}</code>
+        </dd>
+      </dl>
       {claim.status === "pending" && (
-        <>
-          <p>
-            Add this TXT record at your DNS provider, then verify ownership.
-          </p>
-          <dl>
-            <dt>Record name</dt>
-            <dd>
-              <code>{claim.recordName}</code>
-            </dd>
-            <dt>TXT value</dt>
-            <dd>
-              <code>{claim.recordValue}</code>
-            </dd>
-          </dl>
-          <Button disabled={busy} onClick={() => void verify()}>
-            Verify domain
-          </Button>
-        </>
+        <Button disabled={busy} onClick={() => void verify()}>
+          Verify domain
+        </Button>
       )}
       {claim.status === "verified" &&
         (mx ? (

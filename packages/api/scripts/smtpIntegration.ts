@@ -43,6 +43,7 @@ try {
     ],
     { cwd: root, stdio: "pipe" },
   );
+  let txtAnswer = "balebase-verification=fixture";
   worker = new Miniflare(
     convertV4MiniflareOptions({
       name: "smtp-test",
@@ -59,6 +60,34 @@ try {
           ),
         },
       ],
+      outboundService: async (request: Request) => {
+        const url = new URL(request.url);
+        assert.equal(
+          url.searchParams.get("name"),
+          "_balebase-verification.base.example.org",
+        );
+        if (!txtAnswer)
+          return Response.json({
+            Status: 2,
+            Question: [
+              { name: "_balebase-verification.base.example.org", type: 16 },
+            ],
+          });
+        return Response.json({
+          Status: 0,
+          Question: [
+            { name: "_balebase-verification.base.example.org", type: 16 },
+          ],
+          Answer: [
+            {
+              name: "_balebase-verification.base.example.org",
+              type: 16,
+              TTL: 0,
+              data: `"${txtAnswer}"`,
+            },
+          ],
+        });
+      },
       d1Databases: ["DB"],
       r2Buckets: ["STORAGE"],
       bindings: {
@@ -137,6 +166,30 @@ try {
     },
   );
   assert.equal(await suite.exited, 0);
+  txtAnswer = "balebase-verification=another-organization";
+  const ownershipChanged = await worker.dispatchFetch(
+    new URL("/internal/inbound-smtp/recipient", workerUrl).href,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "X-Inbound-Recipient": "legal@base.example.org",
+      },
+    },
+  );
+  assert.equal(ownershipChanged.status, 503);
+  txtAnswer = "";
+  const dnsOutage = await worker.dispatchFetch(
+    new URL("/internal/inbound-smtp/recipient", workerUrl).href,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "X-Inbound-Recipient": "legal@base.example.org",
+      },
+    },
+  );
+  assert.equal(dnsOutage.status, 503);
   const forwarded = await worker.dispatchFetch(
     new URL("/fixture/forward", workerUrl).href,
     {

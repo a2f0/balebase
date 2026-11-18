@@ -35,7 +35,10 @@ second SMTP transaction, as with other SMTP receivers.
    tier's Terraform DNS changes. These DNS-only A/AAAA records publish the
    host. Advertise only address families that accept public TCP/25.
 5. Verify a customer test domain by TXT in **Inbox → Manage inbox addresses**
-   and connect a recipient. From another network run
+   and connect a recipient. Leave its verification TXT in DNS while using
+   direct delivery. Each SMTP recipient check revalidates this proof. A
+   missing or mismatched TXT or unavailable DNS produces a retryable SMTP
+   error before the receiver accepts that recipient. From another network run
    `python3 smtp/check.py mx-staging.balebase.com legal@example.org` using
    that recipient and the tier's hostname. It checks the certificate and
    exact recipient acceptance and rejection without sending a message.
@@ -69,6 +72,14 @@ spool as customer data. A new address binding has a different mailbox ID.
 The receiver never redirects previously accepted mail to that binding.
 Successful deliveries release their local bodies when all recipients finish.
 For held deliveries, arrange recovery with the original workspace's operator.
+After an authorized workspace purge, run the following on this tier's receiver.
+It permanently deletes that organization's held recipients and releases a body
+once every recipient has finished. Queued deliveries and other tenants' held
+recipients remain available.
+
+```sh
+sudo /opt/balebase-smtp/venv/bin/python -B /opt/balebase-smtp/receiver.py discard-held --organization ORGANIZATION_ID
+```
 
 To retire a receiver, remove its customer MX instructions by disabling
 `SMTP_ADVERTISE_MX` and redeploying the API. Migrate customer DNS or

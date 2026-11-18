@@ -14,12 +14,25 @@ interface DomainRow {
   verified_at: string | null;
 }
 
+export function txtChallenge(domain: string, token: string) {
+  return {
+    recordName: `_balebase-verification.${domain}`,
+    recordValue: `balebase-verification=${token}`,
+  };
+}
+export async function hasPublicProof(
+  challenge: { recordName: string; recordValue: string },
+  lookup = resolveTxt,
+) {
+  const records = await lookup(challenge.recordName);
+  return records.some((parts) => parts.join("") === challenge.recordValue);
+}
+
 function domainClaim(row: DomainRow): DomainClaim {
   return {
     domain: row.domain,
     id: row.id,
-    recordName: `_balebase-verification.${row.domain}`,
-    recordValue: `balebase-verification=${row.token}`,
+    ...txtChallenge(row.domain, row.token),
     status: row.verified_at ? "verified" : "pending",
   };
 }
@@ -170,19 +183,19 @@ async function verifyDomain(
   if (!row) return c.json({ error: "Domain request not found." }, 404);
   const claim = domainClaim(row);
   if (claim.status === "verified") return respond(c, inboxRoutes.verify, claim);
-  let records: string[][];
+  let matches: boolean;
   try {
-    records = await lookup(claim.recordName);
+    matches = await hasPublicProof(claim, lookup);
   } catch (error) {
     if (
       error instanceof Error &&
       "code" in error &&
       ["ENODATA", "ENOTFOUND"].includes(String(error.code))
     )
-      records = [];
+      matches = false;
     else return c.json({ error: "DNS lookup failed. Try again shortly." }, 503);
   }
-  if (!records.some((parts) => parts.join("") === claim.recordValue))
+  if (!matches)
     return c.json(
       {
         error:

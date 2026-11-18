@@ -5,6 +5,7 @@ import type { ApiEnv } from "../auth/apiEnv";
 import { readBodyWithLimit } from "../shared/storage";
 import { InvalidInboundMime, ingestInboundEmail, maxEmailBytes } from "./email";
 import { isPlatformDomain } from "./inboundEmailAddress";
+import { hasPublicProof, txtChallenge } from "./routingDomains";
 
 export const smtpIngress = new Hono<ApiEnv>();
 smtpIngress.use("*", async (c, next) => {
@@ -25,13 +26,18 @@ async function recipient(db: D1Database, address: string, inbound: string) {
   if (isPlatformDomain(domain, inbound)) return null;
   return db
     .prepare(
-      `SELECT b.id, b.organization_id FROM inbound_mailboxes b
+      `SELECT b.id, b.organization_id, d.domain, d.token FROM inbound_mailboxes b
      JOIN inbound_domains d ON d.organization_id=b.organization_id AND d.domain=? AND d.verified_at IS NOT NULL
      JOIN organization o ON o.id=b.organization_id AND o.deletedAt IS NULL
      WHERE b.address=? AND b.disconnected_at IS NULL`,
     )
     .bind(domain, address)
-    .first<{ id: string; organization_id: string }>();
+    .first<{
+      id: string;
+      organization_id: string;
+      domain: string;
+      token: string;
+    }>();
 }
 function envelopeAddress(value: string | undefined) {
   const parsed = z.email().max(254).safeParse(value?.toLowerCase());
@@ -42,7 +48,15 @@ smtpIngress.post("/recipient", async (c) => {
   const address = envelopeAddress(c.req.header("X-Inbound-Recipient"));
   if (!address) return c.body(null, 404);
   const box = await recipient(c.env.DB, address, c.env.INBOUND_EMAIL_DOMAIN);
-  return box ? c.json({ mailboxId: box.id }) : c.body(null, 404);
+  if (!box) return c.body(null, 404);
+  try {
+    if (!(await hasPublicProof(txtChallenge(box.domain, box.token))))
+      return c.body(null, 503);
+  } catch {
+    // Keep mail with the sending MTA while DNS is unavailable or proof is missing.
+    return c.body(null, 503);
+  }
+  return c.json({ mailboxId: box.id, organizationId: box.organization_id });
 });
 
 smtpIngress.post("/deliver", async (c) => {

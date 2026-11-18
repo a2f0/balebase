@@ -59,9 +59,17 @@ async def run():
     assert spool.counts() == {}
     # An address that was disconnected after acceptance cannot silently move
     # into a freshly provisioned mailbox. The queue retains its original body.
-    spool.accept("", b"Subject: Old binding\r\n\r\nold", {"legal@base.example.org": "d0acf8b3-4c04-4570-bf98-f3bd56ea037c"})
+    spool.accept("", b"Subject: Old binding\r\n\r\nold", {
+        "legal@base.example.org": ("d0acf8b3-4c04-4570-bf98-f3bd56ea037c", "purged-org"),
+        "legal@another.example.org": ("8cbaf370-8eee-4264-ab1f-bac0aed5d1db", "another-org"),
+    })
     assert spool.deliver_one(bridge)
+    assert spool.deliver_one(bridge)
+    assert spool.counts() == {"held": 2}
+    assert spool.discard_held("purged-org") == 1
     assert spool.counts() == {"held": 1}
+    with closing(sqlite3.connect(spool_file)) as db:
+        assert db.execute("SELECT body FROM messages").fetchone()[0].endswith(b"old")
     print("SMTP STARTTLS, durable DATA, replay and disconnected binding passed")
 
 

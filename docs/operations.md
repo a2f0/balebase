@@ -157,8 +157,10 @@ Once enabled, the inbox screen also provides an MX target and a public DNS
 check for each verified domain. Use a dedicated subdomain when another mail
 provider serves the apex. Each connected recipient can receive direct mail
 and per-address forwarding at the same time. Direct SMTP bypasses filtering
-by the previous provider, including Google Workspace. TXT verification
-establishes customer control of the recipient domain. The receiver checks
+by the previous provider, including Google Workspace. Keep the verification
+TXT published for direct MX. The receiver checks it at RCPT time and returns
+a temporary failure if the proof changes or DNS is unavailable. TXT
+verification establishes customer control of the domain. The receiver checks
 that the envelope recipient has an active binding. It performs no SPF, DKIM,
 DMARC, or spam assessment of senders. Treat From, To and other sender-supplied
 headers as untrusted.

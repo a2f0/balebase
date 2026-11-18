@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+umask 022
 case "${1:-}" in
   prod) hostname=mx.balebase.com; api=https://api.balebase.com ;;
   staging) hostname=mx-staging.balebase.com; api=https://api-staging.balebase.com ;;

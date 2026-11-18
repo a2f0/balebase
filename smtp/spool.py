@@ -15,7 +15,7 @@ class Spool:
                     id INTEGER PRIMARY KEY, sender TEXT NOT NULL, body BLOB NOT NULL);
                 CREATE TABLE IF NOT EXISTS deliveries (
                     id TEXT PRIMARY KEY, message INTEGER NOT NULL REFERENCES messages(id),
-                    address TEXT NOT NULL, mailbox TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0,
+                    address TEXT NOT NULL, mailbox TEXT NOT NULL, organization TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0,
                     due INTEGER NOT NULL DEFAULT 0, status INTEGER,
                     state TEXT NOT NULL DEFAULT 'queued' CHECK(state IN ('queued','held')));
                 CREATE INDEX IF NOT EXISTS deliveries_due ON deliveries(state, due);
@@ -38,8 +38,8 @@ class Spool:
         with closing(self.connect()) as db, db:
             message = db.execute("INSERT INTO messages(sender,body) VALUES (?,?)", (sender, body)).lastrowid
             db.executemany(
-                "INSERT INTO deliveries(id,message,address,mailbox) VALUES (?,?,?,?)",
-                [(str(uuid.uuid4()), message, address, mailbox) for address, mailbox in recipients.items()],
+                "INSERT INTO deliveries(id,message,address,mailbox,organization) VALUES (?,?,?,?,?)",
+                [(str(uuid.uuid4()), message, address, mailbox, org) for address, (mailbox, org) in recipients.items()],
             )
 
     def deliver_one(self, bridge):
@@ -66,6 +66,10 @@ class Spool:
                     db.execute("UPDATE deliveries SET due=?,attempts=attempts+1,status=? WHERE id=?",
                                (int(time.time()) + wait, status, row["id"]))
             return True
+
+    def discard_held(self, organization):
+        with closing(self.connect()) as db, db:
+            return db.execute("DELETE FROM deliveries WHERE state='held' AND organization=?", (organization,)).rowcount
 
     def counts(self):
         with closing(self.connect()) as db:
