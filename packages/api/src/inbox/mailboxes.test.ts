@@ -61,10 +61,11 @@ function fixture(inboundDomain = "inbox.balebase.com", afterPut?: () => void) {
       bindings,
     );
   }
-  async function deliver(to: string) {
+  async function deliver(to: string, mime?: string) {
     let rejection: string | undefined;
     const raw = new Blob([
-      "From: sender@example.org\r\nTo: privacy@balebase.com\r\nSubject: Test delivery\r\n\r\nTest body",
+      mime ??
+        "From: sender@example.org\r\nTo: privacy@balebase.com\r\nSubject: Test delivery\r\n\r\nTest body",
     ]);
     await handleEmail(
       {
@@ -255,6 +256,52 @@ describe("verified inbound domains", () => {
     expect(f.storage.stored.size).toBe(0);
   });
 
+  it("registers cleanup in one D1 query before uploading many small attachments to a legacy inbox", async () => {
+    const partCount = 160;
+    let cleanupQueries = 0;
+    let registeredBeforeFirstPut: number | undefined;
+    const f = fixture("inbox.balebase.com", () => {
+      registeredBeforeFirstPut ??= f.database
+        .query<{ n: number }, []>(
+          "SELECT COUNT(*) AS n FROM deleted_object_cleanup",
+        )
+        .get()?.n;
+    });
+    f.bindings.DB = toD1(f.database, {
+      onQuery(event) {
+        if (event.sql.includes("INSERT INTO deleted_object_cleanup"))
+          cleanupQueries++;
+      },
+    });
+    const parts = Array.from({ length: partCount }, (_, i) =>
+      [
+        "--many",
+        "Content-Type: text/plain",
+        `Content-Disposition: attachment; filename="part-${i}.txt"`,
+        "",
+        "a",
+      ].join("\r\n"),
+    );
+    const mime = [
+      'Content-Type: multipart/mixed; boundary="many"',
+      "",
+      ...parts,
+      "--many--",
+      "",
+    ].join("\r\n");
+    expect(
+      await f.deliver(`upload+${f.org}@inbox.balebase.com`, mime),
+    ).toBeUndefined();
+    expect(cleanupQueries).toBe(1);
+    expect(registeredBeforeFirstPut).toBe(partCount + 1);
+    expect(
+      f.database.query("SELECT id FROM inbound_email_attachments").all(),
+    ).toHaveLength(partCount);
+    expect(f.storage.stored.size).toBe(partCount + 1);
+    expect(
+      f.database.query("SELECT id FROM deleted_object_cleanup").all(),
+    ).toHaveLength(0);
+  });
   it("keeps committed R2 bytes when D1 loses its batch response", async () => {
     const f = fixture();
     const bound = await f.bind("privacy@balebase.com", "root");

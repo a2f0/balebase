@@ -23,7 +23,10 @@ const config = releaseConfiguration(
   process.env,
   currentCommit(),
 );
-const { DRY_RUN } = process.env;
+const {
+  DRY_RUN,
+  TF_VAR_platform_mailbox_organization_id: platformOrganizationId,
+} = process.env;
 const dryRun = DRY_RUN === "1";
 if (config && !dryRun) requireUploadEnvironment();
 if (process.argv.includes("--check")) process.exit(0);
@@ -38,11 +41,8 @@ const wrangler = [
   "deploy",
   "--config",
   workerConfig,
-  ...(process.env.TF_VAR_platform_mailbox_organization_id
-    ? [
-        "--var",
-        `PLATFORM_MAILBOX_ORGANIZATION_ID:${process.env.TF_VAR_platform_mailbox_organization_id}`,
-      ]
+  ...(platformOrganizationId
+    ? ["--var", `PLATFORM_MAILBOX_ORGANIZATION_ID:${platformOrganizationId}`]
     : []),
 ];
 try {

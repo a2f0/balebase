@@ -1,7 +1,6 @@
 import type { Attachment } from "postal-mime";
 import PostalMime from "postal-mime";
 import { normalizeFilename } from "../shared/filenames";
-import { trackedPut } from "../shared/storage";
 import type { Bindings } from "../types";
 import { resolveRecipient } from "./inboundEmailAddress";
 
@@ -157,21 +156,28 @@ async function storeMessageObjects(
     })),
   ];
   const cleanupPrefix = `inbound-upload:${emailId}:`;
+  // Keep each JSON parameter below D1's single-value limit, even for mail
+  // with thousands of small MIME parts. Register every object before writing R2.
+  const chunkSize = 512;
+  const queuedAt = new Date().toISOString();
+  for (let offset = 0; offset < objects.length; offset += chunkSize) {
+    const keys = objects
+      .slice(offset, offset + chunkSize)
+      .map(({ id, key }) => [id, key]);
+    await env.DB.prepare(
+      `INSERT INTO deleted_object_cleanup (id, organization_id, object_key, deleted_at)
+       SELECT ? || json_extract(value, '$[0]'), ?, json_extract(value, '$[1]'), ?
+       FROM json_each(?)`,
+    )
+      .bind(cleanupPrefix, organizationId, queuedAt, JSON.stringify(keys))
+      .run();
+  }
   await Promise.all(
     objects.map((obj) =>
-      trackedPut(
-        env,
-        {
-          cleanupId: cleanupPrefix + obj.id,
-          key: obj.key,
-          organizationId,
-        },
-        obj.content,
-        {
-          httpMetadata: { contentType: obj.contentType },
-          customMetadata: { emailId, organizationId },
-        },
-      ),
+      env.STORAGE.put(obj.key, obj.content, {
+        httpMetadata: { contentType: obj.contentType },
+        customMetadata: { emailId, organizationId },
+      }),
     ),
   );
   return { attachments, cleanupPrefix, objects, parsed, rawObjectKey };
