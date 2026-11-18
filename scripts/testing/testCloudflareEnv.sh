@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+REPO_ROOT="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 MATRIX="$(mktemp -d "${TMPDIR:-/tmp}/cloudflare-env-test.XXXXXX")"
 FIXTURE="$MATRIX/checkouts/test project"
 trap 'rm -rf "$MATRIX"' EXIT
@@ -148,7 +148,7 @@ done
 check_deploy_paths() (
   cd "$1"
   local scripts="$2"
-  export PATH="$FIXTURE/deploy-bin:$PATH"
+  export CDPATH=. PATH="$FIXTURE/deploy-bin:$PATH"
   for frontend in Website App; do
     : > "$MOCK_LOG"
     DRY_RUN=1 "$scripts/deploy$frontend.sh"
@@ -158,8 +158,8 @@ check_deploy_paths() (
   DRY_RUN=0 STRIPE_SECRET_KEY=sk_live_fixture STRIPE_WEBHOOK_SECRET=whsec_fixture "$scripts/deployApi.sh"
   grep -q '^bunx --bun wrangler secret put BETTER_AUTH_SECRET --config ' "$MOCK_LOG"
 )
-check_deploy_paths "$FIXTURE" ./scripts/deploy
-check_deploy_paths "$MATRIX" "./checkouts/test project/scripts/deploy"
+check_deploy_paths "$FIXTURE" scripts/deploy
+check_deploy_paths "$MATRIX" "checkouts/test project/scripts/deploy"
 
 # Each tier is self-contained and needs its app.env.
 expect_failure '.secrets/staging/app.env is missing.' load_tier_env staging

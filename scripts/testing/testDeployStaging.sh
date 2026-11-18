@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+REPO_ROOT="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 REAL_BUN_BIN="$(command -v bun)"
 export REAL_BUN_BIN
 FIXTURE="$(mktemp -d "$REPO_ROOT/.staging-test.XXXXXX")"
