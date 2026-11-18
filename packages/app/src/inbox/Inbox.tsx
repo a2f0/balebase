@@ -19,12 +19,12 @@ import type {
   InboundEmailLink,
   InboundEmailSummary,
   InboxFolder,
+  Mailbox,
 } from "@balebase/validators/inbox";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityFeed } from "../activity/ActivityFeed";
 import { ApiDownload } from "../shared/ApiDownload";
 import { api } from "../shared/apiClient";
-import { errorMessage } from "../shared/errors";
 import {
   countLabel,
   formatBytes,
@@ -36,10 +36,12 @@ import { useClipboard } from "../shared/useClipboard";
 import { useLoad } from "../shared/useLoad";
 import { AttachmentPreviewTile } from "./AttachmentPreview";
 import { EmailLinks } from "./EmailLinks";
+import { InboxRouting, useRoutingRefresh } from "./InboxRouting";
 import { selectEmailId } from "./inboxSelection";
 import { previewKindFor } from "./previewKind";
 
 interface InboxContext {
+  canManage: boolean;
   canAccessFinance: boolean;
   onNavigate: (pathname: string) => void;
 }
@@ -62,70 +64,88 @@ function useInboxModel() {
       ? requested
       : "inbox";
   });
-  const messages = useInboxMessages(folder);
+  const [mailbox, setMailbox] = useState<string>();
+  const messages = useInboxMessages(folder, mailbox);
   const actions = useInboxActions(messages);
   function selectFolder(nextFolder: InboxFolder) {
     if (nextFolder === folder) return;
     actions.clear();
+    setMailbox(mailbox ?? messages.listedMailbox);
     setFolder(nextFolder);
   }
-  return { actions, folder, messages, selectFolder };
+  return { actions, folder, messages, selectFolder, mailbox, setMailbox };
 }
 
-function useInboxMessages(folder: InboxFolder) {
-  const [emails, setEmails] = useState<InboundEmailSummary[]>([]);
-  const [inboundAddress, setInboundAddress] = useState<string>();
-  const [selectedId, setSelectedId] = useState<string>();
-  const [loadingList, setLoadingList] = useState(true);
-  const [error, setError] = useState<string>();
+function useInboxMessages(folder: InboxFolder, mailbox: string | undefined) {
   const { openedByLink, pending } = useLinkedEmailId();
-  const listRequest = useRef(0);
-
-  const refresh = useCallback(async () => {
-    const request = ++listRequest.current;
-    setLoadingList(true);
-    setError(undefined);
-    try {
-      const listing = await api.inbox.list(folder);
-      if (request !== listRequest.current) return;
-      const nextEmails = listing.emails;
-      const requested = pending.current;
-      pending.current = undefined;
-      setEmails(nextEmails);
-      setInboundAddress(listing.address);
-      setSelectedId((current) =>
-        selectEmailId(nextEmails, current, requested, openedByLink),
-      );
-    } catch (cause) {
-      if (request === listRequest.current)
-        setError(errorMessage(cause, "Could not load the inbox."));
-    } finally {
-      if (request === listRequest.current) setLoadingList(false);
-    }
-  }, [folder, openedByLink, pending]);
-
+  const list = useLoad(
+    useCallback(
+      async () => ({
+        folder,
+        mailbox,
+        listing: await api.inbox.list(
+          folder,
+          mailbox || undefined,
+          mailbox === undefined ? openedByLink : undefined,
+        ),
+      }),
+      [folder, mailbox, openedByLink],
+    ),
+    "Could not load the inbox.",
+  );
+  useRoutingRefresh(list.reload);
+  const listing =
+    list.data?.folder === folder && list.data.mailbox === mailbox
+      ? list.data.listing
+      : undefined;
+  const [lastListing, setLastListing] = useState<{
+    mailboxId: string;
+    mailboxes: Mailbox[];
+  }>({ mailboxId: "", mailboxes: [] });
   useEffect(() => {
-    setEmails([]);
-    setSelectedId(undefined);
-    void refresh();
-    return () => {
-      listRequest.current += 1;
-    };
-  }, [refresh]);
-
+    if (listing)
+      setLastListing({
+        mailboxId: listing.mailboxId ?? "",
+        mailboxes: listing.mailboxes ?? [],
+      });
+  }, [listing]);
+  const selectedMailbox = listing?.mailboxes?.find(
+    (box) => box.id === listing.mailboxId,
+  );
+  const [selectedId, setSelectedId] = useState<string>();
+  useEffect(() => {
+    if (!listing) {
+      setSelectedId(undefined);
+      return;
+    }
+    const link = mailbox === undefined ? openedByLink : undefined;
+    const requested = link ? pending.current : undefined;
+    pending.current = undefined;
+    setSelectedId((current) =>
+      selectEmailId(listing.emails, current, requested, link),
+    );
+  }, [listing, pending, openedByLink, mailbox]);
+  const refresh = useCallback(async () => {
+    await list.reload();
+  }, [list.reload]);
+  const detailId = listing ? selectedId : undefined;
   const message = useLoad(
     useCallback(
-      async () => (selectedId ? api.inbox.get(selectedId, folder) : undefined),
-      [folder, selectedId],
+      async () => (detailId ? api.inbox.get(detailId, folder) : undefined),
+      [detailId, folder],
     ),
     "Could not load the email.",
   );
   return {
-    detail: message.data,
-    emails,
-    error: error ?? message.error,
-    inboundAddress,
-    loadingList,
+    detail:
+      listing && message.data?.id === selectedId ? message.data : undefined,
+    emails: listing?.emails ?? [],
+    error: list.error ?? message.error,
+    inboundAddress:
+      selectedMailbox?.connected === false ? undefined : listing?.address,
+    mailboxes: lastListing.mailboxes,
+    listedMailbox: listing ? (listing.mailboxId ?? "") : lastListing.mailboxId,
+    loadingList: list.loading,
     loadingMessage: Boolean(selectedId) && message.loading,
     refresh,
     selectedId,
@@ -139,9 +159,10 @@ function useInboxMessages(folder: InboxFolder) {
  * the query is removed so later reloads open the inbox normally.
  */
 function useLinkedEmailId() {
-  const [openedByLink] = useState(
-    () => new URLSearchParams(window.location.search).get("email") ?? undefined,
-  );
+  const [openedByLink] = useState(() => {
+    const id = new URLSearchParams(window.location.search).get("email");
+    return id && id.length <= 100 ? id : undefined;
+  });
   const pending = useRef(openedByLink);
   useEffect(() => {
     if (window.location.search) {
@@ -242,6 +263,29 @@ function InboxView({
           </Toast>
         )}
         <div className="stack">
+          {context.canManage && <InboxRouting />}
+          {messages.mailboxes.length > 0 && (
+            <label className="field">
+              Mailbox
+              <select
+                className="input"
+                disabled={Boolean(actions.workingId)}
+                value={model.mailbox ?? messages.listedMailbox}
+                onChange={(event) => {
+                  actions.clear();
+                  model.setMailbox(event.target.value);
+                }}
+              >
+                <option value="">Default inbox</option>
+                {messages.mailboxes.map((box) => (
+                  <option value={box.id} key={box.id}>
+                    {box.name} · {box.address}
+                    {box.connected ? "" : " (disconnected)"}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <InboxToolbar
             address={messages.inboundAddress}
             disabled={Boolean(actions.workingId)}

@@ -36,7 +36,6 @@ describe("inbound email", () => {
   it("rejects oversized headers before starting an upload", async () => {
     await expectRejectedMessage(
       `X-Large: ${"x".repeat(128 * 1024)}\r\n\r\nbody`,
-      /Maximum header size/,
     );
   });
 
@@ -45,7 +44,7 @@ describe("inbound email", () => {
     for (let depth = 0; depth < 32; depth++) {
       raw = `Content-Type: multipart/mixed; boundary="level-${depth}"\r\n\r\n--level-${depth}\r\n${raw}\r\n--level-${depth}--\r\n`;
     }
-    await expectRejectedMessage(raw, /Maximum MIME nesting depth/);
+    await expectRejectedMessage(raw);
   });
 
   it("stores an embedded message as an opaque attachment", async () => {
@@ -61,7 +60,9 @@ describe("inbound email", () => {
 
     expect(storage.objects.size).toBe(2);
     expect(database.statements).toHaveLength(2);
-    expect(database.statements[1]?.values[4]).toBe("message/rfc822");
+    expect(
+      JSON.parse(String(database.statements[1]?.values[2]))[0].contentType,
+    ).toBe("message/rfc822");
     const attachment = [...storage.objects].find(([key]) =>
       key.includes("/attachments/"),
     );
@@ -106,10 +107,8 @@ describe("inbound email", () => {
       recipient,
       "Test attachment",
     ]);
-    expect(attachmentStatement?.values.slice(3, 6)).toEqual([
-      "notes.txt",
-      "text/plain",
-      16,
+    expect(JSON.parse(String(attachmentStatement?.values[2]))).toMatchObject([
+      { filename: "notes.txt", contentType: "text/plain", size: 16 },
     ]);
   });
 
@@ -132,15 +131,15 @@ describe("inbound email", () => {
   });
 });
 
-async function expectRejectedMessage(raw: string, reason: RegExp) {
+async function expectRejectedMessage(raw: string) {
   const database = createDatabase();
   const storage = createStorage();
-  await expect(
-    handleEmail(
-      createMessage(raw).message,
-      createBindings(database.value, storage.value),
-    ),
-  ).rejects.toThrow(reason);
+  const received = createMessage(raw);
+  await handleEmail(
+    received.message,
+    createBindings(database.value, storage.value),
+  );
+  expect(received.rejection()).toBe("Invalid message or MIME limits exceeded");
   expect(storage.uploads).toHaveLength(0);
   expect(storage.objects.size).toBe(0);
   expect(database.statements).toHaveLength(0);
@@ -159,17 +158,18 @@ function createBindings(database: D1Database, storage: R2Bucket) {
 function createDatabase() {
   const statements: CapturedStatement[] = [];
   const value = {
-    batch: async () => [],
+    batch: async () => [{ meta: { changes: 1 } }],
     prepare: (query: string) => {
       let values: unknown[] = [];
       const statement = {
         bind: (...nextValues: unknown[]) => {
           values = nextValues;
-          if (!query.includes("SELECT id FROM organization")) {
+          if (query.includes("INSERT INTO inbound_")) {
             statements.push({ query, values });
           }
           return statement;
         },
+        run: async () => ({}),
         first: async () =>
           values[0] === organizationId ? { id: organizationId } : null,
       };

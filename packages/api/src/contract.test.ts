@@ -3,12 +3,15 @@ import { routes } from "@balebase/validators/routes";
 import { app } from "./app";
 
 // Routes outside the contract: service metadata, webhooks that third parties
-// sign, and the organization leave hook in front of Better Auth.
+// sign, the SMTP receiver bridge, and the organization leave hook in front of Better Auth.
 const uncontracted = new Set([
   "GET /",
   "GET /health",
   "POST /api/auth/organization/leave",
   "POST /api/billing/webhook",
+  "POST /internal/inbound-smtp/recipient",
+  "POST /internal/inbound-smtp/validate",
+  "POST /internal/inbound-smtp/deliver",
   "POST /api/checkr/webhook",
 ]);
 

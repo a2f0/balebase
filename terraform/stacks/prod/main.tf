@@ -67,6 +67,50 @@ resource "cloudflare_email_routing_rule" "inbound" {
   depends_on = [cloudflare_email_routing_dns.inbound]
 }
 
+# The Email Routing DNS resource uses the zone ID as its state identity.
+# Manage the apex MX records individually so the upload subdomain keeps its
+# existing resource, and the zone's existing SPF record stays in place.
+# These are the exchanges and priorities assigned to the zone's upload inbox.
+resource "cloudflare_dns_record" "platform_mx" {
+  for_each = var.platform_mailbox_organization_id != "" ? {
+    "route1.mx.cloudflare.net" = 87
+    "route2.mx.cloudflare.net" = 43
+    "route3.mx.cloudflare.net" = 21
+  } : {}
+  zone_id  = data.cloudflare_zone.main.id
+  name     = var.domain
+  type     = "MX"
+  content  = each.key
+  priority = each.value
+  ttl      = 1
+
+  # Activate the Worker rules before mail for the apex starts arriving.
+  depends_on = [cloudflare_email_routing_rule.mailboxes]
+}
+
+resource "cloudflare_email_routing_rule" "mailboxes" {
+  for_each = toset(concat(
+    ["inbox@${var.inbound_email_subdomain}"],
+    var.platform_mailbox_organization_id == "" ? [] : [
+      "legal@${var.domain}", "privacy@${var.domain}"
+    ]
+  ))
+  zone_id = data.cloudflare_zone.main.id
+  name    = "Deliver ${each.value} to ${var.api_worker_name}"
+  enabled = true
+
+  matchers = [{
+    type  = "literal"
+    field = "to"
+    value = each.value
+  }]
+  actions = [{
+    type  = "worker"
+    value = [var.api_worker_name]
+  }]
+  depends_on = [cloudflare_email_routing_dns.inbound]
+}
+
 locals {
   worker_domains = {
     api = {
@@ -129,4 +173,16 @@ resource "cloudflare_ruleset" "api_cors" {
 resource "cloudflare_queue" "finance_sync" {
   account_id = var.cloudflare_account_id
   queue_name = "${var.api_worker_name}-finance-sync"
+}
+
+# Direct customer MX targets a TCP/25 host. Cloudflare's HTTP proxy cannot
+# proxy public SMTP. Customer domains publish their own MX records.
+resource "cloudflare_dns_record" "smtp_host" {
+  for_each = { for kind, ip in { A = var.smtp_ipv4, AAAA = var.smtp_ipv6 } : kind => ip if ip != "" }
+  zone_id  = data.cloudflare_zone.main.id
+  name     = "mx.${var.domain}"
+  type     = each.key
+  content  = each.value
+  proxied  = false
+  ttl      = 300
 }

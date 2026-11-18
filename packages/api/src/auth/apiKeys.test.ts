@@ -163,6 +163,27 @@ describe("organization API keys", () => {
     });
   });
 
+  it("requires a root admin to disconnect a platform address even for an organization owner", async () => {
+    const fixture = await createFixture();
+    fixture.database
+      .query(
+        "INSERT INTO inbound_mailboxes (id, organization_id, name, address, forwarding_id) VALUES (?, ?, 'Legal', 'legal@balebase.com', 'forward')",
+      )
+      .run("platform-legal", fixture.organizationId);
+    const result = await fixture.session(
+      "DELETE",
+      "/api/inbox/routing/mailboxes/platform-legal",
+    );
+    expect(result.status).toBe(403);
+    expect(
+      fixture.database
+        .query(
+          "SELECT disconnected_at FROM inbound_mailboxes WHERE id = 'platform-legal'",
+        )
+        .get(),
+    ).toEqual({ disconnected_at: null });
+  });
+
   it("keeps read keys read-only and session-only routes closed", async () => {
     const fixture = await createFixture();
     const { token: readToken } = await fixture.createKey("read");
@@ -185,6 +206,10 @@ describe("organization API keys", () => {
       ["POST", "/api/organization-settings/api-keys"],
       ["GET", "/api/billing"],
       ["GET", "/api/account-settings/deletion"],
+      ["GET", "/api/inbox/routing"],
+      ["POST", "/api/inbox/routing/domains"],
+      ["POST", "/api/inbox/routing/mailboxes"],
+      ["DELETE", "/api/inbox/routing/mailboxes/example"],
       ["GET", "/api/admin/organizations"],
       ["GET", "/api/organization-settings/organizations"],
       ["DELETE", "/api/organization-settings/current"],

@@ -200,3 +200,47 @@ fi
 [[ ! -s "$MOCK_LOG" ]] || { echo 'Staging ran commands after rejecting a live publishable key' >&2; exit 1; }
 
 echo 'Staging deployment isolation checks passed.'
+
+# The customer-forwarding release can precede the platform cutover. Once an
+# operator opts in, two active addresses in the wrong tenant must still fail.
+cp "$REPO_ROOT/scripts/deploy/verifyInboundEmail.sh" "$FIXTURE/scripts/deploy/"
+verify_bindings() {
+  DEPLOY_TIER=staging PATH="$FIXTURE/bin:$PATH" bash "$FIXTURE/scripts/deploy/verifyInboundEmail.sh" --bindings-only
+}
+cat > "$FIXTURE/bin/curl" <<'STUB'
+#!/usr/bin/env bash
+case "$*" in
+  *'zones?name=balebase.com'*) echo '{"result":[{"id":"fixture-zone"}]}' ;;
+  *'workers/scripts/balebase-api-staging/settings'*)
+    jq -n --arg org "${TEST_WORKER_ORG:-balebase-workspace}" '{success:true,result:{bindings:[{type:"plain_text",name:"PLATFORM_MAILBOX_ORGANIZATION_ID",text:$org},{type:"d1",name:"DB",database_id:"fixture-db-id"}]}}' ;;
+  *'d1/database/fixture-db-id/query'*)
+    jq -e '.sql | contains("legal@inbox-staging.balebase.com")' >/dev/null || exit 2
+    jq -n --arg org "${TEST_RECIPIENT_ORG:?}" '{success:true,result:[{results:[{recipients:2,organizations:1,organization_id:$org}]}]}' ;;
+  *'zones/fixture-zone/dns_records'*)
+    jq -n --arg target "${TEST_MX_TARGET:-route1.mx.cloudflare.net}" '{success:true,result:[{content:$target},{content:"route2.mx.cloudflare.net"},{content:"route3.mx.cloudflare.net"}]}' ;;
+  *) exit 2 ;;
+esac
+STUB
+chmod +x "$FIXTURE/bin/curl"
+verify_bindings
+echo 'TF_VAR_platform_mailbox_organization_id=balebase-workspace' >> "$STAGING_APP_ENV"
+if TEST_RECIPIENT_ORG=other-workspace verify_bindings; then
+  echo 'Platform inbox verification accepted the wrong workspace' >&2
+  exit 1
+fi
+if TEST_WORKER_ORG=other-workspace TEST_RECIPIENT_ORG=balebase-workspace verify_bindings; then
+  echo 'Platform inbox verification accepted the wrong deployed Worker configuration' >&2
+  exit 1
+fi
+if TEST_MX_TARGET=mx.other-provider.test TEST_RECIPIENT_ORG=balebase-workspace verify_bindings; then
+  echo 'Platform inbox verification accepted mixed MX providers' >&2
+  exit 1
+fi
+TEST_RECIPIENT_ORG=balebase-workspace verify_bindings
+
+: > "$MOCK_LOG"
+if TEST_RECIPIENT_ORG=other-workspace PATH="$FIXTURE/bin:$PATH" bash "$FIXTURE/terraform/scripts/run.sh" staging apply -auto-approve; then
+  echo 'Terraform accepted platform addresses in the wrong workspace' >&2
+  exit 1
+fi
+[[ ! -s "$MOCK_LOG" ]] || { echo 'Terraform ran before checking the workspace' >&2; exit 1; }

@@ -11,7 +11,10 @@ export interface Bindings {
   DB: D1Database;
   FINANCE_SYNC_QUEUE?: Queue<{ jobId: string }>;
   EMAIL: SendEmail;
+  SMTP_INGRESS_TOKEN?: string;
+  SMTP_MX_HOST?: string;
   INBOUND_EMAIL_DOMAIN: string;
+  PLATFORM_MAILBOX_ORGANIZATION_ID?: string;
   IMAGES: ImagesBinding;
   PLAID_CLIENT_ID?: string;
   PLAID_ENV?: "development" | "production" | "sandbox";

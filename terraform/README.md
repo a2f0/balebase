@@ -5,9 +5,11 @@ desired Worker custom domains:
 
 - D1 database: `balebase-db`
 - R2 bucket: `balebase-objects`
-- Email Routing MX records for `inbox.balebase.com` (Email Routing itself is
-  enabled once in the dashboard)
-- Inbound email: `upload+<organization-id>@inbox.balebase.com` → `balebase-api`
+- Email Routing MX records for `balebase.com` and `inbox.balebase.com` (Email Routing
+  itself is enabled once in the dashboard)
+- Inbound email to organization upload addresses, bound inbox forwarding
+  addresses, and `legal@balebase.com` and `privacy@balebase.com` goes to
+  `balebase-api`.
 - Website: `balebase.com`
 - Client: `app.balebase.com`
 - API: `api.balebase.com`, with CORS headers on Cloudflare-generated responses

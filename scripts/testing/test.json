@@ -10,6 +10,10 @@
       "command": ["bun", "--bun", "run", "test:deploy"]
     },
     {
+      "label": "test:smtp",
+      "command": ["bun", "--bun", "run", "test:smtp"]
+    },
+    {
       "label": "test:env",
       "command": ["bun", "--bun", "run", "test:env"]
     },

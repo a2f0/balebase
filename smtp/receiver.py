@@ -1,0 +1,194 @@
+"""Balebase inbound SMTP. The only delivery transport is the tier's HTTPS Worker."""
+import argparse
+import asyncio
+from email.utils import formatdate
+import ipaddress
+import http.client
+import json
+import logging
+import os
+import sqlite3
+import ssl
+from pathlib import Path
+from urllib.parse import urlsplit
+from uuid import UUID
+
+from aiosmtpd.smtp import SMTP
+from spool import Spool, SpoolUnavailable
+
+MAX_BYTES = 25 * 1024 * 1024 - 512  # reserve space for the Received trace
+
+
+class Bridge:
+    def __init__(self, origin, token):
+        url = urlsplit(origin)
+        local = url.hostname in ("localhost", "127.0.0.1", "::1")
+        if (url.scheme != "https" and not (url.scheme == "http" and local)) or not url.hostname:
+            raise ValueError("The Worker bridge requires HTTPS")
+        if url.username or url.password or url.path not in ("", "/") or url.query or url.fragment:
+            raise ValueError("Expected the Worker origin")
+        if len(token) < 32:
+            raise ValueError("Configure the SMTP ingress credential")
+        self.url = url
+        self.token = token
+
+    def __call__(self, route, address, body=b"", extra=None):
+        conn_type = http.client.HTTPSConnection if self.url.scheme == "https" else http.client.HTTPConnection
+        conn = conn_type(self.url.hostname, self.url.port, timeout=15 if route == "recipient" else 120)
+        try:
+            conn.request("POST", "/internal/inbound-smtp/" + route, body, {
+                "Authorization": "Bearer " + self.token, "X-Inbound-Recipient": address,
+                "Content-Type": "message/rfc822", **(extra or {}),
+            })
+            response = conn.getresponse()
+            return response.status, response.read(1024)
+        except (OSError, http.client.HTTPException):
+            return 503, b""
+        finally:
+            conn.close()
+
+
+class Receiver:
+    def __init__(self, spool, bridge):
+        self.spool = spool
+        self.bridge = bridge
+        self.quota_lock = asyncio.Lock()
+        self.reservations = {}
+
+    async def handle_RCPT(self, server, session, envelope, address, options):
+        address = address.lower()
+        if len(address) > 254 or not address.isascii() or any(ord(c) < 33 or ord(c) == 127 for c in address):
+            return "550 5.1.3 Invalid recipient"
+        if options:
+            return "555 5.5.4 Unsupported recipient option"
+        if len(envelope.rcpt_tos) >= 100:
+            return "452 4.5.3 Too many recipients"
+        status, data = await asyncio.to_thread(self.bridge, "recipient", address)
+        if status == 404:
+            return "550 5.1.1 Unknown recipient"
+        if status != 200:
+            return "451 4.3.0 Recipient verification unavailable"
+        try:
+            binding = json.loads(data)
+            mailbox = str(UUID(binding["mailboxId"]))
+            org = binding["organizationId"]
+            if not isinstance(org, str) or not org:
+                raise ValueError("Missing recipient workspace")
+        except (ValueError, TypeError, KeyError):
+            return "451 4.3.0 Invalid verification response"
+        if not hasattr(envelope, "bindings"):
+            envelope.bindings = {}
+        if address not in envelope.bindings:
+            async with self.quota_lock:
+                try:
+                    available = await asyncio.to_thread(self.spool.available, org)
+                except (OSError, sqlite3.Error):
+                    return "451 4.3.1 Cannot check queue capacity"
+                reserved = self.reservations.setdefault(envelope, {})
+                active = sum(reservation.get(org, 0) for reservation in self.reservations.values())
+                # The RFC 1870 SIZE estimate can be absent or smaller than DATA.
+                # Reserve one maximum-size traced body per workspace per envelope.
+                additional = 4096 + (0 if org in reserved else MAX_BYTES + 512)
+                if active + additional > available:
+                    return "452 4.2.2 Workspace cannot accept queued mail"
+                reserved[org] = reserved.get(org, 0) + additional
+                envelope.rcpt_tos.append(address)
+                envelope.bindings[address] = (mailbox, org)
+        return "250 2.1.5 Recipient accepted"
+
+    async def handle_DATA(self, server, session, envelope):
+        # SMTPUTF8 is disabled. Keep envelope fields safe for HTTP headers,
+        # including the null reverse path used by delivery status messages.
+        sender = "" if envelope.mail_from == "<>" else envelope.mail_from
+        if len(sender) > 254 or not sender.isascii() or any(ord(c) < 32 or ord(c) == 127 for c in sender):
+            return "550 5.1.7 Invalid sender"
+        peer = ipaddress.ip_address(session.peer[0])
+        protocol = "ESMTPS" if session.ssl else "ESMTP"
+        trace = f"Received: from [{peer}] by {server.hostname} with {protocol}; {formatdate(localtime=False, usegmt=True)}\r\n"
+        body = trace.encode("ascii") + envelope.original_content
+        status, _ = await asyncio.to_thread(self.bridge, "validate", "", body)
+        if status in (413, 422):
+            return "554 5.6.0 Message exceeds the supported MIME limits"
+        if status != 204:
+            return "451 4.3.0 Message validation unavailable"
+        try:
+            async with self.quota_lock:
+                await asyncio.to_thread(self.spool.accept, sender, body, envelope.bindings)
+                self.reservations.pop(envelope, None)
+        except SpoolUnavailable:
+            return "452 4.2.2 Workspace cannot accept queued mail"
+        except (sqlite3.Error, OSError):
+            logging.error("SMTP spool write failed")
+            return "452 4.3.1 Cannot durably queue message"
+        return "250 2.0.0 Message queued"
+
+
+async def serve(handler, hostname, host, port, tls, session_seconds=600):
+    active = {}
+
+    class LimitedSMTP(SMTP):
+        def _set_post_data_state(self):
+            # aiosmtpd creates a fresh envelope after HELO/EHLO, RSET and DATA.
+            handler.reservations.pop(self.envelope, None)
+            super()._set_post_data_state()
+
+        def connection_made(self, transport):
+            if self not in active:
+                peer = transport.get_extra_info("peername")[0]
+                if len(active) >= 8 or list(active.values()).count(peer) >= 4:
+                    transport.write(b"421 4.3.2 Server busy\r\n")
+                    transport.close()
+                    return
+                active[self] = peer
+                self.deadline = asyncio.get_running_loop().call_later(session_seconds, self.close_session)
+            super().connection_made(transport)
+
+        def close_session(self):
+            if self.transport:
+                self.transport.close()
+
+        def connection_lost(self, error):
+            if self in active:
+                del active[self]
+                self.deadline.cancel()
+                handler.reservations.pop(self.envelope, None)
+                super().connection_lost(error)
+
+    def protocol():
+        return LimitedSMTP(handler, hostname=hostname, tls_context=tls, require_starttls=False,
+                           decode_data=False, enable_SMTPUTF8=False, timeout=120,
+                           auth_exclude_mechanism={"LOGIN", "PLAIN"}, data_size_limit=MAX_BYTES,
+                           command_call_limit={"RCPT": 200, "*": 30})
+    return await asyncio.get_running_loop().create_server(protocol, host=host, port=port, backlog=64)
+
+
+async def main(spool):
+    credentials = Path(os.environ["CREDENTIALS_DIRECTORY"])
+    bridge = Bridge(os.environ["SMTP_API_ORIGIN"], (credentials / "bridge-token").read_text().strip())
+    tls = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    tls.minimum_version = ssl.TLSVersion.TLSv1_2
+    tls.load_cert_chain(credentials / "fullchain.pem", credentials / "privkey.pem")
+    server = await serve(Receiver(spool, bridge), os.environ["SMTP_HOSTNAME"],
+                         os.environ.get("SMTP_BIND") or None, int(os.environ.get("SMTP_PORT", 25)), tls)
+    async with server:
+        while True:
+            # Single consumer. A crash after delivery retries the same UUID.
+            if not await asyncio.to_thread(spool.deliver_one, bridge):
+                await asyncio.sleep(1)
+
+
+if __name__ == "__main__":
+    os.umask(0o077)
+    spool = Spool(Path(os.environ.get("STATE_DIRECTORY", "/var/lib/balebase-smtp")) / "spool.sqlite")
+    parser = argparse.ArgumentParser()
+    commands = parser.add_subparsers(dest="command")
+    commands.add_parser("status")
+    discard = commands.add_parser("purge-organization", help="Permanently delete all queued and held copies for a purged workspace")
+    discard.add_argument("--organization", required=True)
+    args = parser.parse_args()
+    if args.command == "purge-organization":
+        print(json.dumps({"discarded": spool.purge_organization(args.organization)}))
+    elif args.command == "status":
+        print(json.dumps(spool.counts()))
+    else:
+        asyncio.run(main(spool))

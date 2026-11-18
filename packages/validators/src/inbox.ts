@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { ActivityPageSchema, ActivityQuerySchema } from "./activity";
-import { RecordIdSchema } from "./fields";
+import { lineName, RecordIdSchema } from "./fields";
 import { route } from "./route";
 
 /** An email linked to a folder, transaction, or item, as the target lists it. */
@@ -108,15 +108,97 @@ export type InboundEmailDetail = z.infer<typeof InboundEmailDetailSchema>;
 
 const EmailIdSchema = z.object({ emailId: z.string() });
 
+const DomainSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .max(230)
+  .regex(
+    /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z](?:[a-z0-9-]{0,61}[a-z0-9])?$/,
+    "Enter a domain such as example.com.",
+  );
+
+const MailboxSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  address: z.string(),
+  connected: z.boolean(),
+});
+export type Mailbox = z.infer<typeof MailboxSchema>;
+
+const DomainClaimSchema = z.object({
+  id: z.string(),
+  domain: z.string(),
+  recordName: z.string(),
+  recordValue: z.string(),
+  status: z.enum(["pending", "verified"]),
+});
+export type DomainClaim = z.infer<typeof DomainClaimSchema>;
+
 export const inboxRoutes = {
+  routing: route({
+    method: "GET",
+    path: "/api/inbox/routing",
+    response: z.object({
+      domains: z.array(DomainClaimSchema),
+      directMx: z
+        .object({ host: z.string(), priority: z.number() })
+        .nullable()
+        .optional(),
+      mailboxes: z.array(
+        MailboxSchema.extend({ forwardingAddress: z.string() }),
+      ),
+    }),
+  }),
+  claim: route({
+    method: "POST",
+    path: "/api/inbox/routing/domains",
+    body: z.object({ domain: DomainSchema }),
+    response: DomainClaimSchema,
+  }),
+  verify: route({
+    method: "POST",
+    path: "/api/inbox/routing/domains/:id/verify",
+    response: DomainClaimSchema,
+  }),
+  mx: route({
+    method: "GET",
+    path: "/api/inbox/routing/domains/:id/mx",
+    response: z.object({ ready: z.boolean() }),
+  }),
+  release: route({
+    method: "DELETE",
+    path: "/api/inbox/routing/domains/:id",
+    response: "empty",
+  }),
+  bind: route({
+    method: "POST",
+    path: "/api/inbox/routing/mailboxes",
+    body: z.object({
+      name: lineName(80, "Enter an inbox name of up to 80 characters."),
+      address: z.email().trim().toLowerCase().max(254),
+    }),
+    response: z.object({ id: z.string(), forwardingAddress: z.string() }),
+  }),
+  disconnect: route({
+    method: "DELETE",
+    path: "/api/inbox/routing/mailboxes/:id",
+    response: "empty",
+  }),
   list: route({
     method: "GET",
     path: "/api/inbox",
-    query: InboxFolderQuerySchema,
+    query: InboxFolderQuerySchema.extend({
+      folder: InboxFolderSchema.or(z.literal("")).optional(),
+      mailbox: RecordIdSchema.optional(),
+      email: RecordIdSchema.optional(),
+    }),
     response: z.object({
       /** The address that delivers mail to this organization's inbox. */
       address: z.string(),
       emails: z.array(InboundEmailSummarySchema),
+      mailboxId: z.string().nullable(),
+      mailboxes: z.array(MailboxSchema),
     }),
   }),
   get: route({

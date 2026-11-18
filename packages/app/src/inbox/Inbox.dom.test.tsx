@@ -24,12 +24,12 @@ afterEach(() => {
 
 async function render() {
   ({ container } = await mount(
-    <Inbox canAccessFinance={false} onNavigate={() => {}} />,
+    <Inbox canManage={false} canAccessFinance={false} onNavigate={() => {}} />,
   ));
   await settle();
 }
 
-function fixture(linkCount = 0, listed = true) {
+function fixture(linkCount = 0, listed = true, unlink?: Promise<void>) {
   let status: InboxFolder = "inbox";
   const requests: string[] = [];
   const email: InboundEmailDetail = {
@@ -62,6 +62,7 @@ function fixture(linkCount = 0, listed = true) {
       return Response.json({ emailId: email.id });
     }
     if (url.pathname.endsWith("/links/link-1") && init?.method === "DELETE") {
+      await unlink;
       email.linkCount -= 1;
       email.links = [];
       return new Response(null, { status: 204 });
@@ -226,10 +227,20 @@ describe("Inbox, mounted", () => {
       return Response.json({
         address: "upload@example.com",
         emails: emails.filter(({ id }) => !archived.has(id)),
+        mailboxes: [
+          {
+            id: "legal",
+            address: "legal@example.org",
+            name: "Legal",
+            connected: true,
+          },
+        ],
       });
     });
     await render();
     await click("Archive");
+    const selector = container.querySelector<HTMLSelectElement>("select");
+    expect(selector?.disabled).toBe(true);
     // Chosen while the archive of the first message is still on its way.
     const statement = [
       ...container.querySelectorAll<HTMLButtonElement>(".inboxItem"),
@@ -240,6 +251,7 @@ describe("Inbox, mounted", () => {
     expect(container.textContent).toContain("Email archived.");
     const selected = container.querySelector('.inboxItem[aria-pressed="true"]');
     expect(selected?.textContent).toContain("Statement");
+    expect(selector?.disabled).toBe(false);
   });
 
   it("disables Trash for hidden links while allowing Archive", async () => {
@@ -256,7 +268,8 @@ describe("Inbox, mounted", () => {
   });
 
   it("enables Trash after removing the last link", async () => {
-    const { email } = fixture(1);
+    const unlink = Promise.withResolvers<void>();
+    const { email, requests } = fixture(1, true, unlink.promise);
     email.links = [
       {
         id: "link-1",
@@ -268,7 +281,42 @@ describe("Inbox, mounted", () => {
     await render();
     expect(button("Move to Trash").disabled).toBe(true);
     await click("Unlink Receipts");
+    await click("Refresh");
+    await act(async () => unlink.resolve());
+    await settle();
+    expect(
+      requests.filter((request) => request === "GET /api/inbox/email-1"),
+    ).toHaveLength(1);
     expect(button("Move to Trash").disabled).toBe(false);
+  });
+
+  it("cancels an unresolved email link when the reader switches folders", async () => {
+    const delayed = Promise.withResolvers<Response>();
+    const requests: string[] = [];
+    respond(async (url) => {
+      requests.push(url.pathname + url.search);
+      if (url.searchParams.get("folder") === "archived") return delayed.promise;
+      return Response.json({
+        emails: [],
+        mailboxes: [],
+        address: "default@example.org",
+      });
+    });
+    dom.history.replaceState(null, "", "/inbox?email=email-1&folder=archived");
+    await render();
+    await click("Trash");
+    await act(async () =>
+      delayed.resolve(Response.json({ emails: [], mailboxId: "old" })),
+    );
+    await settle();
+    expect(requests.filter((url) => url.includes("folder=trash"))).toHaveLength(
+      1,
+    );
+    expect(requests.find((url) => url.includes("folder=trash"))).not.toContain(
+      "email=",
+    );
+    expect(requests.some((url) => url.includes("/email-1"))).toBe(false);
+    expect(container.textContent).toContain("Trash is empty");
   });
 
   it("opens a linked archived email even when the listing is empty", async () => {

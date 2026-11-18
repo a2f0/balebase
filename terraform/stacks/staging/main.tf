@@ -52,6 +52,30 @@ resource "cloudflare_email_routing_rule" "inbound" {
   depends_on = [cloudflare_email_routing_dns.inbound]
 }
 
+# Keep the existing upload rule and its Terraform state address.
+resource "cloudflare_email_routing_rule" "mailboxes" {
+  for_each = var.enable_email_routing ? toset(concat(
+    ["inbox@${var.inbound_email_subdomain}"],
+    var.platform_mailbox_organization_id == "" ? [] : [
+      "legal@${var.inbound_email_subdomain}", "privacy@${var.inbound_email_subdomain}"
+    ]
+  )) : toset([])
+  zone_id = data.cloudflare_zone.main.id
+  name    = "Deliver ${each.value} to ${var.api_worker_name}"
+  enabled = true
+
+  matchers = [{
+    type  = "literal"
+    field = "to"
+    value = each.value
+  }]
+  actions = [{
+    type  = "worker"
+    value = [var.api_worker_name]
+  }]
+  depends_on = [cloudflare_email_routing_dns.inbound]
+}
+
 locals {
   worker_domains = {
     api = {
@@ -82,4 +106,16 @@ resource "cloudflare_workers_custom_domain" "main" {
 resource "cloudflare_queue" "finance_sync" {
   account_id = var.cloudflare_account_id
   queue_name = "${var.api_worker_name}-finance-sync"
+}
+
+# Direct customer MX targets a TCP/25 host. Cloudflare's HTTP proxy cannot
+# proxy public SMTP. Customer domains publish their own MX records.
+resource "cloudflare_dns_record" "smtp_host" {
+  for_each = { for kind, ip in { A = var.smtp_ipv4, AAAA = var.smtp_ipv6 } : kind => ip if ip != "" }
+  zone_id  = data.cloudflare_zone.main.id
+  name     = "mx-staging.${var.domain}"
+  type     = each.key
+  content  = each.value
+  proxied  = false
+  ttl      = 300
 }

@@ -34,5 +34,8 @@ if [[ $# -eq 0 ]]; then
   set -- plan
 fi
 
+if [[ "$1" == "apply" && -n "${TF_VAR_platform_mailbox_organization_id:-}" ]]; then
+  DEPLOY_TIER="$TIER" bash "$REPO_ROOT/scripts/deploy/verifyInboundEmail.sh" --bindings-only
+fi
 terraform -chdir="$STACK_DIR" init -input=false >/dev/null
 exec terraform -chdir="$STACK_DIR" "$@"

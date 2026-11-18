@@ -39,6 +39,7 @@ interface PackageWorkspace {
   // Production mode starts only from shipped code and checks no other files.
   production: string[];
   ignoreDependencies?: string[];
+  ignoreBinaries?: string[];
   includeEntryExports?: boolean;
 }
 
@@ -54,7 +55,11 @@ const packageWorkspaces: Record<string, PackageWorkspace> = {
   "packages/*": defaultPackage,
   "packages/api": {
     ...defaultPackage,
+    // The SMTP test shell wrapper starts the harness, which bundles its Worker fixture.
+    entry: [...defaultPackage.entry, "scripts/smtpIntegration{,Worker}.ts"],
     project: [...defaultPackage.project, "scripts/**/*.ts"],
+    // The SMTP smoke test generates a short-lived local TLS certificate.
+    ignoreBinaries: ["openssl"],
     production: [...defaultPackage.production, "!src/testing/**"],
   },
   // Every validators file is a package entry, and knip skips unused exports

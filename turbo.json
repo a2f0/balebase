@@ -1,7 +1,10 @@
 {
   "$schema": "https://turborepo.com/schema.json",
   "agentGuidance": false,
-  "globalPassThroughEnv": ["STAGING_STRIPE_PORTAL_CONFIGURATION_ID"],
+  "globalPassThroughEnv": [
+    "STAGING_STRIPE_PORTAL_CONFIGURATION_ID",
+    "TF_VAR_platform_mailbox_organization_id"
+  ],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],

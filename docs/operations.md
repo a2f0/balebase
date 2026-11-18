@@ -136,6 +136,67 @@ client at `/inbox`. The production tier also needs
 subdomain's Email Routing setup. The Terraform token needs Email Routing Rules
 Write.
 
+### Connect an inbound email domain
+
+1. In the customer's organization, open **Inbox → Manage inbox addresses**,
+   add the exact domain in the public address, and publish the generated
+   `_balebase-verification.<domain>` TXT record at its DNS provider. DNS
+   providers that append the zone name take a relative record name. Choose
+   **Verify domain** after the record becomes publicly visible.
+2. Connect the public recipient to a named inbox. In the customer's mail
+   service, forward that exact envelope recipient to the displayed
+   `inbox+<binding-id>@inbox.balebase.com` address. Customer MX records can
+   continue serving their existing mail provider. For example, Tearleads can
+   add a Google Workspace recipient address map for `legal@tearleads.com`.
+3. Send a test message from outside the organization to the public address and
+   check its subject and attachment in the named Balebase inbox. To roll back,
+   restore the previous mail-provider route before disconnecting the inbox.
+
+For direct delivery, deploy the [Balebase SMTP receiver](../smtp/README.md).
+Once enabled, the inbox screen also provides an MX target and a public DNS
+check for each verified domain. Use a dedicated subdomain when another mail
+provider serves the apex. Each connected recipient can receive direct mail
+and per-address forwarding at the same time. Direct SMTP bypasses filtering
+by the previous provider, including Google Workspace. Keep the verification
+TXT published for direct MX. The receiver checks it at RCPT time and returns
+a temporary failure if the proof changes or DNS is unavailable. TXT
+verification establishes customer control of the domain. The receiver checks
+that the exact envelope address has an active binding. Named Balebase inbox
+addresses are case-insensitive. It performs no SPF, DKIM,
+DMARC, or spam assessment of senders. Treat From, To and other sender-supplied
+headers as untrusted.
+
+For Balebase's own addresses, a root administrator who manages the Balebase
+workspace connects `privacy@balebase.com` and `legal@balebase.com` to separate
+inboxes. Cloudflare routes their literal envelope addresses directly. Stage
+the same two local parts at `inbox-staging.balebase.com`, and stage customer
+forwarding to the alias on that host. Apply migration 0105 and deploy the
+Worker before enabling the new routing rules. Review the production Terraform
+plan for apex MX changes and run `bun run deploy:email:verify` after applying.
+The first deploy sets up uploads and customer forwarding. To enable the
+platform recipients, connect both addresses in the Balebase organization and
+set `TF_VAR_platform_mailbox_organization_id` to that organization's ID in
+the tier's deployment environment. Keep this value set while routing should
+remain active. Redeploy the API to bind native delivery to this workspace.
+Run `bun run deploy:domains` with the tier environment to finish the production
+cutover. Supplying this setting through Terraform CLI overrides, variable files
+or saved plans bypasses the native email preflight. The supported deployment
+checks both inbox bindings and the deployed Worker against the configured
+organization ID. It checks for existing MX destinations from
+other providers before enabling the rules and publishing the apex MX. Send
+one external message per platform address and confirm each lands in its
+designated inbox before announcing the addresses.
+
+When a domain changes hands, the previous organization can disconnect its
+addresses and release the domain in **Manage inbox addresses**. If that
+organization is unavailable, have the new owner create a pending claim in
+their own workspace. A support operator should confirm its exact generated
+TXT value in public DNS, confirm the intended organization and domain with
+the parties, then disable the old bindings and release the old claim in one
+D1 transaction. Historical mail stays with its original organization. The
+new owner then chooses **Verify domain**, connects their addresses, and
+updates their mail provider's forwarding destinations.
+
 ## Background jobs and retained output
 
 Migration `0073_unify_job_runs.sql` moves existing finance runs into `job_runs`
@@ -738,7 +799,9 @@ after its 15-minute upload grace period, and retries storage failures. In stagin
 run that job manually after the grace period to finish file deletion.
 File cleanup processes 25 objects per run, so a large backlog can take days to
 drain; the grace period is a minimum wait, not a deletion deadline. Additional
-manual cleanup runs can drain eligible files sooner.
+manual cleanup runs can drain eligible files sooner. If the tier accepts
+direct SMTP, follow the [receiver purge procedure](../smtp/README.md#operations)
+for each ID in **Purge history** to remove its queued and held spool copies.
 
 Root admins can restore discarded global audit forms from **Global Audits →
 Discarded forms**. The **Purge discarded global forms** job

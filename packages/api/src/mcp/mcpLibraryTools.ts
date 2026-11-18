@@ -9,7 +9,7 @@ const fileId = { id: "File id from list_library_files." };
 
 const inboxFolder = {
   folder:
-    "Which mailbox to read; defaults to inbox. Archived and trashed email is only found in its own folder.",
+    "Which folder to read; defaults to inbox. Archived and trashed email is only found in its own folder.",
 };
 
 const emailId = { id: "Email id from list_inbox_emails." };
@@ -100,7 +100,13 @@ export const libraryTools: McpTool[] = [
   {
     description:
       "Lists up to 100 emails in the organization's shared inbox, archive, or trash, newest first, with the inbox's upload address.",
-    descriptions: inboxFolder,
+    descriptions: {
+      ...inboxFolder,
+      mailbox:
+        "Named mailbox ID from a previous listing. Defaults to the organization upload inbox.",
+      email:
+        "Choose the mailbox containing this linked email when no mailbox ID is given.",
+    },
     name: "list_inbox_emails",
     route: inboxRoutes.list,
     title: "List inbox emails",

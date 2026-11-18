@@ -23,7 +23,11 @@ const config = releaseConfiguration(
   process.env,
   currentCommit(),
 );
-const { DRY_RUN } = process.env;
+const {
+  DRY_RUN,
+  SMTP_ADVERTISE_MX,
+  TF_VAR_platform_mailbox_organization_id: platformOrganizationId,
+} = process.env;
 const dryRun = DRY_RUN === "1";
 if (config && !dryRun) requireUploadEnvironment();
 if (process.argv.includes("--check")) process.exit(0);
@@ -38,6 +42,15 @@ const wrangler = [
   "deploy",
   "--config",
   workerConfig,
+  ...(SMTP_ADVERTISE_MX === "1"
+    ? [
+        "--var",
+        `SMTP_MX_HOST:${environment === "staging" ? "mx-staging" : "mx"}.balebase.com`,
+      ]
+    : []),
+  ...(platformOrganizationId
+    ? ["--var", `PLATFORM_MAILBOX_ORGANIZATION_ID:${platformOrganizationId}`]
+    : []),
 ];
 try {
   // Build once, upload those maps, then publish the exact same module. Keeping

@@ -13,7 +13,7 @@ import {
   findActivity,
   insertActivity,
 } from "../shared/activity";
-import { respond } from "../shared/respond";
+import { readQuery, respond } from "../shared/respond";
 import { storedDownload } from "../shared/storage";
 import { organizationInboxAddress } from "./inboundEmailAddress";
 import {
@@ -24,7 +24,10 @@ import {
   shownLink,
 } from "./inboundEmailLinks";
 
+import { inboxRouting, listMailboxes } from "./mailboxes";
+
 const inbox = new Hono<ApiEnv>();
+inbox.route("/routing", inboxRouting());
 
 const emailStatus = `CASE
   WHEN inbound_emails.deleted_at IS NOT NULL THEN 'trash'
@@ -57,9 +60,24 @@ interface InboundEmailAttachmentRow {
 }
 
 inbox.get("/", async (context) => {
-  const folder = inboxFolder(context.req.query("folder"));
-  if (!folder) return invalidFolder(context);
+  const query = readQuery(context, inboxRoutes.list, "Invalid inbox query.");
+  if (query instanceof Response) return query;
+  const folder = query.folder || "inbox";
   const organizationId = context.get("organizationId");
+  const mailboxes = await listMailboxes(context.env.DB, organizationId);
+  const linkedEmail = query.email;
+  const mailboxId =
+    query.mailbox ??
+    (linkedEmail
+      ? await context.env.DB.prepare(
+          "SELECT mailbox_id FROM inbound_emails WHERE organization_id = ? AND id = ?",
+        )
+          .bind(organizationId, linkedEmail)
+          .first<string>("mailbox_id")
+      : null);
+  const selected = mailboxes.find((box) => box.id === mailboxId);
+  if (mailboxId !== null && !selected)
+    return context.json({ error: "Inbox not found." }, 404);
   const folderFilter = emailFolderFilter(folder);
   const ordering =
     folder === "trash" ? "email.deleted_at" : "email.received_at";
@@ -78,19 +96,23 @@ inbox.get("/", async (context) => {
      LEFT JOIN inbound_email_attachments AS attachment
        ON attachment.email_id = email.id
      LEFT JOIN "user" AS deleted_by ON deleted_by.id = email.deleted_by_user_id
-     WHERE email.organization_id = ? AND ${folderFilter}
+     WHERE email.organization_id = ? AND email.mailbox_id IS ? AND ${folderFilter}
      GROUP BY email.id
      ORDER BY ${ordering} DESC, email.id DESC
      LIMIT 100`,
   )
-    .bind(organizationId)
+    .bind(organizationId, selected?.id ?? null)
     .all<InboundEmailRow>();
 
   return respond(context, inboxRoutes.list, {
-    address: organizationInboxAddress(
-      organizationId,
-      context.env.INBOUND_EMAIL_DOMAIN,
-    ),
+    mailboxes,
+    mailboxId: selected?.id ?? null,
+    address:
+      selected?.address ??
+      organizationInboxAddress(
+        organizationId,
+        context.env.INBOUND_EMAIL_DOMAIN,
+      ),
     emails: result.results.map(toEmailSummary),
   });
 });
