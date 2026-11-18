@@ -8,6 +8,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 # shellcheck source=scripts/lib/cloudflareEnv.sh
 # shellcheck disable=SC1091
 source "$SCRIPT_DIR/../lib/cloudflareEnv.sh"
+cd "$REPO_ROOT"
 load_cloudflare_env
 
 export VITE_API_URL="${VITE_API_URL:-https://api.balebase.com}"

@@ -2,28 +2,15 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-# Git hooks, including pre-push, export repository variables such as GIT_DIR.
-# Clear them so Git resolves the fixture as its own repository and never
-# initializes this checkout or reads its real .secrets link.
-while IFS= read -r git_variable; do
-  unset "$git_variable"
-done < <(git rev-parse --local-env-vars)
+MATRIX="$(mktemp -d "${TMPDIR:-/tmp}/cloudflare-env-test.XXXXXX")"
+FIXTURE="$MATRIX/checkouts/test project"
+trap 'rm -rf "$MATRIX"' EXIT
 
-# The fixture is its own Git repository outside this checkout, so the loaders
-# resolve it as the repository root.
-FIXTURE="$(mktemp -d "${TMPDIR:-/tmp}/cloudflare-env-test.XXXXXX")"
-trap 'rm -rf "$FIXTURE"' EXIT
-
-mkdir -p "$FIXTURE/scripts/dev" "$FIXTURE/scripts/lib" "$FIXTURE/packages/api" "$FIXTURE/bin" \
+mkdir -p "$FIXTURE/scripts/deploy" "$FIXTURE/scripts/dev" "$FIXTURE/scripts/lib" "$FIXTURE/packages/api" "$FIXTURE/bin" \
   "$FIXTURE/.secrets/prod"
+cp "$REPO_ROOT/scripts/deploy/deployWebsite.sh" "$FIXTURE/scripts/deploy/"
 cp "$REPO_ROOT/scripts/lib/cloudflareEnv.sh" "$FIXTURE/scripts/lib/"
 cp "$REPO_ROOT/scripts/dev/devApi.sh" "$FIXTURE/scripts/dev/"
-git init -q "$FIXTURE"
-fixture_root="$(cd "$FIXTURE" && pwd -P)"
-[[ "$(cd "$FIXTURE" && git rev-parse --show-toplevel)" == "$fixture_root" ]] || {
-  echo 'The fixture does not resolve as its own Git repository' >&2
-  exit 1
-}
 
 cat > "$FIXTURE/.secrets/prod/shared.env" <<'EOF'
 TF_VAR_cloudflare_api_token=shared-token
@@ -58,10 +45,10 @@ if [[ -n "${AMBIENT_CLOUDFLARE_TOKEN:-}" ]]; then
     CLOUDFLARE_EMAIL_API_TOKEN=ambient-email-token
 fi
 if [[ "$1" == "devApi" ]]; then
-  exec bash scripts/dev/devApi.sh
+  exec bash "$(dirname "$0")/scripts/dev/devApi.sh"
 fi
 # shellcheck source=/dev/null
-source scripts/lib/cloudflareEnv.sh
+source "$(dirname "$0")/scripts/lib/cloudflareEnv.sh"
 "$@"
 printf 'tf_token=%s tf_account=%s token=%s account=%s auth=%s\n' \
   "${TF_VAR_cloudflare_api_token:-}" "${TF_VAR_cloudflare_account_id:-}" \
@@ -96,7 +83,7 @@ chmod +x "$FIXTURE/bin/mktemp" "$FIXTURE/bin/bunx"
 export MOCK_LOG="$FIXTURE/commands.log"
 
 probe() {
-  (cd "$FIXTURE" && PATH="$FIXTURE/bin:$PATH" bash probe.sh "$@")
+  (cd "$MATRIX" && PATH="$FIXTURE/bin:$PATH" bash "./checkouts/test project/probe.sh" "$@")
 }
 
 expect_output() {
@@ -144,6 +131,19 @@ expect_output \
 expect_output \
   'tf_token=prod-token tf_account=shared-account token=shared-email-token account= auth=prod-auth' \
   load_cloudflare_email_env
+
+# The standalone website wrapper must run the checkout's Wrangler from either
+# directory. Stub both Bun commands so this only exercises path resolution.
+mkdir "$FIXTURE/deploy-bin"
+for tool in bun bunx; do
+  cat > "$FIXTURE/deploy-bin/$tool" <<'EOF'
+#!/usr/bin/env bash
+[[ "$PWD" -ef "$FIXTURE" ]] || exit 1
+EOF
+  chmod +x "$FIXTURE/deploy-bin/$tool"
+done
+(cd "$FIXTURE" && DRY_RUN=1 PATH="$FIXTURE/deploy-bin:$PATH" ./scripts/deploy/deployWebsite.sh)
+(cd "$MATRIX" && DRY_RUN=1 PATH="$FIXTURE/deploy-bin:$PATH" "./checkouts/test project/scripts/deploy/deployWebsite.sh")
 
 # Each tier is self-contained and needs its app.env.
 expect_failure '.secrets/staging/app.env is missing.' load_tier_env staging

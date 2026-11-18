@@ -11,6 +11,7 @@ source "$SCRIPT_DIR/../lib/cloudflareEnv.sh"
 # shellcheck source=scripts/lib/workerDeploy.sh
 # shellcheck disable=SC1091
 source "$SCRIPT_DIR/../lib/workerDeploy.sh"
+cd "$REPO_ROOT"
 load_cloudflare_env
 validate_auth_env
 validate_plaid_env

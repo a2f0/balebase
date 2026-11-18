@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 
-get_repo_root() {
-  git rev-parse --show-toplevel
-}
+cloudflare_env_root="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd -P)" || return 1
 
 source_env_file() {
   local env_file="$1"
@@ -26,20 +24,17 @@ source_env_file() {
 # Each tier folder is self-contained: shared.env, when present, holds values
 # copied from the cross-project root file, and app.env holds this project's
 # values for the tier, so app.env wins. Pass a root to read a tree other than
-# the current Git checkout. Call it as a plain command: a `||` or `if` around
+# this script's checkout. Call it as a plain command: a `||` or `if` around
 # it disables errexit while the files are sourced, so a malformed line would
 # no longer stop the caller.
 load_tier_env() {
   local tier="$1"
-  local repo_root="${2:-}"
+  local repo_root="${2:-$cloudflare_env_root}"
   local tier_dir
 
   if [[ "$tier" != "prod" && "$tier" != "staging" ]]; then
     echo "ERROR: Unknown secrets tier: $tier" >&2
     return 1
-  fi
-  if [[ -z "$repo_root" ]]; then
-    repo_root="$(get_repo_root)" || return 1
   fi
 
   tier_dir="$repo_root/.secrets/$tier"

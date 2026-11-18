@@ -8,6 +8,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 # shellcheck source=scripts/lib/cloudflareEnv.sh
 # shellcheck disable=SC1091
 source "$SCRIPT_DIR/../lib/cloudflareEnv.sh"
+cd "$REPO_ROOT"
 load_cloudflare_env
 
 export PUBLIC_APP_URL="${PUBLIC_APP_URL:-https://app.balebase.com}"
