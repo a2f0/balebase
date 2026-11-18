@@ -23,9 +23,11 @@ function fixture(inboundDomain = "inbox.balebase.com", afterPut?: () => void) {
   });
   let records: string[][] = [];
   let error: Error | undefined;
+  let onLookup: (() => void) | undefined;
   const names: string[] = [];
   const routing = inboxRouting(async (name) => {
     names.push(name);
+    onLookup?.();
     if (error) throw error;
     return records;
   });
@@ -102,6 +104,9 @@ function fixture(inboundDomain = "inbox.balebase.com", afterPut?: () => void) {
     deliver,
     org,
     request,
+    duringLookup: (callback: () => void) => {
+      onLookup = callback;
+    },
     publish: (next: string[][]) => {
       records = next;
     },
@@ -140,6 +145,19 @@ describe("verified inbound domains", () => {
         )
         .all(),
     ).toHaveLength(1);
+  });
+  it("leaves a claim available when the verifying workspace is deleted during DNS lookup", async () => {
+    const f = fixture();
+    const claim = await f.claim();
+    const other = await f.claim("other");
+    f.publish([[claim.recordValue], [other.recordValue]]);
+    f.duringLookup(() => {
+      f.database
+        .query("UPDATE organization SET deletedAt = ? WHERE id = ?")
+        .run(new Date().toISOString(), f.org);
+    });
+    expect((await f.verify(claim.id)).status).toBe(409);
+    expect((await f.verify(other.id, "other")).status).toBe(200);
   });
   it("distinguishes missing TXT records from DNS outages and leaves the claim pending", async () => {
     const f = fixture();

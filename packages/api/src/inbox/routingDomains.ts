@@ -37,7 +37,15 @@ export async function listDomains(db: D1Database, org: string) {
 export function routingActor(c: Context<ApiEnv>) {
   const org = c.get("organizationId");
   const userId = c.get("authSession").user.id;
-  return { org, userId, manager: stillManages(org, userId) };
+  const manager = stillManages(org, userId);
+  return {
+    org,
+    userId,
+    manager: {
+      sql: `${manager.sql} AND EXISTS (SELECT 1 FROM organization WHERE id = ? AND deletedAt IS NULL)`,
+      bindings: [...manager.bindings, org],
+    },
+  };
 }
 
 export async function writeRouting(

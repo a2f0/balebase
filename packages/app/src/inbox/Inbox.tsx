@@ -97,9 +97,16 @@ function useInboxMessages(folder: InboxFolder, mailbox: string | undefined) {
     list.data?.folder === folder && list.data.mailbox === mailbox
       ? list.data.listing
       : undefined;
-  const [mailboxes, setMailboxes] = useState<Mailbox[]>([]);
+  const [lastListing, setLastListing] = useState<{
+    mailboxId: string;
+    mailboxes: Mailbox[];
+  }>({ mailboxId: "", mailboxes: [] });
   useEffect(() => {
-    if (listing) setMailboxes(listing.mailboxes ?? []);
+    if (listing)
+      setLastListing({
+        mailboxId: listing.mailboxId ?? "",
+        mailboxes: listing.mailboxes ?? [],
+      });
   }, [listing]);
   const selectedMailbox = listing?.mailboxes?.find(
     (box) => box.id === listing.mailboxId,
@@ -133,8 +140,8 @@ function useInboxMessages(folder: InboxFolder, mailbox: string | undefined) {
     error: list.error ?? message.error,
     inboundAddress:
       selectedMailbox?.connected === false ? undefined : listing?.address,
-    mailboxes,
-    listedMailbox: listing?.mailboxId ?? "",
+    mailboxes: lastListing.mailboxes,
+    listedMailbox: listing ? (listing.mailboxId ?? "") : lastListing.mailboxId,
     loadingList: list.loading,
     loadingMessage: Boolean(selectedId) && message.loading,
     refresh,

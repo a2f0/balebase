@@ -22,12 +22,10 @@ ZONE_NAME="balebase.com"
 if [[ "$DEPLOY_TIER" == "staging" ]]; then
   INBOUND_DOMAIN="inbox-staging.balebase.com"
   PLATFORM_DOMAIN="$INBOUND_DOMAIN"
-  api_config="wrangler.staging.jsonc"
   WORKER_NAME="balebase-api-staging"
 else
   INBOUND_DOMAIN="inbox.balebase.com"
   PLATFORM_DOMAIN="$ZONE_NAME"
-  api_config="wrangler.jsonc"
   WORKER_NAME="balebase-api"
 fi
 
@@ -40,22 +38,26 @@ cloudflare_get() {
 # Cloudflare can route both addresses while D1 still rejects their envelopes.
 # Only compare aggregate counts and the destination organization ID.
 check_bindings() {
-  local sql
+  local sql database_id
   if [[ -z "${TF_VAR_platform_mailbox_organization_id:-}" ]]; then return 0; fi
+  # Read the D1 binding from the live Worker so standalone verification also
+  # checks the deployed database in a fresh staging checkout.
+  database_id="$(cloudflare_get "$account_token" "$API_BASE/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$WORKER_NAME/settings" |
+    jq -er --arg expected "$TF_VAR_platform_mailbox_organization_id" '
+      select(.success == true and any(.result.bindings[]?; .name == "PLATFORM_MAILBOX_ORGANIZATION_ID" and .type == "plain_text" and .text == $expected)) |
+      .result.bindings[] | select(.type == "d1" and .name == "DB") | (.database_id // .id) | select(type == "string" and length > 0)')" || {
+    echo "ERROR: Deploy $WORKER_NAME with its database and configured platform inbox organization before enabling its email routes." >&2
+    exit 1
+  }
   sql="SELECT count(*) AS recipients, count(DISTINCT box.organization_id) AS organizations, min(box.organization_id) AS organization_id
     FROM inbound_mailboxes box JOIN organization org ON org.id = box.organization_id
     WHERE box.disconnected_at IS NULL AND org.deletedAt IS NULL
       AND box.address IN ('legal@$PLATFORM_DOMAIN', 'privacy@$PLATFORM_DOMAIN')"
-  if ! (
-    cd "$SCRIPT_DIR/../../packages/api"
-    bunx --bun --no-install wrangler d1 execute DB --remote --config "$api_config" --command "$sql" --json
-  ) | jq -e --arg expected "$TF_VAR_platform_mailbox_organization_id" '.[0].results[0] | .recipients == 2 and .organizations == 1 and .organization_id == $expected' >/dev/null; then
+  if ! jq -n --arg sql "$sql" '{sql:$sql}' |
+    curl -fsS "$API_BASE/accounts/$CLOUDFLARE_ACCOUNT_ID/d1/database/$database_id/query" \
+      -H "Authorization: Bearer $account_token" -H 'Content-Type: application/json' --data-binary @- |
+    jq -e --arg expected "$TF_VAR_platform_mailbox_organization_id" '.success == true and (.result[0].results[0] | .recipients == 2 and .organizations == 1 and .organization_id == $expected)' >/dev/null; then
     echo "ERROR: Connect both legal@$PLATFORM_DOMAIN and privacy@$PLATFORM_DOMAIN in the Balebase workspace, then rerun email verification." >&2
-    exit 1
-  fi
-  if ! cloudflare_get "$account_token" "$API_BASE/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$WORKER_NAME/settings" |
-    jq -e --arg expected "$TF_VAR_platform_mailbox_organization_id" '.success == true and any(.result.bindings[]?; .name == "PLATFORM_MAILBOX_ORGANIZATION_ID" and .type == "plain_text" and .text == $expected)' >/dev/null; then
-    echo "ERROR: Deploy $WORKER_NAME with the configured platform inbox organization before enabling its email routes." >&2
     exit 1
   fi
 }
