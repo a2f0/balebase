@@ -8,8 +8,8 @@ trap 'rm -rf "$MATRIX"' EXIT
 
 mkdir -p "$FIXTURE/scripts/deploy" "$FIXTURE/scripts/dev" "$FIXTURE/scripts/lib" "$FIXTURE/packages/api" "$FIXTURE/bin" \
   "$FIXTURE/.secrets/prod"
-cp "$REPO_ROOT/scripts/deploy/deployWebsite.sh" "$FIXTURE/scripts/deploy/"
-cp "$REPO_ROOT/scripts/lib/cloudflareEnv.sh" "$FIXTURE/scripts/lib/"
+cp "$REPO_ROOT/scripts/deploy/"deploy{Api,App,Website}.sh "$FIXTURE/scripts/deploy/"
+cp "$REPO_ROOT/scripts/lib/"{cloudflareEnv,workerDeploy}.sh "$FIXTURE/scripts/lib/"
 cp "$REPO_ROOT/scripts/dev/devApi.sh" "$FIXTURE/scripts/dev/"
 
 cat > "$FIXTURE/.secrets/prod/shared.env" <<'EOF'
@@ -132,18 +132,33 @@ expect_output \
   'tf_token=prod-token tf_account=shared-account token=shared-email-token account= auth=prod-auth' \
   load_cloudflare_email_env
 
-# The standalone website wrapper must run the checkout's Wrangler from either
-# directory. Stub both Bun commands so this only exercises path resolution.
+# Standalone deploys must run the checkout's Wrangler from either directory.
+# Only the stubs run. They record arguments and never read secret values.
 mkdir "$FIXTURE/deploy-bin"
 for tool in bun bunx; do
   cat > "$FIXTURE/deploy-bin/$tool" <<'EOF'
 #!/usr/bin/env bash
 [[ "$PWD" -ef "$FIXTURE" ]] || exit 1
+printf '%s %s\n' "${0##*/}" "$*" >> "$MOCK_LOG"
 EOF
   chmod +x "$FIXTURE/deploy-bin/$tool"
 done
-(cd "$FIXTURE" && DRY_RUN=1 PATH="$FIXTURE/deploy-bin:$PATH" ./scripts/deploy/deployWebsite.sh)
-(cd "$MATRIX" && DRY_RUN=1 PATH="$FIXTURE/deploy-bin:$PATH" "./checkouts/test project/scripts/deploy/deployWebsite.sh")
+
+check_deploy_paths() (
+  cd "$1"
+  local scripts="$2"
+  export PATH="$FIXTURE/deploy-bin:$PATH"
+  for frontend in Website App; do
+    : > "$MOCK_LOG"
+    DRY_RUN=1 "$scripts/deploy$frontend.sh"
+    grep -q '^bunx --bun wrangler deploy --config .* --dry-run$' "$MOCK_LOG"
+  done
+  : > "$MOCK_LOG"
+  DRY_RUN=0 STRIPE_SECRET_KEY=sk_live_fixture STRIPE_WEBHOOK_SECRET=whsec_fixture "$scripts/deployApi.sh"
+  grep -q '^bunx --bun wrangler secret put BETTER_AUTH_SECRET --config ' "$MOCK_LOG"
+)
+check_deploy_paths "$FIXTURE" ./scripts/deploy
+check_deploy_paths "$MATRIX" "./checkouts/test project/scripts/deploy"
 
 # Each tier is self-contained and needs its app.env.
 expect_failure '.secrets/staging/app.env is missing.' load_tier_env staging
