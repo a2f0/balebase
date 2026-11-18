@@ -38,12 +38,14 @@ const page = galleryPage(manifest, project, screen);
     <div class="container screenshotsInner">
       <h1 class="screenshotsIntro" id="page-title">
         <span class="eyebrow">Product tour</span>
-        {!screen && <span class="title" id="gallery-index-title">Screenshots</span>}
+        <span class="title" id="gallery-index-title" hidden={!!screen}>Screenshots</span>
+        <span class="srOnly" id="gallery-detail-title" hidden={!screen}>{page.heading}</span>
       </h1>
       <screenshot-gallery
         base-path={galleryPath}
         empty-message="Screenshots are on their way."
         error-message="The screenshots could not be loaded."
+        heading-id="gallery-detail-title"
         initial-project={project}
         initial-screen={screen}
         label={`${productName} screenshots`}
@@ -57,13 +59,15 @@ const page = galleryPage(manifest, project, screen);
   <script>
     import { defineScreenshotElements } from "@a2f0/agent-tool/screenshots/gallery";
 
-    const indexTitle = document.getElementById("gallery-index-title");
-    if (indexTitle) {
-      const indexPath = location.pathname;
-      document.addEventListener("screenshot-change", () => {
-        if (location.pathname !== indexPath) indexTitle.remove();
-      });
+    const gallery = document.querySelector("screenshot-gallery");
+    const indexPath = gallery?.getAttribute("base-path");
+    function syncHeading() {
+      const isIndex = location.pathname.replace(/\/$/, "") === indexPath;
+      document.getElementById("gallery-index-title")?.toggleAttribute("hidden", !isIndex);
+      document.getElementById("gallery-detail-title")?.toggleAttribute("hidden", isIndex);
     }
+    document.addEventListener("screenshot-change", syncHeading);
+    window.addEventListener("popstate", syncHeading);
     defineScreenshotElements();
   </script>
 </BaseLayout>

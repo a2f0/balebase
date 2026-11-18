@@ -213,7 +213,11 @@ function current(page: Page) {
       ".shots-slide[data-active] img.shots-image",
     );
     return {
-      heading: document.querySelector("#page-title")?.textContent?.trim(),
+      heading: document.querySelector("#gallery-detail-title:not([hidden])")
+        ?.textContent,
+      visibleHeading:
+        document.querySelector("#gallery-index-title:not([hidden])")
+          ?.textContent ?? null,
       image: image?.currentSrc.replace(location.origin, ""),
       loaded: (image?.naturalWidth ?? 0) > 0,
       project: root?.getAttribute("data-project"),
@@ -246,23 +250,34 @@ it("shows the first capture and switches themes", async () => {
     await page.goto("https://website.test/screenshots/");
     await page.waitForSelector(".shots-gallery[data-state='ready']");
     await shown(page, "light");
-    expect(
-      await page.$eval("#gallery-index-title", (el) => el.textContent),
-    ).toBe("Screenshots");
     expect(await current(page)).toMatchObject({
+      visibleHeading: "Screenshots",
       image: "/screenshot-gallery/img/web/light/projects.png?v=0",
       loaded: true,
       project: "web",
       theme: "light",
       title: "Projects",
     });
+    // Keep the index in browser history before the gallery replaces the
+    // current entry with the selected screen.
+    await page.evaluate(() => {
+      location.hash = "main";
+    });
     await page.click(".shots-icon-button[data-action='theme']");
     await shown(page, "dark");
     expect(new URL(page.url()).pathname).toBe("/screenshots/web/projects/");
-    expect((await current(page)).heading).toBe("Product tour");
+    expect((await current(page)).visibleHeading).toBeNull();
     expect((await current(page)).image).toBe(
       "/screenshot-gallery/img/web/dark/projects.png?v=0",
     );
+    await page.goBack();
+    expect(new URL(page.url()).pathname).toBe("/screenshots/");
+    expect((await current(page)).visibleHeading).toBe("Screenshots");
+    await page.goForward();
+    expect(await current(page)).toMatchObject({
+      heading: "Projects, desktop screenshot",
+      visibleHeading: null,
+    });
   } finally {
     await page.close();
   }
@@ -345,7 +360,8 @@ it("opens a deep link on its layout and screen, in a page that fits a phone", as
       () => document.querySelector(".shots-title")?.textContent === "Audit",
     );
     expect(await current(page)).toMatchObject({
-      heading: "Product tour",
+      heading: "Audit, phone screenshot",
+      visibleHeading: null,
       project: "mobile",
     });
     expect(
