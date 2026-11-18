@@ -67,10 +67,22 @@ resource "cloudflare_email_routing_rule" "inbound" {
   depends_on = [cloudflare_email_routing_dns.inbound]
 }
 
-# Keep the existing upload rule and its Terraform state address.
-resource "cloudflare_email_routing_dns" "platform" {
-  zone_id = data.cloudflare_zone.main.id
-  name    = var.domain
+# The Email Routing DNS resource uses the zone ID as its state identity.
+# Manage the apex MX records individually so the upload subdomain keeps its
+# existing resource, and the zone's existing SPF record stays in place.
+# These are the exchanges and priorities assigned to the zone's upload inbox.
+resource "cloudflare_dns_record" "platform_mx" {
+  for_each = {
+    "route1.mx.cloudflare.net" = 87
+    "route2.mx.cloudflare.net" = 43
+    "route3.mx.cloudflare.net" = 21
+  }
+  zone_id  = data.cloudflare_zone.main.id
+  name     = var.domain
+  type     = "MX"
+  content  = each.key
+  priority = each.value
+  ttl      = 1
 }
 
 resource "cloudflare_email_routing_rule" "mailboxes" {
@@ -92,7 +104,7 @@ resource "cloudflare_email_routing_rule" "mailboxes" {
     type  = "worker"
     value = [var.api_worker_name]
   }]
-  depends_on = [cloudflare_email_routing_dns.inbound, cloudflare_email_routing_dns.platform]
+  depends_on = [cloudflare_email_routing_dns.inbound, cloudflare_dns_record.platform_mx]
 }
 
 locals {
