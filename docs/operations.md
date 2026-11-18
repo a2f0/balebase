@@ -136,6 +136,31 @@ client at `/inbox`. The production tier also needs
 subdomain's Email Routing setup. The Terraform token needs Email Routing Rules
 Write.
 
+### Connect an inbound email domain
+
+1. In the customer's organization, open **Inbox → Manage inbox addresses**,
+   add the exact domain in the public address, and publish the generated
+   `_balebase-verification.<domain>` TXT record at its DNS provider. DNS
+   providers that append the zone name take a relative record name. Choose
+   **Verify domain** after the record becomes publicly visible.
+2. Connect the public recipient to a named inbox. In the customer's mail
+   service, forward that exact envelope recipient to the displayed
+   `inbox+<binding-id>@inbox.balebase.com` address. Customer MX records can
+   continue serving their existing mail provider. For example, Tearleads can
+   add a Google Workspace recipient address map for `legal@tearleads.com`.
+3. Send a test message from outside the organization to the public address and
+   check its subject and attachment in the named Balebase inbox. To roll back,
+   restore the previous mail-provider route before disconnecting the inbox.
+
+For Balebase's own addresses, a root administrator who manages the Balebase
+workspace connects `privacy@balebase.com` and `legal@balebase.com` to separate
+inboxes. Cloudflare routes their literal envelope addresses directly. Stage
+the same two local parts at `inbox-staging.balebase.com`, and stage customer
+forwarding to the alias on that host. Apply migration 0105 and deploy the
+Worker before enabling the new routing rules. Review the production Terraform
+plan for apex MX changes and run `bun run deploy:email:verify` after applying.
+Unbound recipients are rejected until a manager creates the corresponding inbox.
+
 ## Background jobs and retained output
 
 Migration `0073_unify_job_runs.sql` moves existing finance runs into `job_runs`

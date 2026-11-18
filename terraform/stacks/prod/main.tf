@@ -67,6 +67,34 @@ resource "cloudflare_email_routing_rule" "inbound" {
   depends_on = [cloudflare_email_routing_dns.inbound]
 }
 
+# Keep the existing upload rule and its Terraform state address.
+resource "cloudflare_email_routing_dns" "platform" {
+  zone_id = data.cloudflare_zone.main.id
+  name    = var.domain
+}
+
+resource "cloudflare_email_routing_rule" "mailboxes" {
+  for_each = toset([
+    "inbox@${var.inbound_email_subdomain}",
+    "legal@${var.domain}",
+    "privacy@${var.domain}",
+  ])
+  zone_id = data.cloudflare_zone.main.id
+  name    = "Deliver ${each.value} to ${var.api_worker_name}"
+  enabled = true
+
+  matchers = [{
+    type  = "literal"
+    field = "to"
+    value = each.value
+  }]
+  actions = [{
+    type  = "worker"
+    value = [var.api_worker_name]
+  }]
+  depends_on = [cloudflare_email_routing_dns.inbound, cloudflare_email_routing_dns.platform]
+}
+
 locals {
   worker_domains = {
     api = {

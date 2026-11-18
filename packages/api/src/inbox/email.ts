@@ -2,7 +2,7 @@ import type { Attachment } from "postal-mime";
 import PostalMime from "postal-mime";
 import { normalizeFilename } from "../shared/filenames";
 import type { Bindings } from "../types";
-import { organizationIdForInboundAddress } from "./inboundEmailAddress";
+import { resolveRecipient } from "./inboundEmailAddress";
 
 const maxEmailBytes = 25 * 1024 * 1024;
 const maxHeaderTextLength = 1_000;
@@ -22,37 +22,33 @@ export async function handleEmail(
   message: ForwardableEmailMessage,
   env: Bindings,
 ) {
-  const organizationId = organizationIdForInboundAddress(
-    message.to,
-    env.INBOUND_EMAIL_DOMAIN,
-  );
-  if (!organizationId) {
-    message.setReject("Unknown recipient");
-    return;
-  }
-
   if (message.rawSize > maxEmailBytes) {
     message.setReject("Messages must be 25 MB or smaller");
     return;
   }
 
-  const organization = await env.DB.prepare(
-    `SELECT id FROM organization
-     WHERE id = ? AND deletedAt IS NULL`,
-  )
-    .bind(organizationId)
-    .first<{ id: string }>();
-  if (!organization) {
+  const recipient = await resolveRecipient(
+    env.DB,
+    message.to,
+    env.INBOUND_EMAIL_DOMAIN,
+  );
+  if (!recipient) {
     message.setReject("Unknown recipient");
     return;
   }
 
-  await ingestInboundEmail(message, organization.id, env);
+  await ingestInboundEmail(
+    message,
+    recipient.organizationId,
+    recipient.mailboxId,
+    env,
+  );
 }
 
 async function ingestInboundEmail(
   message: ForwardableEmailMessage,
   organizationId: string,
+  mailboxId: string | null,
   env: Pick<Bindings, "DB" | "STORAGE">,
 ) {
   const emailId = crypto.randomUUID();
@@ -90,8 +86,8 @@ async function ingestInboundEmail(
       env.DB.prepare(
         `INSERT INTO inbound_emails
          (id, organization_id, message_id, envelope_from, envelope_to, subject,
-          raw_object_key, raw_size, received_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          raw_object_key, raw_size, received_at, mailbox_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).bind(
         emailId,
         organizationId,
@@ -102,6 +98,7 @@ async function ingestInboundEmail(
         rawObjectKey,
         message.rawSize,
         createdAt,
+        mailboxId,
       ),
       ...attachments.map((attachment) =>
         env.DB.prepare(

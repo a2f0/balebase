@@ -24,7 +24,7 @@ afterEach(() => {
 
 async function render() {
   ({ container } = await mount(
-    <Inbox canAccessFinance={false} onNavigate={() => {}} />,
+    <Inbox canManage={false} canAccessFinance={false} onNavigate={() => {}} />,
   ));
   await settle();
 }

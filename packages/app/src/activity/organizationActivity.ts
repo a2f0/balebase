@@ -7,6 +7,11 @@ import { purgeSummary, retentionSummary } from "./systemActivity";
 export const organizationActionLabels: Record<string, string> = {
   "organization.created": "created the organization",
   "organization.deletion_requested": "deleted the organization",
+  "organization.inbound_address_bound": "connected an inbox address",
+  "organization.inbound_address_disconnected": "disconnected an inbox address",
+  "organization.inbound_domain_requested": "requested an email domain",
+  "organization.inbound_domain_released": "released an email domain",
+  "organization.inbound_domain_verified": "verified an email domain",
   "organization.invitation_accepted": "accepted an invitation",
   "organization.invitation_canceled": "canceled an invitation",
   "organization.invitation_created": "sent an invitation",

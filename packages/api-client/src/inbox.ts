@@ -7,6 +7,38 @@ import { endpoint } from "./endpoint";
 import type { Transport } from "./transport";
 
 const endpoints = {
+  release: endpoint<typeof inboxRoutes.release>({
+    method: "DELETE",
+    path: "/api/inbox/routing/domains/:id",
+    response: "empty",
+  }),
+  disconnect: endpoint<typeof inboxRoutes.disconnect>({
+    method: "DELETE",
+    path: "/api/inbox/routing/mailboxes/:id",
+    response: "empty",
+  }),
+  bind: endpoint<typeof inboxRoutes.bind>({
+    method: "POST",
+    path: "/api/inbox/routing/mailboxes",
+    body: "json",
+    response: "json",
+  }),
+  verify: endpoint<typeof inboxRoutes.verify>({
+    method: "POST",
+    path: "/api/inbox/routing/domains/:id/verify",
+    response: "json",
+  }),
+  claim: endpoint<typeof inboxRoutes.claim>({
+    method: "POST",
+    path: "/api/inbox/routing/domains",
+    body: "json",
+    response: "json",
+  }),
+  routing: endpoint<typeof inboxRoutes.routing>({
+    method: "GET",
+    path: "/api/inbox/routing",
+    response: "json",
+  }),
   list: endpoint<typeof inboxRoutes.list>({
     method: "GET",
     path: "/api/inbox",
@@ -57,9 +89,22 @@ const endpoints = {
 
 export function inboxApi(transport: Transport) {
   return {
+    routing: () => transport.call(endpoints.routing, {}),
+    claimDomain: (domain: string) =>
+      transport.call(endpoints.claim, { body: { domain } }),
+    verifyDomain: (id: string) =>
+      transport.call(endpoints.verify, { params: { id } }),
+    releaseDomain: (id: string) =>
+      transport.call(endpoints.release, { params: { id } }),
+    bindMailbox: (name: string, address: string) =>
+      transport.call(endpoints.bind, { body: { name, address } }),
+    disconnectMailbox: (id: string) =>
+      transport.call(endpoints.disconnect, { params: { id } }),
     /** A folder's emails and the address that delivers to the inbox. */
-    list(folder: InboxFolder = "inbox") {
-      return transport.call(endpoints.list, { query: folderQuery(folder) });
+    list(folder: InboxFolder = "inbox", mailbox?: string) {
+      return transport.call(endpoints.list, {
+        query: { ...folderQuery(folder), mailbox },
+      });
     },
     async get(id: string, folder: InboxFolder = "inbox") {
       const { email } = await transport.call(endpoints.get, {

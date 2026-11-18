@@ -173,7 +173,11 @@ const routes: WorkspaceRoute[] = [
     matches: exactly("/inbox"),
     page: "inbox",
     render: ({ access, navigate }) => (
-      <Inbox canAccessFinance={access.can("finance")} onNavigate={navigate} />
+      <Inbox
+        canManage={canManageOrganization(access.memberRole)}
+        canAccessFinance={access.can("finance")}
+        onNavigate={navigate}
+      />
     ),
   },
   {

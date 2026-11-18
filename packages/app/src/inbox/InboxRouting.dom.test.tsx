@@ -1,0 +1,91 @@
+import { expect, it } from "bun:test";
+import { act } from "react";
+import { installDom } from "../testing/dom";
+import { Inbox } from "./Inbox";
+
+const { mount, respond, click, fill, settle, window: dom } = installDom();
+it("shows the TXT challenge, verifies the domain, and switches to its connected mailbox", async () => {
+  let requested = false;
+  let verified = false;
+  let connected = false;
+  const alias = "inbox+binding@inbox.balebase.com";
+  const box = {
+    name: "Legal",
+    address: "legal@tearleads.com",
+    connected: true,
+    id: "legal",
+    forwardingAddress: alias,
+  };
+  const claim = {
+    id: "d",
+    domain: "tearleads.com",
+    recordName: "_balebase-verification.tearleads.com",
+    recordValue: "balebase-verification=test",
+  };
+  const lists: string[] = [];
+  respond(async (url, init) => {
+    if (url.pathname.endsWith("/domains")) {
+      expect(JSON.parse(String(init?.body))).toEqual({
+        domain: "tearleads.com",
+      });
+      requested = true;
+      return Response.json({ ...claim, status: "pending" });
+    }
+    if (url.pathname.endsWith("/verify")) {
+      verified = true;
+      return Response.json({ ...claim, status: "verified" });
+    }
+    if (url.pathname.endsWith("/mailboxes")) {
+      expect(JSON.parse(String(init?.body))).toEqual({
+        name: "Legal",
+        address: "legal@tearleads.com",
+      });
+      connected = true;
+      return Response.json({ id: box.id, forwardingAddress: alias });
+    }
+    if (url.pathname.endsWith("/routing"))
+      return Response.json({
+        domains: requested
+          ? [{ ...claim, status: verified ? "verified" : "pending" }]
+          : [],
+        mailboxes: connected ? [box] : [],
+      });
+    lists.push(url.search);
+    return Response.json({
+      address: url.search ? box.address : "upload+org@inbox.balebase.com",
+      emails: [],
+      mailboxes: connected ? [box] : [],
+    });
+  });
+  const { container } = await mount(
+    <Inbox canManage canAccessFinance={false} onNavigate={() => {}} />,
+  );
+  await settle();
+  const details = container.querySelector("details");
+  expect(details).toBeTruthy();
+  await act(async () => {
+    if (details) {
+      details.open = true;
+      details.dispatchEvent(new dom.Event("toggle") as never);
+    }
+  });
+  await settle();
+  await fill(
+    container.querySelector('input[placeholder="example.com"]'),
+    "tearleads.com",
+  );
+  await click("Add domain");
+  expect(container.textContent).toContain(claim.recordName);
+  expect(container.textContent).toContain(claim.recordValue);
+  await click("Verify domain");
+  expect(container.textContent).toContain("Verified");
+  await fill(container.querySelector('input[placeholder="Legal"]'), "Legal");
+  await fill(container.querySelector('input[type="email"]'), box.address);
+  await click("Connect inbox address");
+  expect(container.textContent).toContain(alias);
+  await fill(container.querySelector("select"), "legal");
+  expect(lists.at(-1)).toBe("?mailbox=legal");
+  expect(container.querySelector(".inboxAddressValue")?.textContent).toBe(
+    box.address,
+  );
+});

@@ -19,6 +19,7 @@ import type {
   InboundEmailLink,
   InboundEmailSummary,
   InboxFolder,
+  Mailbox,
 } from "@balebase/validators/inbox";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityFeed } from "../activity/ActivityFeed";
@@ -36,10 +37,12 @@ import { useClipboard } from "../shared/useClipboard";
 import { useLoad } from "../shared/useLoad";
 import { AttachmentPreviewTile } from "./AttachmentPreview";
 import { EmailLinks } from "./EmailLinks";
+import { InboxRouting } from "./InboxRouting";
 import { selectEmailId } from "./inboxSelection";
 import { previewKindFor } from "./previewKind";
 
 interface InboxContext {
+  canManage: boolean;
   canAccessFinance: boolean;
   onNavigate: (pathname: string) => void;
 }
@@ -62,17 +65,19 @@ function useInboxModel() {
       ? requested
       : "inbox";
   });
-  const messages = useInboxMessages(folder);
+  const [mailbox, setMailbox] = useState("");
+  const messages = useInboxMessages(folder, mailbox);
   const actions = useInboxActions(messages);
   function selectFolder(nextFolder: InboxFolder) {
     if (nextFolder === folder) return;
     actions.clear();
     setFolder(nextFolder);
   }
-  return { actions, folder, messages, selectFolder };
+  return { actions, folder, messages, selectFolder, mailbox, setMailbox };
 }
 
-function useInboxMessages(folder: InboxFolder) {
+function useInboxMessages(folder: InboxFolder, mailbox: string) {
+  const [mailboxes, setMailboxes] = useState<Mailbox[]>([]);
   const [emails, setEmails] = useState<InboundEmailSummary[]>([]);
   const [inboundAddress, setInboundAddress] = useState<string>();
   const [selectedId, setSelectedId] = useState<string>();
@@ -86,13 +91,17 @@ function useInboxMessages(folder: InboxFolder) {
     setLoadingList(true);
     setError(undefined);
     try {
-      const listing = await api.inbox.list(folder);
+      const listing = await api.inbox.list(folder, mailbox || undefined);
       if (request !== listRequest.current) return;
       const nextEmails = listing.emails;
       const requested = pending.current;
       pending.current = undefined;
       setEmails(nextEmails);
-      setInboundAddress(listing.address);
+      const selected = listing.mailboxes?.find((box) => box.id === mailbox);
+      setInboundAddress(
+        selected && !selected.connected ? undefined : listing.address,
+      );
+      setMailboxes(listing.mailboxes ?? []);
       setSelectedId((current) =>
         selectEmailId(nextEmails, current, requested, openedByLink),
       );
@@ -102,10 +111,11 @@ function useInboxMessages(folder: InboxFolder) {
     } finally {
       if (request === listRequest.current) setLoadingList(false);
     }
-  }, [folder, openedByLink, pending]);
+  }, [folder, mailbox, openedByLink, pending]);
 
   useEffect(() => {
     setEmails([]);
+    setInboundAddress(undefined);
     setSelectedId(undefined);
     void refresh();
     return () => {
@@ -125,6 +135,7 @@ function useInboxMessages(folder: InboxFolder) {
     emails,
     error: error ?? message.error,
     inboundAddress,
+    mailboxes,
     loadingList,
     loadingMessage: Boolean(selectedId) && message.loading,
     refresh,
@@ -242,6 +253,25 @@ function InboxView({
           </Toast>
         )}
         <div className="stack">
+          {context.canManage && <InboxRouting onChange={messages.refresh} />}
+          {messages.mailboxes.length > 0 && (
+            <label className="field">
+              Mailbox
+              <select
+                className="input"
+                value={model.mailbox}
+                onChange={(event) => model.setMailbox(event.target.value)}
+              >
+                <option value="">Default inbox</option>
+                {messages.mailboxes.map((box) => (
+                  <option value={box.id} key={box.id}>
+                    {box.name} · {box.address}
+                    {box.connected ? "" : " (disconnected)"}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <InboxToolbar
             address={messages.inboundAddress}
             disabled={Boolean(actions.workingId)}

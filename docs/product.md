@@ -394,6 +394,21 @@ authorization server yet, so clients that only support OAuth cannot connect.
 Apply migrations `0060_create_organization_api_keys.sql` and
 `0061_attribute_activity_to_api_keys.sql` before deploying.
 
+## Inbound mailboxes
+
+In **Inbox → Manage inbox addresses**, an organization owner or administrator
+adds a domain, publishes the TXT record shown, and chooses **Verify domain**.
+Verification proves control of that exact domain. Each connected address
+creates a named inbox and receives its own forwarding address. Configure your
+mail provider to deliver the selected recipient to that address. Organization
+members choose a mailbox in **Inbox** to read its messages, attachments,
+archive, and trash. Existing uploads continue to arrive in **Default inbox**.
+
+Disconnecting an address stops delivery through both its public and forwarding
+addresses and retains its inbox history. Release a domain after disconnecting
+its addresses. Only a platform administrator managing the organization can
+connect or disconnect a Balebase-owned address.
+
 ## Library folders and inbox links
 
 Library documents can be organized into flat, organization-scoped folders,

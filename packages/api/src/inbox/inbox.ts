@@ -24,7 +24,10 @@ import {
   shownLink,
 } from "./inboundEmailLinks";
 
+import { inboxRouting, listMailboxes } from "./mailboxes";
+
 const inbox = new Hono<ApiEnv>();
+inbox.route("/routing", inboxRouting());
 
 const emailStatus = `CASE
   WHEN inbound_emails.deleted_at IS NOT NULL THEN 'trash'
@@ -60,6 +63,11 @@ inbox.get("/", async (context) => {
   const folder = inboxFolder(context.req.query("folder"));
   if (!folder) return invalidFolder(context);
   const organizationId = context.get("organizationId");
+  const mailboxes = await listMailboxes(context.env.DB, organizationId);
+  const mailboxId = context.req.query("mailbox");
+  const selected = mailboxes.find((box) => box.id === mailboxId);
+  if (mailboxId !== undefined && !selected)
+    return context.json({ error: "Inbox not found." }, 404);
   const folderFilter = emailFolderFilter(folder);
   const ordering =
     folder === "trash" ? "email.deleted_at" : "email.received_at";
@@ -78,19 +86,22 @@ inbox.get("/", async (context) => {
      LEFT JOIN inbound_email_attachments AS attachment
        ON attachment.email_id = email.id
      LEFT JOIN "user" AS deleted_by ON deleted_by.id = email.deleted_by_user_id
-     WHERE email.organization_id = ? AND ${folderFilter}
+     WHERE email.organization_id = ? AND email.mailbox_id IS ? AND ${folderFilter}
      GROUP BY email.id
      ORDER BY ${ordering} DESC, email.id DESC
      LIMIT 100`,
   )
-    .bind(organizationId)
+    .bind(organizationId, selected?.id ?? null)
     .all<InboundEmailRow>();
 
   return respond(context, inboxRoutes.list, {
-    address: organizationInboxAddress(
-      organizationId,
-      context.env.INBOUND_EMAIL_DOMAIN,
-    ),
+    mailboxes,
+    address:
+      selected?.address ??
+      organizationInboxAddress(
+        organizationId,
+        context.env.INBOUND_EMAIL_DOMAIN,
+      ),
     emails: result.results.map(toEmailSummary),
   });
 });
