@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 # shellcheck source=scripts/lib/cloudflareEnv.sh
@@ -11,6 +11,7 @@ source "$SCRIPT_DIR/../lib/cloudflareEnv.sh"
 # shellcheck source=scripts/lib/workerDeploy.sh
 # shellcheck disable=SC1091
 source "$SCRIPT_DIR/../lib/workerDeploy.sh"
+cd "$REPO_ROOT"
 load_cloudflare_env
 validate_auth_env
 validate_plaid_env
