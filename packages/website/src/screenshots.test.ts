@@ -63,15 +63,13 @@ test("a staged manifest is read and validated", () => {
   }
 });
 
-test("each deep link has its own heading, title, and description", () => {
+test("each deep link has its own title and description", () => {
   expect(galleryPage(manifest)).toEqual({
     description: expect.stringContaining("desktop, tablet, and phone"),
-    heading: "Screenshots",
     title: "Screenshots — Balebase",
   });
   expect(galleryPage(manifest, "mobile", "audit")).toEqual({
     description: "An audit in progress. Shown in the phone layout.",
-    heading: "Audit, phone screenshot",
     title: "Audit, phone screenshot — Balebase",
   });
   // A screen without alt text is described by its label.

@@ -36,15 +36,14 @@ const page = galleryPage(manifest, project, screen);
 <BaseLayout description={page.description} title={page.title}>
   <section aria-labelledby="page-title" class="screenshotsPage">
     <div class="container screenshotsInner">
-      <div class="screenshotsIntro">
-        <p class="eyebrow">Product tour</p>
-        <h1 class="title" id="page-title">{page.heading}</h1>
-      </div>
+      <h1 class="screenshotsIntro" id="page-title">
+        <span class="eyebrow">Product tour</span>
+        {!screen && <span class="title" id="gallery-index-title">Screenshots</span>}
+      </h1>
       <screenshot-gallery
         base-path={galleryPath}
         empty-message="Screenshots are on their way."
         error-message="The screenshots could not be loaded."
-        heading-id="page-title"
         initial-project={project}
         initial-screen={screen}
         label={`${productName} screenshots`}
@@ -58,6 +57,13 @@ const page = galleryPage(manifest, project, screen);
   <script>
     import { defineScreenshotElements } from "@a2f0/agent-tool/screenshots/gallery";
 
+    const indexTitle = document.getElementById("gallery-index-title");
+    if (indexTitle) {
+      const indexPath = location.pathname;
+      document.addEventListener("screenshot-change", () => {
+        if (location.pathname !== indexPath) indexTitle.remove();
+      });
+    }
     defineScreenshotElements();
   </script>
 </BaseLayout>

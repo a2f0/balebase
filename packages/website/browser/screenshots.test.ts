@@ -213,7 +213,7 @@ function current(page: Page) {
       ".shots-slide[data-active] img.shots-image",
     );
     return {
-      heading: document.querySelector("#page-title")?.textContent,
+      heading: document.querySelector("#page-title")?.textContent?.trim(),
       image: image?.currentSrc.replace(location.origin, ""),
       loaded: (image?.naturalWidth ?? 0) > 0,
       project: root?.getAttribute("data-project"),
@@ -246,6 +246,9 @@ it("shows the first capture and switches themes", async () => {
     await page.goto("https://website.test/screenshots/");
     await page.waitForSelector(".shots-gallery[data-state='ready']");
     await shown(page, "light");
+    expect(
+      await page.$eval("#gallery-index-title", (el) => el.textContent),
+    ).toBe("Screenshots");
     expect(await current(page)).toMatchObject({
       image: "/screenshot-gallery/img/web/light/projects.png?v=0",
       loaded: true,
@@ -255,6 +258,8 @@ it("shows the first capture and switches themes", async () => {
     });
     await page.click(".shots-icon-button[data-action='theme']");
     await shown(page, "dark");
+    expect(new URL(page.url()).pathname).toBe("/screenshots/web/projects/");
+    expect((await current(page)).heading).toBe("Product tour");
     expect((await current(page)).image).toBe(
       "/screenshot-gallery/img/web/dark/projects.png?v=0",
     );
@@ -340,7 +345,7 @@ it("opens a deep link on its layout and screen, in a page that fits a phone", as
       () => document.querySelector(".shots-title")?.textContent === "Audit",
     );
     expect(await current(page)).toMatchObject({
-      heading: "Audit, phone screenshot",
+      heading: "Product tour",
       project: "mobile",
     });
     expect(

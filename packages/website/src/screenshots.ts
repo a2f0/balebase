@@ -36,7 +36,7 @@ export const galleryTitleTemplate = `{heading} — ${productName}`;
 const indexDescription = `See ${productName} on desktop, tablet, and phone, in light and dark themes: projects, audits, issues, equipment, contracts, finance, and more, with one sample company's records.`;
 
 /**
- * The heading, title, and description of the gallery's index (no project or
+ * The title and description of the gallery's index (no project or
  * screen) or of one screen's deep link, described by its alt text.
  */
 export function galleryPage(
@@ -45,11 +45,9 @@ export function galleryPage(
   screen?: string,
 ) {
   if (!project || !screen) {
-    const heading = "Screenshots";
     return {
       description: indexDescription,
-      heading,
-      title: galleryTitleTemplate.replace("{heading}", heading),
+      title: galleryTitleTemplate.replace("{heading}", "Screenshots"),
     };
   }
   const heading = screenshotHeading(manifest, project, screen);
@@ -59,7 +57,6 @@ export function galleryPage(
   const description = `${alt ?? `${label} in ${productName}.`} Shown in the ${layout} layout.`;
   return {
     description,
-    heading,
     title: galleryTitleTemplate.replace("{heading}", heading),
   };
 }
