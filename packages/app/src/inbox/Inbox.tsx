@@ -70,6 +70,7 @@ function useInboxModel() {
   function selectFolder(nextFolder: InboxFolder) {
     if (nextFolder === folder) return;
     actions.clear();
+    setMailbox(mailbox ?? messages.listedMailbox);
     setFolder(nextFolder);
   }
   return { actions, folder, messages, selectFolder, mailbox, setMailbox };
@@ -117,19 +118,21 @@ function useInboxMessages(folder: InboxFolder, mailbox: string | undefined) {
       setSelectedId(undefined);
       return;
     }
-    const requested = pending.current;
+    const link = mailbox === undefined ? openedByLink : undefined;
+    const requested = link ? pending.current : undefined;
     pending.current = undefined;
     setSelectedId((current) =>
-      selectEmailId(listing.emails, current, requested, openedByLink),
+      selectEmailId(listing.emails, current, requested, link),
     );
-  }, [listing, pending, openedByLink]);
+  }, [listing, pending, openedByLink, mailbox]);
   const refresh = useCallback(async () => {
     await list.reload();
   }, [list.reload]);
   const message = useLoad(
     useCallback(
-      async () => (selectedId ? api.inbox.get(selectedId, folder) : undefined),
-      [folder, selectedId],
+      async () =>
+        listing && selectedId ? api.inbox.get(selectedId, folder) : undefined,
+      [folder, listing, selectedId],
     ),
     "Could not load the email.",
   );

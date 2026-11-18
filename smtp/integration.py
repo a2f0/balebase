@@ -43,18 +43,29 @@ async def run():
             assert code == 250
     async with server:
         await asyncio.to_thread(submit)
-        spool.quota_bytes = 1
+        spool.quota_bytes = 25 * 1024 * 1024 + 4096
         def over_quota():
             with smtplib.SMTP(host, port, timeout=10) as smtp:
                 smtp.ehlo()
                 assert smtp.mail("")[0] == 250
-                assert smtp.rcpt("legal@base.example.org")[0] == 250
-                assert smtp.data("Subject: full\r\n\r\nbody")[0] == 452
+                assert smtp.rcpt("legal@base.example.org")[0] == 452
+                assert smtp.rcpt("legal@other.example.org")[0] == 250
+                with smtplib.SMTP(host, port, timeout=10) as competing:
+                    competing.ehlo()
+                    assert competing.mail("")[0] == 250
+                    assert competing.rcpt("legal@other.example.org")[0] == 452
+                    assert smtp.rset()[0] == 250
+                    assert competing.rcpt("legal@other.example.org")[0] == 250
+                # Disconnecting releases the new connection's reservation too.
+                assert smtp.mail("")[0] == 250
+                assert smtp.rcpt("legal@base.example.org")[0] == 452
+                assert smtp.rcpt("legal@other.example.org")[0] == 250
+                assert smtp.data("Subject: other workspace\r\n\r\nbody")[0] == 250
         await asyncio.to_thread(over_quota)
     # Reopen from disk as a restarted receiver does. Lose the first successful
     # HTTP response and then replay all deliveries with their persisted IDs.
     spool = Spool(spool_file)
-    assert spool.counts() == {"queued": 2}
+    assert spool.counts() == {"queued": 3}
     def lost_ack(*args):
         status, _ = bridge(*args)
         assert status == 204, status

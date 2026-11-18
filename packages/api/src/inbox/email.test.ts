@@ -36,7 +36,6 @@ describe("inbound email", () => {
   it("rejects oversized headers before starting an upload", async () => {
     await expectRejectedMessage(
       `X-Large: ${"x".repeat(128 * 1024)}\r\n\r\nbody`,
-      /Maximum header size/,
     );
   });
 
@@ -45,7 +44,7 @@ describe("inbound email", () => {
     for (let depth = 0; depth < 32; depth++) {
       raw = `Content-Type: multipart/mixed; boundary="level-${depth}"\r\n\r\n--level-${depth}\r\n${raw}\r\n--level-${depth}--\r\n`;
     }
-    await expectRejectedMessage(raw, /Maximum MIME nesting depth/);
+    await expectRejectedMessage(raw);
   });
 
   it("stores an embedded message as an opaque attachment", async () => {
@@ -132,15 +131,15 @@ describe("inbound email", () => {
   });
 });
 
-async function expectRejectedMessage(raw: string, reason: RegExp) {
+async function expectRejectedMessage(raw: string) {
   const database = createDatabase();
   const storage = createStorage();
-  await expect(
-    handleEmail(
-      createMessage(raw).message,
-      createBindings(database.value, storage.value),
-    ),
-  ).rejects.toThrow(reason);
+  const received = createMessage(raw);
+  await handleEmail(
+    received.message,
+    createBindings(database.value, storage.value),
+  );
+  expect(received.rejection()).toBe("Invalid message or MIME limits exceeded");
   expect(storage.uploads).toHaveLength(0);
   expect(storage.objects.size).toBe(0);
   expect(database.statements).toHaveLength(0);

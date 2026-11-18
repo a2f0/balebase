@@ -52,6 +52,8 @@ class Receiver:
     def __init__(self, spool, bridge):
         self.spool = spool
         self.bridge = bridge
+        self.quota_lock = asyncio.Lock()
+        self.reservations = {}
 
     async def handle_RCPT(self, server, session, envelope, address, options):
         address = address.lower()
@@ -77,8 +79,21 @@ class Receiver:
         if not hasattr(envelope, "bindings"):
             envelope.bindings = {}
         if address not in envelope.bindings:
-            envelope.rcpt_tos.append(address)
-            envelope.bindings[address] = (mailbox, org)
+            async with self.quota_lock:
+                try:
+                    available = await asyncio.to_thread(self.spool.available, org)
+                except (OSError, sqlite3.Error):
+                    return "451 4.3.1 Cannot check queue capacity"
+                reserved = self.reservations.setdefault(envelope, {})
+                active = sum(reservation.get(org, 0) for reservation in self.reservations.values())
+                # The RFC 1870 SIZE estimate can be absent or smaller than DATA.
+                # Reserve one maximum-size traced body per workspace per envelope.
+                additional = 4096 + (0 if org in reserved else MAX_BYTES + 512)
+                if active + additional > available:
+                    return "452 4.2.2 Workspace cannot accept queued mail"
+                reserved[org] = reserved.get(org, 0) + additional
+                envelope.rcpt_tos.append(address)
+                envelope.bindings[address] = (mailbox, org)
         return "250 2.1.5 Recipient accepted"
 
     async def handle_DATA(self, server, session, envelope):
@@ -91,7 +106,9 @@ class Receiver:
         protocol = "ESMTPS" if session.ssl else "ESMTP"
         trace = f"Received: from [{peer}] by {server.hostname} with {protocol}; {formatdate(localtime=False, usegmt=True)}\r\n"
         try:
-            await asyncio.to_thread(self.spool.accept, sender, trace.encode("ascii") + envelope.original_content, envelope.bindings)
+            async with self.quota_lock:
+                await asyncio.to_thread(self.spool.accept, sender, trace.encode("ascii") + envelope.original_content, envelope.bindings)
+                self.reservations.pop(envelope, None)
         except SpoolUnavailable:
             return "452 4.2.2 Workspace cannot accept queued mail"
         except (sqlite3.Error, OSError):
@@ -104,6 +121,11 @@ async def serve(handler, hostname, host, port, tls):
     active = set()
 
     class LimitedSMTP(SMTP):
+        def _set_post_data_state(self):
+            # aiosmtpd creates a fresh envelope after HELO/EHLO, RSET and DATA.
+            handler.reservations.pop(self.envelope, None)
+            super()._set_post_data_state()
+
         def connection_made(self, transport):
             if self not in active and len(active) >= 8:
                 transport.write(b"421 4.3.2 Server busy\r\n")
@@ -115,6 +137,7 @@ async def serve(handler, hostname, host, port, tls):
         def connection_lost(self, error):
             if self in active:
                 active.discard(self)
+                handler.reservations.pop(self.envelope, None)
                 super().connection_lost(error)
 
     def protocol():

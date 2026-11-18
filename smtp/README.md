@@ -63,9 +63,15 @@ Take encrypted filesystem snapshots of the persistent spool for recovery.
 Only restore the spool to the same tier.
 
 The spool allows 256 MiB per workspace (retained body bytes plus 4 KiB per
-recipient), across queued and held deliveries. A full workspace receives
-SMTP 452 at DATA, before acceptance; the sending server can retry. The
-whole SQLite spool has a 4 GiB cap.
+recipient), across queued and held deliveries. RCPT reserves space for one
+maximum-size body per workspace per transaction and 4 KiB per recipient. When
+the remaining space cannot cover that reservation, only that workspace's
+recipient gets SMTP 452; the sender can deliver to its other accepted
+recipients and retry the rest. DATA rechecks storage and retirement before
+acceptance. The whole SQLite spool has a 4 GiB cap. The Worker allows 1,200
+MIME parts including the root, 30 levels of nesting and 128 KiB per header
+block. Messages that exceed MIME limits after direct SMTP acceptance are held
+with HTTP 422.
 
 Queue retries back off to once per hour. Investigate growing queues,
 especially after Worker deploys or token rotations. After restoring the

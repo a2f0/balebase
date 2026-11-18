@@ -13,6 +13,7 @@ let worker: Miniflare | undefined;
 const token = crypto.randomUUID();
 const legal = crypto.randomUUID();
 const accounts = crypto.randomUUID();
+const other = crypto.randomUUID();
 const alias = `inbox+${crypto.randomUUID()}@inbox.balebase.com`;
 try {
   const main = resolve(import.meta.dir, "smtpIntegrationWorker.ts");
@@ -62,25 +63,22 @@ try {
       ],
       outboundService: async (request: Request) => {
         const url = new URL(request.url);
-        assert.equal(
-          url.searchParams.get("name"),
-          "_balebase-verification.base.example.org",
+        const name = url.searchParams.get("name");
+        assert.ok(
+          name === "_balebase-verification.base.example.org" ||
+            name === "_balebase-verification.other.example.org",
         );
         if (!txtAnswer)
           return Response.json({
             Status: 2,
-            Question: [
-              { name: "_balebase-verification.base.example.org", type: 16 },
-            ],
+            Question: [{ name, type: 16 }],
           });
         return Response.json({
           Status: 0,
-          Question: [
-            { name: "_balebase-verification.base.example.org", type: 16 },
-          ],
+          Question: [{ name, type: 16 }],
           Answer: [
             {
-              name: "_balebase-verification.base.example.org",
+              name,
               type: 16,
               TTL: 0,
               data: `"${txtAnswer}"`,
@@ -108,23 +106,29 @@ try {
   for (const { sql } of schema) await db.prepare(sql).run();
   await db
     .prepare(
-      "INSERT INTO organization(id,name,slug,createdAt) VALUES ('org','org','org',0)",
+      "INSERT INTO organization(id,name,slug,createdAt) VALUES ('org','org','org',0),('other','other','other',0)",
     )
     .run();
   await db
     .prepare(
-      "INSERT INTO inbound_domains VALUES ('claim','org','base.example.org','fixture','now')",
+      "INSERT INTO inbound_domains VALUES ('claim','org','base.example.org','fixture','now'),('other-claim','other','other.example.org','fixture','now')",
     )
     .run();
-  for (const [id, address, forwarding] of [
-    [legal, "legal@base.example.org", alias.slice(6, alias.indexOf("@"))],
-    [accounts, "accounts@base.example.org", crypto.randomUUID()],
+  for (const [id, org, address, forwarding] of [
+    [
+      legal,
+      "org",
+      "legal@base.example.org",
+      alias.slice(6, alias.indexOf("@")),
+    ],
+    [accounts, "org", "accounts@base.example.org", crypto.randomUUID()],
+    [other, "other", "legal@other.example.org", crypto.randomUUID()],
   ] as const)
     await db
       .prepare(
-        "INSERT INTO inbound_mailboxes(id,organization_id,name,address,forwarding_id) VALUES (?,'org',?,?,?)",
+        "INSERT INTO inbound_mailboxes(id,organization_id,name,address,forwarding_id) VALUES (?,?,?,?,?)",
       )
-      .bind(id, address, address, forwarding)
+      .bind(id, org, address, address, forwarding)
       .run();
   const workerUrl = await worker.ready;
   execFileSync(
@@ -166,6 +170,23 @@ try {
     },
   );
   assert.equal(await suite.exited, 0);
+  const invalid = await worker.dispatchFetch(
+    new URL("/internal/inbound-smtp/deliver", workerUrl).href,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "X-Inbound-Recipient": "legal@base.example.org",
+        "X-Inbound-Mailbox": legal,
+        "X-Inbound-Delivery": crypto.randomUUID(),
+      },
+      body:
+        'Content-Type: multipart/mixed; boundary="p"\r\n\r\n' +
+        "--p\r\n\r\npart\r\n".repeat(1200) +
+        "--p--\r\n",
+    },
+  );
+  assert.equal(invalid.status, 422);
   txtAnswer = "balebase-verification=another-organization";
   const ownershipChanged = await worker.dispatchFetch(
     new URL("/internal/inbound-smtp/recipient", workerUrl).href,
@@ -210,7 +231,12 @@ try {
       subject: string;
       raw_object_key: string;
     }>();
-  assert.equal(results.length, 3);
+  assert.equal(results.length, 4);
+  assert.ok(
+    results.some(
+      (row) => row.mailbox_id === other && row.subject === "other workspace",
+    ),
+  );
   const storage = await worker.getR2Bucket("STORAGE");
   for (const [id, address] of [
     [legal, "legal@base.example.org"],

@@ -271,6 +271,35 @@ describe("Inbox, mounted", () => {
     expect(button("Move to Trash").disabled).toBe(false);
   });
 
+  it("cancels an unresolved email link when the reader switches folders", async () => {
+    const delayed = Promise.withResolvers<Response>();
+    const requests: string[] = [];
+    respond(async (url) => {
+      requests.push(url.pathname + url.search);
+      if (url.searchParams.get("folder") === "archived") return delayed.promise;
+      return Response.json({
+        emails: [],
+        mailboxes: [],
+        address: "default@example.org",
+      });
+    });
+    dom.history.replaceState(null, "", "/inbox?email=email-1&folder=archived");
+    await render();
+    await click("Trash");
+    await act(async () =>
+      delayed.resolve(Response.json({ emails: [], mailboxId: "old" })),
+    );
+    await settle();
+    expect(requests.filter((url) => url.includes("folder=trash"))).toHaveLength(
+      1,
+    );
+    expect(requests.find((url) => url.includes("folder=trash"))).not.toContain(
+      "email=",
+    );
+    expect(requests.some((url) => url.includes("/email-1"))).toBe(false);
+    expect(container.textContent).toContain("Trash is empty");
+  });
+
   it("opens a linked archived email even when the listing is empty", async () => {
     const { setStatus } = fixture(1, false);
     setStatus("archived");

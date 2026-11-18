@@ -7,6 +7,8 @@ import { resolveRecipient } from "./inboundEmailAddress";
 export class InvalidInboundMime extends Error {}
 
 export const maxEmailBytes = 25 * 1024 * 1024;
+const maxMimeParts = 1_200;
+const objectWriteConcurrency = 4;
 const maxHeaderTextLength = 1_000;
 
 interface StoredAttachment {
@@ -40,12 +42,17 @@ export async function handleEmail(
     return;
   }
 
-  await ingestInboundEmail(
-    message,
-    recipient.organizationId,
-    recipient.mailboxId,
-    env,
-  );
+  try {
+    await ingestInboundEmail(
+      message,
+      recipient.organizationId,
+      recipient.mailboxId,
+      env,
+    );
+  } catch (error) {
+    if (!(error instanceof InvalidInboundMime)) throw error;
+    message.setReject("Invalid message or MIME limits exceeded");
+  }
 }
 
 type InboundMessage = Pick<
@@ -120,7 +127,11 @@ export async function ingestInboundEmail(
     throw error;
   }
   message.setReject("Unknown recipient");
-  await Promise.allSettled(objects.map((obj) => env.STORAGE.delete(obj.key)));
+  // Durable cleanup owns retries if the immediate best-effort deletion fails.
+  for (let start = 0; start < objects.length; start += 512) {
+    const keys = objects.slice(start, start + 512).map((obj) => obj.key);
+    await env.STORAGE.delete(keys).catch(() => {});
+  }
 }
 
 // Keep bound metadata parameters below D1's per-value limit. Attachment
@@ -174,6 +185,7 @@ async function storeMessageObjects(
   const parsed = await PostalMime.parse(raw, {
     maxHeadersSize: 128 * 1024,
     maxNestingDepth: 30,
+    maxPartCount: maxMimeParts,
     maxRfc822NestingDepth: 0,
   }).catch((cause: unknown) => {
     throw new InvalidInboundMime(
@@ -215,14 +227,19 @@ async function storeMessageObjects(
       .bind(cleanupPrefix, organizationId, queuedAt, JSON.stringify(keys))
       .run();
   }
-  await Promise.all(
-    objects.map((obj) =>
-      env.STORAGE.put(obj.key, obj.content, {
-        httpMetadata: { contentType: obj.contentType },
-        customMetadata: { emailId, organizationId },
-      }),
-    ),
-  );
+  for (let start = 0; start < objects.length; start += objectWriteConcurrency) {
+    const group = objects.slice(start, start + objectWriteConcurrency);
+    const results = await Promise.allSettled(
+      group.map((obj) =>
+        env.STORAGE.put(obj.key, obj.content, {
+          httpMetadata: { contentType: obj.contentType },
+          customMetadata: { emailId, organizationId },
+        }),
+      ),
+    );
+    const failure = results.find((result) => result.status === "rejected");
+    if (failure) throw failure.reason;
+  }
   return { attachments, cleanupPrefix, objects, parsed, rawObjectKey };
 }
 

@@ -796,7 +796,9 @@ after its 15-minute upload grace period, and retries storage failures. In stagin
 run that job manually after the grace period to finish file deletion.
 File cleanup processes 25 objects per run, so a large backlog can take days to
 drain; the grace period is a minimum wait, not a deletion deadline. Additional
-manual cleanup runs can drain eligible files sooner.
+manual cleanup runs can drain eligible files sooner. If the tier accepts
+direct SMTP, follow the [receiver purge procedure](../smtp/README.md#operations)
+for each ID in **Purge history** to remove its queued and held spool copies.
 
 Root admins can restore discarded global audit forms from **Global Audits →
 Discarded forms**. The **Purge discarded global forms** job

@@ -292,7 +292,7 @@ describe("verified inbound domains", () => {
     expect(f.storage.stored.size).toBe(0);
   });
 
-  it.each([160, 1100])(
+  it.each([160, 1100, 1199, 1200])(
     "stores %i small attachments in a legacy inbox with bounded D1 writes",
     async (partCount) => {
       let attachmentQueries = 0;
@@ -313,6 +313,18 @@ describe("verified inbound domains", () => {
             cleanupQueries++;
         },
       });
+      let activePuts = 0;
+      let maxActivePuts = 0;
+      const put = f.bindings.STORAGE.put.bind(f.bindings.STORAGE);
+      f.bindings.STORAGE.put = async (...args) => {
+        activePuts++;
+        maxActivePuts = Math.max(maxActivePuts, activePuts);
+        try {
+          return await put(...args);
+        } finally {
+          activePuts--;
+        }
+      };
       const parts = Array.from({ length: partCount }, () =>
         ["--many", "Content-Disposition: attachment", "", "a"].join("\r\n"),
       );
@@ -323,9 +335,19 @@ describe("verified inbound domains", () => {
         "--many--",
         "",
       ].join("\r\n");
-      expect(
-        await f.deliver(`upload+${f.org}@inbox.balebase.com`, mime),
-      ).toBeUndefined();
+      const rejection = await f.deliver(
+        `upload+${f.org}@inbox.balebase.com`,
+        mime,
+      );
+      // The multipart container itself counts as a MIME part.
+      if (partCount === 1200) {
+        expect(rejection).toBe("Invalid message or MIME limits exceeded");
+        expect(cleanupQueries).toBe(0);
+        expect(maxActivePuts).toBe(0);
+        return;
+      }
+      expect(rejection).toBeUndefined();
+      expect(maxActivePuts).toBe(4);
       expect(cleanupQueries).toBe(Math.ceil((partCount + 1) / 512));
       expect(attachmentQueries).toBeGreaterThan(0);
       expect(attachmentQueries).toBeLessThan(10);

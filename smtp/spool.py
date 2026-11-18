@@ -43,19 +43,26 @@ class Spool:
         db.execute("PRAGMA max_page_count=1048576")
         return db
 
+    def remaining(self, db, org):
+        if db.execute("SELECT 1 FROM retired_organizations WHERE id=?", (org,)).fetchone():
+            return 0
+        # Charge each retained body once per tenant, plus 4 KiB per recipient.
+        used = db.execute("""
+            SELECT (SELECT COUNT(*) * 4096 FROM deliveries WHERE organization=?) +
+              COALESCE(SUM(length(body)),0)
+            FROM messages WHERE id IN (SELECT message FROM deliveries WHERE organization=?)
+        """, (org, org)).fetchone()[0]
+        return self.quota_bytes - used
+
+    def available(self, org):
+        with closing(self.connect()) as db:
+            return self.remaining(db, org)
+
     def accept(self, sender, body, recipients):
         with closing(self.connect()) as db, db:
             db.execute("BEGIN IMMEDIATE")
             for org, count in Counter(org for _, org in recipients.values()).items():
-                # Charge each retained body once per tenant, plus 4 KiB per recipient.
-                used = db.execute("""
-                    SELECT (SELECT COUNT(*) * 4096 FROM deliveries WHERE organization=?) +
-                      COALESCE(SUM(length(body)),0)
-                    FROM messages WHERE id IN (SELECT message FROM deliveries WHERE organization=?)
-                """, (org,org)).fetchone()[0]
-                if db.execute("SELECT 1 FROM retired_organizations WHERE id=?", (org,)).fetchone():
-                    raise SpoolUnavailable("Workspace retired")
-                if used + len(body) + count * 4096 > self.quota_bytes:
+                if self.remaining(db, org) < len(body) + count * 4096:
                     raise SpoolUnavailable("Workspace spool limit")
             message = db.execute("INSERT INTO messages(sender,body) VALUES (?,?)", (sender, body)).lastrowid
             db.executemany(
