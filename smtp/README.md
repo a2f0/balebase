@@ -69,9 +69,9 @@ the remaining space cannot cover that reservation, only that workspace's
 recipient gets SMTP 452; the sender can deliver to its other accepted
 recipients and retry the rest. DATA rechecks storage and retirement before
 acceptance. The whole SQLite spool has a 4 GiB cap. The Worker allows 1,200
-MIME parts including the root, 30 levels of nesting and 128 KiB per header
-block. Messages that exceed MIME limits after direct SMTP acceptance are held
-with HTTP 422.
+MIME parts including the root, 30 levels of nesting and 128 KiB of aggregate
+MIME headers. Messages that exceed MIME limits after direct SMTP acceptance
+are held with HTTP 422.
 
 Queue retries back off to once per hour. Investigate growing queues,
 especially after Worker deploys or token rotations. After restoring the
