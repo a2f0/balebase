@@ -163,7 +163,8 @@ The first deploy sets up uploads and customer forwarding. To enable the
 platform recipients, connect both addresses in the Balebase organization and
 set `TF_VAR_platform_mailbox_organization_id` to that organization's ID in
 the tier's deployment environment. Keep this value set while routing should
-remain active. Production checks both bindings against that ID before applying
+remain active. Redeploy the API to bind native delivery to this workspace.
+The Terraform wrapper checks both bindings against that ID before applying
 the rules, then publishes apex MX. Run `bun run deploy:domains` to finish
 the production cutover. Send
 one external message per platform address and confirm each lands in its

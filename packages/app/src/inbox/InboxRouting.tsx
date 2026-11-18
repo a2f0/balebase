@@ -122,6 +122,7 @@ function DomainForm({
       <label className="field">
         Email domain
         <input
+          disabled={busy}
           className="input"
           placeholder="example.com"
           value={domain}
@@ -203,6 +204,7 @@ function MailboxForm({
       <label className="field">
         Inbox name
         <input
+          disabled={busy}
           className="input"
           value={name}
           placeholder="Legal"
@@ -214,6 +216,7 @@ function MailboxForm({
       <label className="field">
         Address to receive
         <input
+          disabled={busy}
           className="input"
           type="email"
           placeholder="legal@example.com"

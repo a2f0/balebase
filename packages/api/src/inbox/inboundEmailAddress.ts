@@ -35,10 +35,19 @@ export function isPlatformDomain(domain: string, inboundDomain: string) {
   );
 }
 
+export function platformRecipients(inboundDomain: string) {
+  const domain =
+    inboundDomain === "inbox-staging.balebase.com"
+      ? inboundDomain
+      : "balebase.com";
+  return [`legal@${domain}`, `privacy@${domain}`];
+}
+
 export async function resolveRecipient(
   db: D1Database,
   address: string,
   inboundDomain: string,
+  platformOrganizationId?: string,
 ): Promise<{ organizationId: string; mailboxId: string | null } | null> {
   const uploadOrganization = organizationIdForInboundAddress(
     address,
@@ -62,8 +71,13 @@ export async function resolveRecipient(
       `SELECT box.organization_id AS organizationId, box.id AS mailboxId
      FROM inbound_mailboxes box JOIN organization org ON org.id = box.organization_id
      WHERE org.deletedAt IS NULL AND box.disconnected_at IS NULL
+       AND (box.address NOT IN (?, ?) OR box.organization_id = ?)
        AND ${forwarding ? "box.forwarding_id" : "box.address"} = ?`,
     )
-    .bind(forwarding ? local.slice("inbox+".length) : normalized)
+    .bind(
+      ...platformRecipients(inboundDomain),
+      platformOrganizationId ?? null,
+      forwarding ? local.slice("inbox+".length) : normalized,
+    )
     .first<{ organizationId: string; mailboxId: string }>();
 }

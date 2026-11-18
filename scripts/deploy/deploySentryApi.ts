@@ -38,6 +38,12 @@ const wrangler = [
   "deploy",
   "--config",
   workerConfig,
+  ...(process.env.TF_VAR_platform_mailbox_organization_id
+    ? [
+        "--var",
+        `PLATFORM_MAILBOX_ORGANIZATION_ID:${process.env.TF_VAR_platform_mailbox_organization_id}`,
+      ]
+    : []),
 ];
 try {
   // Build once, upload those maps, then publish the exact same module. Keeping

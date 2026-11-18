@@ -32,6 +32,7 @@ export async function handleEmail(
     env.DB,
     message.to,
     env.INBOUND_EMAIL_DOMAIN,
+    env.PLATFORM_MAILBOX_ORGANIZATION_ID,
   );
   if (!recipient) {
     message.setReject("Unknown recipient");

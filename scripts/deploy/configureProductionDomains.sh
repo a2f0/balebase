@@ -12,9 +12,6 @@ if [[ "${AUTO_APPROVE:-0}" == "1" ]]; then
   apply_args=(apply -auto-approve)
 fi
 
-# Check the recipients before publishing their apex mail exchanges.
-DEPLOY_TIER=prod "$SCRIPT_DIR/verifyInboundEmail.sh" --bindings-only
-
 echo "Applying the production Worker custom domains with Terraform..."
 bash "$REPO_ROOT/terraform/scripts/run.sh" "${apply_args[@]}"
 

@@ -219,3 +219,10 @@ if TEST_RECIPIENT_ORG=other-workspace verify_bindings; then
   exit 1
 fi
 TEST_RECIPIENT_ORG=balebase-workspace verify_bindings
+
+: > "$MOCK_LOG"
+if TEST_RECIPIENT_ORG=other-workspace PATH="$FIXTURE/bin:$PATH" bash "$FIXTURE/terraform/scripts/run.sh" staging apply -auto-approve; then
+  echo 'Terraform accepted platform addresses in the wrong workspace' >&2
+  exit 1
+fi
+[[ ! -s "$MOCK_LOG" ]] || { echo 'Terraform ran before checking the workspace' >&2; exit 1; }

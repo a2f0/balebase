@@ -12,6 +12,7 @@ export interface Bindings {
   FINANCE_SYNC_QUEUE?: Queue<{ jobId: string }>;
   EMAIL: SendEmail;
   INBOUND_EMAIL_DOMAIN: string;
+  PLATFORM_MAILBOX_ORGANIZATION_ID?: string;
   IMAGES: ImagesBinding;
   PLAID_CLIENT_ID?: string;
   PLAID_ENV?: "development" | "production" | "sandbox";

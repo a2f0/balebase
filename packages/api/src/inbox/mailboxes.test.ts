@@ -19,6 +19,7 @@ function fixture(inboundDomain = "inbox.balebase.com", afterPut?: () => void) {
     DB: toD1(database),
     STORAGE: storage.bucket,
     INBOUND_EMAIL_DOMAIN: inboundDomain,
+    PLATFORM_MAILBOX_ORGANIZATION_ID: "org_root",
   });
   let records: string[][] = [];
   let error: Error | undefined;
@@ -293,6 +294,10 @@ describe("verified inbound domains", () => {
           )
           .all(),
       ).toHaveLength(2);
+      f.bindings.PLATFORM_MAILBOX_ORGANIZATION_ID = "org_other";
+      expect(await f.deliver(`legal@${platform}`)).toBe("Unknown recipient");
+      expect((await f.bind(`legal@${platform}`, "root")).status).toBe(403);
+      f.bindings.PLATFORM_MAILBOX_ORGANIZATION_ID = "org_root";
       f.database
         .query("UPDATE organization SET deletedAt = ? WHERE id = 'org_root'")
         .run(new Date().toISOString());

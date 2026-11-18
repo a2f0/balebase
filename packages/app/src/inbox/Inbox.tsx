@@ -79,17 +79,23 @@ function useInboxMessages(folder: InboxFolder, mailbox: string | undefined) {
   const { openedByLink, pending } = useLinkedEmailId();
   const list = useLoad(
     useCallback(
-      () =>
-        api.inbox.list(
+      async () => ({
+        folder,
+        mailbox,
+        listing: await api.inbox.list(
           folder,
           mailbox || undefined,
           mailbox === undefined ? openedByLink : undefined,
         ),
+      }),
       [folder, mailbox, openedByLink],
     ),
     "Could not load the inbox.",
   );
-  const listing = list.data;
+  const listing =
+    list.data?.folder === folder && list.data.mailbox === mailbox
+      ? list.data.listing
+      : undefined;
   const [mailboxes, setMailboxes] = useState<Mailbox[]>([]);
   useEffect(() => {
     if (listing) setMailboxes(listing.mailboxes ?? []);
@@ -120,7 +126,8 @@ function useInboxMessages(folder: InboxFolder, mailbox: string | undefined) {
     "Could not load the email.",
   );
   return {
-    detail: message.data,
+    detail:
+      listing && message.data?.id === selectedId ? message.data : undefined,
     emails: listing?.emails ?? [],
     error: list.error ?? message.error,
     inboundAddress:

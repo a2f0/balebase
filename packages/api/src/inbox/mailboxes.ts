@@ -3,7 +3,11 @@ import { type Context, Hono } from "hono";
 import type { ApiEnv } from "../auth/apiEnv";
 import { requireManager } from "../organizations/organizationMembers";
 import { readBody, respond } from "../shared/respond";
-import { forwardingAddress, isPlatformDomain } from "./inboundEmailAddress";
+import {
+  forwardingAddress,
+  isPlatformDomain,
+  platformRecipients,
+} from "./inboundEmailAddress";
 import {
   domainRoutes,
   listDomains,
@@ -86,6 +90,18 @@ async function bindMailbox(c: Context<ApiEnv>) {
   )
     return c.json(
       { error: "This address is reserved for inbound delivery." },
+      403,
+    );
+  if (
+    c.env.PLATFORM_MAILBOX_ORGANIZATION_ID &&
+    platformRecipients(c.env.INBOUND_EMAIL_DOMAIN).includes(body.address) &&
+    org !== c.env.PLATFORM_MAILBOX_ORGANIZATION_ID
+  )
+    return c.json(
+      {
+        error:
+          "This platform address belongs to the configured Balebase organization.",
+      },
       403,
     );
   const platform = isPlatformDomain(domain, c.env.INBOUND_EMAIL_DOMAIN);
