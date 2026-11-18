@@ -31,9 +31,9 @@ async function recipient(db: D1Database, address: string, inbound: string) {
   if (isPlatformDomain(domain, inbound)) return null;
   return db
     .prepare(
-      `SELECT b.id, b.organization_id, d.domain, d.token FROM inbound_mailboxes b
+      `SELECT b.id, b.organization_id, d.domain, d.token, o.deletedAt FROM inbound_mailboxes b
      JOIN inbound_domains d ON d.organization_id=b.organization_id AND d.domain=? AND d.verified_at IS NOT NULL
-     JOIN organization o ON o.id=b.organization_id AND o.deletedAt IS NULL
+     JOIN organization o ON o.id=b.organization_id
      WHERE b.address=? AND b.disconnected_at IS NULL`,
     )
     .bind(domain, address)
@@ -42,6 +42,7 @@ async function recipient(db: D1Database, address: string, inbound: string) {
       organization_id: string;
       domain: string;
       token: string;
+      deletedAt: string | null;
     }>();
 }
 function envelopeAddress(value: string | undefined) {
@@ -54,6 +55,7 @@ smtpIngress.post("/recipient", async (c) => {
   if (!address) return c.body(null, 404);
   const box = await recipient(c.env.DB, address, c.env.INBOUND_EMAIL_DOMAIN);
   if (!box) return c.body(null, 404);
+  if (box.deletedAt !== null) return c.body(null, 503);
   try {
     if (!(await hasPublicProof(txtChallenge(box.domain, box.token))))
       return c.body(null, 503);
@@ -107,6 +109,7 @@ smtpIngress.post("/deliver", async (c) => {
   if (await received()) return c.body(null, 204);
   const box = await recipient(c.env.DB, address, c.env.INBOUND_EMAIL_DOMAIN);
   if (box?.id !== mailbox.data) return c.body(null, 410);
+  if (box.deletedAt !== null) return c.body(null, 503);
   const raw = await readBodyWithLimit(c.req.raw.body, maxEmailBytes, 60_000);
   if (!raw) return c.body(null, 413);
   if (raw.byteLength !== size) return c.body(null, 400);
@@ -133,5 +136,15 @@ smtpIngress.post("/deliver", async (c) => {
     // object keys, and the receipt and original message commit together.
     if (!(await received())) throw error;
   }
-  return c.body(null, rejected ? 410 : 204);
+  if (rejected) {
+    // A soft-delete or cleanup may have raced the final commit. Only the
+    // loss of the pinned binding permanently stops the queued delivery.
+    const current = await recipient(
+      c.env.DB,
+      address,
+      c.env.INBOUND_EMAIL_DOMAIN,
+    );
+    return c.body(null, current?.id === mailbox.data ? 503 : 410);
+  }
+  return c.body(null, 204);
 });

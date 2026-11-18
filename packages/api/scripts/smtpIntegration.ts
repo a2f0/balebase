@@ -272,6 +272,49 @@ try {
       await (await storage.get(file.object_key))?.text(),
       "attachment body",
     );
+  // A reversible workspace deletion retains the queued binding. After
+  // restoration the original delivery succeeds; purging the email leaves
+  // its receipt in place, so replay cannot recreate the deleted message.
+  const delivery = crypto.randomUUID();
+  const deliveryOptions = {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "X-Inbound-Recipient": "legal@base.example.org",
+      "X-Inbound-Mailbox": legal,
+      "X-Inbound-Delivery": delivery,
+    },
+    body: "Subject: staged delivery\r\n\r\nretained",
+  };
+  const endpoint = new URL("/internal/inbound-smtp/deliver", workerUrl).href;
+  await db
+    .prepare("UPDATE organization SET deletedAt='2020-01-01' WHERE id='org'")
+    .run();
+  assert.equal(
+    (await worker.dispatchFetch(endpoint, deliveryOptions)).status,
+    503,
+  );
+  await db
+    .prepare("UPDATE organization SET deletedAt=NULL WHERE id='org'")
+    .run();
+  assert.equal(
+    (await worker.dispatchFetch(endpoint, deliveryOptions)).status,
+    204,
+  );
+  const purged = await db
+    .prepare("DELETE FROM inbound_emails WHERE subject='staged delivery'")
+    .run();
+  assert.equal(purged.meta.changes, 1);
+  assert.equal(
+    (await worker.dispatchFetch(endpoint, deliveryOptions)).status,
+    204,
+  );
+  assert.equal(
+    await db
+      .prepare("SELECT id FROM inbound_emails WHERE subject='staged delivery'")
+      .first(),
+    null,
+  );
   console.log(
     "Worker D1/R2 contained exactly one delivery per SMTP recipient and a forwarded message in the same Legal inbox.",
   );

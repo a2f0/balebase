@@ -128,11 +128,11 @@ function useInboxMessages(folder: InboxFolder, mailbox: string | undefined) {
   const refresh = useCallback(async () => {
     await list.reload();
   }, [list.reload]);
+  const detailId = listing ? selectedId : undefined;
   const message = useLoad(
     useCallback(
-      async () =>
-        listing && selectedId ? api.inbox.get(selectedId, folder) : undefined,
-      [folder, listing, selectedId],
+      async () => (detailId ? api.inbox.get(detailId, folder) : undefined),
+      [detailId, folder],
     ),
     "Could not load the email.",
   );

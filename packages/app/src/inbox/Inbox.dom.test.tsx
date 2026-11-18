@@ -29,7 +29,7 @@ async function render() {
   await settle();
 }
 
-function fixture(linkCount = 0, listed = true) {
+function fixture(linkCount = 0, listed = true, unlink?: Promise<void>) {
   let status: InboxFolder = "inbox";
   const requests: string[] = [];
   const email: InboundEmailDetail = {
@@ -62,6 +62,7 @@ function fixture(linkCount = 0, listed = true) {
       return Response.json({ emailId: email.id });
     }
     if (url.pathname.endsWith("/links/link-1") && init?.method === "DELETE") {
+      await unlink;
       email.linkCount -= 1;
       email.links = [];
       return new Response(null, { status: 204 });
@@ -267,7 +268,8 @@ describe("Inbox, mounted", () => {
   });
 
   it("enables Trash after removing the last link", async () => {
-    const { email } = fixture(1);
+    const unlink = Promise.withResolvers<void>();
+    const { email, requests } = fixture(1, true, unlink.promise);
     email.links = [
       {
         id: "link-1",
@@ -279,6 +281,12 @@ describe("Inbox, mounted", () => {
     await render();
     expect(button("Move to Trash").disabled).toBe(true);
     await click("Unlink Receipts");
+    await click("Refresh");
+    await act(async () => unlink.resolve());
+    await settle();
+    expect(
+      requests.filter((request) => request === "GET /api/inbox/email-1"),
+    ).toHaveLength(1);
     expect(button("Move to Trash").disabled).toBe(false);
   });
 
