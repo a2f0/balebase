@@ -158,7 +158,7 @@ function DomainForm({
 function VerificationTxt({ claim }: { claim: DomainClaim }) {
   const { copy, notice } = useClipboard();
   return (
-    <>
+    <div>
       <dl>
         {[
           {
@@ -189,8 +189,8 @@ function VerificationTxt({ claim }: { claim: DomainClaim }) {
           </Fragment>
         ))}
       </dl>
-      {notice && <p role="status">{notice.message}</p>}
-    </>
+      <div role="status">{notice?.message}</div>
+    </div>
   );
 }
 

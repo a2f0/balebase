@@ -99,8 +99,16 @@ it("shows the TXT challenge, verifies the domain, and switches to its connected 
   expect(container.textContent).not.toContain("Copy failed.");
   await click("Verify domain");
   expect(container.textContent).toContain("Verified");
+  const delayed = Promise.withResolvers<void>();
+  stubClipboard(() => delayed.promise);
+  await click("Copy record name for tearleads.com");
+  stubClipboard(async (text) => {
+    copied.push(text);
+  });
   await click("Copy TXT value for tearleads.com");
+  await act(async () => delayed.reject(new Error("Clipboard denied")));
   expect(container.textContent).toContain("TXT value copied.");
+  expect(container.textContent).not.toContain("Copy failed.");
   expect(copied).toEqual([claim.recordName, claim.recordValue]);
   expect(container.textContent).toContain("mx.balebase.com");
   await click("Check public MX");
