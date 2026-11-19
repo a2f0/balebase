@@ -195,7 +195,12 @@ it("shows the TXT challenge, verifies the domain, and switches to its connected 
   await fill(container.querySelector('input[type="email"]'), box.address);
   await click("Connect inbox address");
   expect(container.textContent).toContain(alias);
+  const addressCopy = Promise.withResolvers<void>();
+  stubClipboard(() => addressCopy.promise);
+  await click("Copy email address upload+org@inbox.balebase.com");
   await fill(container.querySelector("select"), "legal");
+  await act(async () => addressCopy.resolve());
+  expect(container.textContent).not.toContain("Inbound email address copied.");
   expect(lists.at(-1)).toBe("?mailbox=legal");
   expect(container.querySelector(".inboxAddressValue")?.textContent).toBe(
     box.address,

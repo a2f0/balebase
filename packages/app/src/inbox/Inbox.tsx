@@ -180,6 +180,7 @@ function useInboxActions(messages: ReturnType<typeof useInboxMessages>) {
   const [workingId, setWorkingId] = useState<string>();
   const action = useAction("Could not update the email.");
   const clipboard = useClipboard();
+  const [copiedAddress, setCopiedAddress] = useState<string>();
   const copyGate = useInboxCopyGate();
   const clear = () => {
     action.setError(undefined);
@@ -189,14 +190,15 @@ function useInboxActions(messages: ReturnType<typeof useInboxMessages>) {
   async function copyAddress() {
     const address = messages.inboundAddress;
     if (!address) return;
-    clear();
-    await copyGate.run(() =>
-      clipboard.copy(
+    await copyGate.run(() => {
+      clear();
+      setCopiedAddress(address);
+      return clipboard.copy(
         address,
         "Inbound email address copied.",
         "Could not copy the email address. Please try again.",
-      ),
-    );
+      );
+    });
   }
 
   async function moveToTrash(email: InboundEmailDetail) {
@@ -235,7 +237,8 @@ function useInboxActions(messages: ReturnType<typeof useInboxMessages>) {
     clear,
     copyAddress,
     copyGate,
-    copyNotice: clipboard.notice,
+    copyNotice:
+      copiedAddress === messages.inboundAddress ? clipboard.notice : undefined,
     error: action.error,
     moveToTrash,
     notice: action.notice,
