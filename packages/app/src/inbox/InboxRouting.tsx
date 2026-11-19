@@ -1,8 +1,9 @@
 import { Button, confirmDialog, Toast } from "@balebase/ui/react";
 import type { DomainClaim } from "@balebase/validators/inbox";
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { api } from "../shared/apiClient";
 import { useAction } from "../shared/useAction";
+import { useClipboard } from "../shared/useClipboard";
 import { useLoad } from "../shared/useLoad";
 
 // A mutation can finish after its panel unmounts. Mounted views reload their
@@ -154,6 +155,45 @@ function DomainForm({
   );
 }
 
+function VerificationTxt({ claim }: { claim: DomainClaim }) {
+  const { copy, notice } = useClipboard();
+  return (
+    <>
+      <dl>
+        {[
+          {
+            label: "Record name",
+            action: "Copy record name",
+            value: claim.recordName,
+          },
+          {
+            label: "TXT value",
+            action: "Copy TXT value",
+            value: claim.recordValue,
+          },
+        ].map(({ label, action, value }) => (
+          <Fragment key={label}>
+            <dt>{label}</dt>
+            <dd className="inboxDnsField">
+              <code>{value}</code>
+              <Button
+                aria-label={`${action} for ${claim.domain}`}
+                icon="copy"
+                iconOnly
+                onClick={() => void copy(value, `${label} copied.`)}
+                size="sm"
+                title={action}
+                variant="ghost"
+              />
+            </dd>
+          </Fragment>
+        ))}
+      </dl>
+      {notice && <p role="status">{notice.message}</p>}
+    </>
+  );
+}
+
 function DomainRecord({
   claim,
   mx,
@@ -179,16 +219,7 @@ function DomainRecord({
           ? "Add this TXT record at your DNS provider, then verify ownership."
           : "Keep the TXT record published while using direct MX. A missing record temporarily stops direct delivery."}
       </p>
-      <dl>
-        <dt>Record name</dt>
-        <dd>
-          <code>{claim.recordName}</code>
-        </dd>
-        <dt>TXT value</dt>
-        <dd>
-          <code>{claim.recordValue}</code>
-        </dd>
-      </dl>
+      <VerificationTxt claim={claim} />
       {claim.status === "pending" && (
         <Button disabled={busy} onClick={() => void verify()}>
           Verify domain

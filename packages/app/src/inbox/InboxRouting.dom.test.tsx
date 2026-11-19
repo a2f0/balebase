@@ -3,7 +3,15 @@ import { act } from "react";
 import { installDom } from "../testing/dom";
 import { Inbox } from "./Inbox";
 
-const { mount, respond, click, fill, settle, window: dom } = installDom();
+const {
+  mount,
+  respond,
+  click,
+  fill,
+  settle,
+  stubClipboard,
+  window: dom,
+} = installDom();
 it("shows the TXT challenge, verifies the domain, and switches to its connected mailbox", async () => {
   let requested = false;
   let verified = false;
@@ -79,8 +87,21 @@ it("shows the TXT challenge, verifies the domain, and switches to its connected 
   await click("Add domain");
   expect(container.textContent).toContain(claim.recordName);
   expect(container.textContent).toContain(claim.recordValue);
+  stubClipboard();
+  await click("Copy record name for tearleads.com");
+  expect(container.textContent).toContain("Copy failed.");
+  const copied: string[] = [];
+  stubClipboard(async (text) => {
+    copied.push(text);
+  });
+  await click("Copy record name for tearleads.com");
+  expect(container.textContent).toContain("Record name copied.");
+  expect(container.textContent).not.toContain("Copy failed.");
   await click("Verify domain");
   expect(container.textContent).toContain("Verified");
+  await click("Copy TXT value for tearleads.com");
+  expect(container.textContent).toContain("TXT value copied.");
+  expect(copied).toEqual([claim.recordName, claim.recordValue]);
   expect(container.textContent).toContain("mx.balebase.com");
   await click("Check public MX");
   expect(container.textContent).toContain("Public MX records match.");
