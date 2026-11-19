@@ -36,6 +36,7 @@ export function InboxRouting() {
 }
 
 function RoutingSettings() {
+  const clipboard = useClipboard();
   const settings = useLoad(
     api.inbox.routing,
     "Could not load inbox addresses.",
@@ -69,14 +70,18 @@ function RoutingSettings() {
       {(settings.error || action.error) && (
         <Toast tone="danger">{settings.error ?? action.error}</Toast>
       )}
-      <DomainForm
-        busy={busy}
-        onSubmit={(domain) => change(() => api.inbox.claimDomain(domain))}
-      />
+      <div>
+        <DomainForm
+          busy={busy}
+          onSubmit={(domain) => change(() => api.inbox.claimDomain(domain))}
+        />
+        <div role="status">{clipboard.notice?.message}</div>
+      </div>
       {settings.data?.domains.map((claim) => (
         <DomainRecord
           key={claim.id}
           claim={claim}
+          clipboard={clipboard}
           mx={settings.data?.directMx ?? null}
           busy={busy}
           verify={() => change(() => api.inbox.verifyDomain(claim.id))}
@@ -155,53 +160,58 @@ function DomainForm({
   );
 }
 
-function VerificationTxt({ claim }: { claim: DomainClaim }) {
-  const { copy, notice } = useClipboard();
+function VerificationTxt({
+  claim,
+  clipboard,
+}: {
+  claim: DomainClaim;
+  clipboard: ReturnType<typeof useClipboard>;
+}) {
   return (
-    <div>
-      <dl>
-        {[
-          {
-            label: "Record name",
-            action: "Copy record name",
-            value: claim.recordName,
-          },
-          {
-            label: "TXT value",
-            action: "Copy TXT value",
-            value: claim.recordValue,
-          },
-        ].map(({ label, action, value }) => (
-          <Fragment key={label}>
-            <dt>{label}</dt>
-            <dd className="inboxDnsField">
-              <code>{value}</code>
-              <Button
-                aria-label={`${action} for ${claim.domain}`}
-                icon="copy"
-                iconOnly
-                onClick={() => void copy(value, `${label} copied.`)}
-                size="sm"
-                title={action}
-                variant="ghost"
-              />
-            </dd>
-          </Fragment>
-        ))}
-      </dl>
-      <div role="status">{notice?.message}</div>
-    </div>
+    <dl>
+      {[
+        {
+          label: "Record name",
+          action: "Copy record name",
+          value: claim.recordName,
+        },
+        {
+          label: "TXT value",
+          action: "Copy TXT value",
+          value: claim.recordValue,
+        },
+      ].map(({ label, action, value }) => (
+        <Fragment key={label}>
+          <dt>{label}</dt>
+          <dd className="inboxDnsField">
+            <code>{value}</code>
+            <Button
+              aria-label={`${action} for ${claim.domain}`}
+              disabled={clipboard.busy}
+              icon="copy"
+              iconOnly
+              onClick={() => void clipboard.copy(value, `${label} copied.`)}
+              size="sm"
+              title={action}
+              variant="ghost"
+            />
+          </dd>
+        </Fragment>
+      ))}
+    </dl>
   );
 }
 
 function DomainRecord({
   claim,
+  clipboard,
   mx,
   busy,
   verify,
   release,
 }: {
   claim: DomainClaim;
+  clipboard: ReturnType<typeof useClipboard>;
   mx: { host: string; priority: number } | null;
   busy: boolean;
   verify: () => Promise<boolean>;
@@ -219,7 +229,7 @@ function DomainRecord({
           ? "Add this TXT record at your DNS provider, then verify ownership."
           : "Keep the TXT record published while using direct MX. A missing record temporarily stops direct delivery."}
       </p>
-      <VerificationTxt claim={claim} />
+      <VerificationTxt claim={claim} clipboard={clipboard} />
       {claim.status === "pending" && (
         <Button disabled={busy} onClick={() => void verify()}>
           Verify domain

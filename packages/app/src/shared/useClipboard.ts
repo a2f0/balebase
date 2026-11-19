@@ -28,6 +28,7 @@ export function useClipboard() {
   }
   return {
     copy,
+    busy: state.status === "copying",
     notice: state.status === "finished" ? state.notice : undefined,
   };
 }

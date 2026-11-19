@@ -100,16 +100,29 @@ it("shows the TXT challenge, verifies the domain, and switches to its connected 
   await click("Verify domain");
   expect(container.textContent).toContain("Verified");
   const delayed = Promise.withResolvers<void>();
-  stubClipboard(() => delayed.promise);
+  stubClipboard(async (text) => {
+    await delayed.promise;
+    copied.push(text);
+  });
   await click("Copy record name for tearleads.com");
+  const valueButton = container.querySelector<HTMLButtonElement>(
+    'button[aria-label="Copy TXT value for tearleads.com"]',
+  );
+  expect(valueButton?.disabled).toBe(true);
+  await click(valueButton);
+  await act(async () => delayed.resolve());
+  expect(valueButton?.disabled).toBe(false);
   stubClipboard(async (text) => {
     copied.push(text);
   });
   await click("Copy TXT value for tearleads.com");
-  await act(async () => delayed.reject(new Error("Clipboard denied")));
   expect(container.textContent).toContain("TXT value copied.");
   expect(container.textContent).not.toContain("Copy failed.");
-  expect(copied).toEqual([claim.recordName, claim.recordValue]);
+  expect(copied).toEqual([
+    claim.recordName,
+    claim.recordName,
+    claim.recordValue,
+  ]);
   expect(container.textContent).toContain("mx.balebase.com");
   await click("Check public MX");
   expect(container.textContent).toContain("Public MX records match.");
