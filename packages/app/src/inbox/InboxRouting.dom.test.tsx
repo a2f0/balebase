@@ -1,17 +1,65 @@
 import { expect, it } from "bun:test";
+import { DialogHost } from "@balebase/ui/react";
 import { act } from "react";
 import { installDom } from "../testing/dom";
 import { Inbox } from "./Inbox";
+import { InboxRouting } from "./InboxRouting";
 
 const {
   mount,
   respond,
   click,
+  button,
   fill,
   settle,
   stubClipboard,
   window: dom,
 } = installDom();
+
+it("keeps a released domain's delayed copy feedback out of the remaining record", async () => {
+  const claims = ["first.example", "second.example"].map((domain) => ({
+    id: domain,
+    domain,
+    recordName: `_balebase-verification.${domain}`,
+    recordValue: `balebase-verification=${domain}`,
+    status: "pending",
+  }));
+  respond(async (url, init) => {
+    if (init?.method === "DELETE" && url.pathname.endsWith("/first.example")) {
+      claims.shift();
+      return new Response(null, { status: 204 });
+    }
+    return Response.json({ domains: claims, mailboxes: [] });
+  });
+  const delayed = Promise.withResolvers<void>();
+  stubClipboard(() => delayed.promise);
+  const { container } = await mount(
+    <>
+      <DialogHost />
+      <InboxRouting />
+    </>,
+  );
+  const details = container.querySelector("details");
+  if (!details) throw new Error("Missing inbox settings");
+  await act(async () => {
+    details.open = true;
+    details.dispatchEvent(new dom.Event("toggle") as never);
+  });
+  await settle();
+  await click("Copy TXT value for first.example");
+  await click("Release domain");
+  const dialog = document.querySelector("dialog[open]");
+  if (!dialog) throw new Error("Missing release confirmation");
+  await click(button("Release domain", dialog));
+  await settle();
+  expect(container.textContent).not.toContain("first.example");
+  const second = button("Copy TXT value for second.example");
+  expect(second.getAttribute("aria-disabled")).toBe("true");
+  await act(async () => delayed.resolve());
+  expect(second.getAttribute("aria-disabled")).toBe("false");
+  expect(container.textContent).not.toContain("TXT value copied.");
+});
+
 it("shows the TXT challenge, verifies the domain, and switches to its connected mailbox", async () => {
   let requested = false;
   let verified = false;

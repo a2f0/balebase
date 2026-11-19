@@ -35,26 +35,25 @@ export function InboxRouting() {
   );
 }
 
-function useTxtClipboard() {
-  const { copy, notice } = useClipboard();
+function useTxtCopyGate() {
   const writing = useRef(false);
   const [busy, setBusy] = useState(false);
-  async function copyField(value: string, message: string) {
+  async function run(write: () => Promise<void>) {
     if (writing.current) return;
     writing.current = true;
     setBusy(true);
     try {
-      await copy(value, message);
+      await write();
     } finally {
       writing.current = false;
       setBusy(false);
     }
   }
-  return { copy: copyField, busy, notice };
+  return { run, busy };
 }
 
 function RoutingSettings() {
-  const clipboard = useTxtClipboard();
+  const copyGate = useTxtCopyGate();
   const settings = useLoad(
     api.inbox.routing,
     "Could not load inbox addresses.",
@@ -88,18 +87,15 @@ function RoutingSettings() {
       {(settings.error || action.error) && (
         <Toast tone="danger">{settings.error ?? action.error}</Toast>
       )}
-      <div>
-        <DomainForm
-          busy={busy}
-          onSubmit={(domain) => change(() => api.inbox.claimDomain(domain))}
-        />
-        <div role="status">{clipboard.notice?.message}</div>
-      </div>
+      <DomainForm
+        busy={busy}
+        onSubmit={(domain) => change(() => api.inbox.claimDomain(domain))}
+      />
       {settings.data?.domains.map((claim) => (
         <DomainRecord
           key={claim.id}
           claim={claim}
-          clipboard={clipboard}
+          copyGate={copyGate}
           mx={settings.data?.directMx ?? null}
           busy={busy}
           verify={() => change(() => api.inbox.verifyDomain(claim.id))}
@@ -180,56 +176,62 @@ function DomainForm({
 
 function VerificationTxt({
   claim,
-  clipboard,
+  copyGate,
 }: {
   claim: DomainClaim;
-  clipboard: ReturnType<typeof useTxtClipboard>;
+  copyGate: ReturnType<typeof useTxtCopyGate>;
 }) {
+  const { copy, notice } = useClipboard();
   return (
-    <dl>
-      {[
-        {
-          label: "Record name",
-          action: "Copy record name",
-          value: claim.recordName,
-        },
-        {
-          label: "TXT value",
-          action: "Copy TXT value",
-          value: claim.recordValue,
-        },
-      ].map(({ label, action, value }) => (
-        <Fragment key={label}>
-          <dt>{label}</dt>
-          <dd className="inboxDnsField">
-            <code>{value}</code>
-            <Button
-              aria-label={`${action} for ${claim.domain}`}
-              aria-disabled={clipboard.busy}
-              icon="copy"
-              iconOnly
-              onClick={() => void clipboard.copy(value, `${label} copied.`)}
-              size="sm"
-              title={action}
-              variant="ghost"
-            />
-          </dd>
-        </Fragment>
-      ))}
-    </dl>
+    <div>
+      <dl>
+        {[
+          {
+            label: "Record name",
+            action: "Copy record name",
+            value: claim.recordName,
+          },
+          {
+            label: "TXT value",
+            action: "Copy TXT value",
+            value: claim.recordValue,
+          },
+        ].map(({ label, action, value }) => (
+          <Fragment key={label}>
+            <dt>{label}</dt>
+            <dd className="inboxDnsField">
+              <code>{value}</code>
+              <Button
+                aria-label={`${action} for ${claim.domain}`}
+                aria-disabled={copyGate.busy}
+                icon="copy"
+                iconOnly
+                onClick={() =>
+                  void copyGate.run(() => copy(value, `${label} copied.`))
+                }
+                size="sm"
+                title={action}
+                variant="ghost"
+              />
+            </dd>
+          </Fragment>
+        ))}
+      </dl>
+      <div role="status">{notice?.message}</div>
+    </div>
   );
 }
 
 function DomainRecord({
   claim,
-  clipboard,
+  copyGate,
   mx,
   busy,
   verify,
   release,
 }: {
   claim: DomainClaim;
-  clipboard: ReturnType<typeof useTxtClipboard>;
+  copyGate: ReturnType<typeof useTxtCopyGate>;
   mx: { host: string; priority: number } | null;
   busy: boolean;
   verify: () => Promise<boolean>;
@@ -247,7 +249,7 @@ function DomainRecord({
           ? "Add this TXT record at your DNS provider, then verify ownership."
           : "Keep the TXT record published while using direct MX. A missing record temporarily stops direct delivery."}
       </p>
-      <VerificationTxt claim={claim} clipboard={clipboard} />
+      <VerificationTxt claim={claim} copyGate={copyGate} />
       {claim.status === "pending" && (
         <Button disabled={busy} onClick={() => void verify()}>
           Verify domain
