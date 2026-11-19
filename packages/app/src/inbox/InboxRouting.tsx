@@ -1,8 +1,9 @@
 import { Button, confirmDialog, Toast } from "@balebase/ui/react";
 import type { DomainClaim } from "@balebase/validators/inbox";
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { api } from "../shared/apiClient";
 import { useAction } from "../shared/useAction";
+import { useClipboard } from "../shared/useClipboard";
 import { useLoad } from "../shared/useLoad";
 
 // A mutation can finish after its panel unmounts. Mounted views reload their
@@ -19,7 +20,9 @@ export function useRoutingRefresh(reload: () => Promise<unknown>) {
   }, [reload]);
 }
 
-export function InboxRouting() {
+type CopyGate = ReturnType<typeof useInboxCopyGate>;
+
+export function InboxRouting({ copyGate }: { copyGate: CopyGate }) {
   const [visited, setVisited] = useState(false);
   return (
     <details
@@ -29,12 +32,29 @@ export function InboxRouting() {
       }}
     >
       <summary>Manage inbox addresses</summary>
-      {visited && <RoutingSettings />}
+      {visited && <RoutingSettings copyGate={copyGate} />}
     </details>
   );
 }
 
-function RoutingSettings() {
+export function useInboxCopyGate() {
+  const writing = useRef(false);
+  const [busy, setBusy] = useState(false);
+  async function run(write: () => Promise<void>) {
+    if (writing.current) return;
+    writing.current = true;
+    setBusy(true);
+    try {
+      await write();
+    } finally {
+      writing.current = false;
+      setBusy(false);
+    }
+  }
+  return { run, busy };
+}
+
+function RoutingSettings({ copyGate }: { copyGate: CopyGate }) {
   const settings = useLoad(
     api.inbox.routing,
     "Could not load inbox addresses.",
@@ -76,6 +96,7 @@ function RoutingSettings() {
         <DomainRecord
           key={claim.id}
           claim={claim}
+          copyGate={copyGate}
           mx={settings.data?.directMx ?? null}
           busy={busy}
           verify={() => change(() => api.inbox.verifyDomain(claim.id))}
@@ -83,7 +104,18 @@ function RoutingSettings() {
             remove(
               "Release domain",
               `Remove the domain claim for ${claim.domain}?`,
-              () => api.inbox.releaseDomain(claim.id),
+              async () => {
+                await api.inbox.releaseDomain(claim.id);
+                settings.setData(
+                  (current) =>
+                    current && {
+                      ...current,
+                      domains: current.domains.filter(
+                        (domain) => domain.id !== claim.id,
+                      ),
+                    },
+                );
+              },
             )
           }
         />
@@ -154,14 +186,64 @@ function DomainForm({
   );
 }
 
+function VerificationTxt({
+  claim,
+  copyGate,
+}: {
+  claim: DomainClaim;
+  copyGate: CopyGate;
+}) {
+  const { copy, notice } = useClipboard();
+  return (
+    <div>
+      <dl>
+        {[
+          {
+            label: "Record name",
+            action: "Copy record name",
+            value: claim.recordName,
+          },
+          {
+            label: "TXT value",
+            action: "Copy TXT value",
+            value: claim.recordValue,
+          },
+        ].map(({ label, action, value }) => (
+          <Fragment key={label}>
+            <dt>{label}</dt>
+            <dd className="inboxDnsField">
+              <code>{value}</code>
+              <Button
+                aria-label={`${action} for ${claim.domain}`}
+                aria-disabled={copyGate.busy}
+                icon="copy"
+                iconOnly
+                onClick={() =>
+                  void copyGate.run(() => copy(value, `${label} copied.`))
+                }
+                size="sm"
+                title={action}
+                variant="ghost"
+              />
+            </dd>
+          </Fragment>
+        ))}
+      </dl>
+      <div role="status">{notice?.message}</div>
+    </div>
+  );
+}
+
 function DomainRecord({
   claim,
+  copyGate,
   mx,
   busy,
   verify,
   release,
 }: {
   claim: DomainClaim;
+  copyGate: CopyGate;
   mx: { host: string; priority: number } | null;
   busy: boolean;
   verify: () => Promise<boolean>;
@@ -179,16 +261,7 @@ function DomainRecord({
           ? "Add this TXT record at your DNS provider, then verify ownership."
           : "Keep the TXT record published while using direct MX. A missing record temporarily stops direct delivery."}
       </p>
-      <dl>
-        <dt>Record name</dt>
-        <dd>
-          <code>{claim.recordName}</code>
-        </dd>
-        <dt>TXT value</dt>
-        <dd>
-          <code>{claim.recordValue}</code>
-        </dd>
-      </dl>
+      <VerificationTxt claim={claim} copyGate={copyGate} />
       {claim.status === "pending" && (
         <Button disabled={busy} onClick={() => void verify()}>
           Verify domain
