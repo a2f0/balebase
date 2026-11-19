@@ -20,7 +20,9 @@ export function useRoutingRefresh(reload: () => Promise<unknown>) {
   }, [reload]);
 }
 
-export function InboxRouting() {
+type CopyGate = ReturnType<typeof useInboxCopyGate>;
+
+export function InboxRouting({ copyGate }: { copyGate: CopyGate }) {
   const [visited, setVisited] = useState(false);
   return (
     <details
@@ -30,12 +32,12 @@ export function InboxRouting() {
       }}
     >
       <summary>Manage inbox addresses</summary>
-      {visited && <RoutingSettings />}
+      {visited && <RoutingSettings copyGate={copyGate} />}
     </details>
   );
 }
 
-function useTxtCopyGate() {
+export function useInboxCopyGate() {
   const writing = useRef(false);
   const [busy, setBusy] = useState(false);
   async function run(write: () => Promise<void>) {
@@ -52,8 +54,7 @@ function useTxtCopyGate() {
   return { run, busy };
 }
 
-function RoutingSettings() {
-  const copyGate = useTxtCopyGate();
+function RoutingSettings({ copyGate }: { copyGate: CopyGate }) {
   const settings = useLoad(
     api.inbox.routing,
     "Could not load inbox addresses.",
@@ -103,7 +104,18 @@ function RoutingSettings() {
             remove(
               "Release domain",
               `Remove the domain claim for ${claim.domain}?`,
-              () => api.inbox.releaseDomain(claim.id),
+              async () => {
+                await api.inbox.releaseDomain(claim.id);
+                settings.setData(
+                  (current) =>
+                    current && {
+                      ...current,
+                      domains: current.domains.filter(
+                        (domain) => domain.id !== claim.id,
+                      ),
+                    },
+                );
+              },
             )
           }
         />
@@ -179,7 +191,7 @@ function VerificationTxt({
   copyGate,
 }: {
   claim: DomainClaim;
-  copyGate: ReturnType<typeof useTxtCopyGate>;
+  copyGate: CopyGate;
 }) {
   const { copy, notice } = useClipboard();
   return (
@@ -231,7 +243,7 @@ function DomainRecord({
   release,
 }: {
   claim: DomainClaim;
-  copyGate: ReturnType<typeof useTxtCopyGate>;
+  copyGate: CopyGate;
   mx: { host: string; priority: number } | null;
   busy: boolean;
   verify: () => Promise<boolean>;

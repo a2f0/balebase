@@ -36,7 +36,11 @@ import { useClipboard } from "../shared/useClipboard";
 import { useLoad } from "../shared/useLoad";
 import { AttachmentPreviewTile } from "./AttachmentPreview";
 import { EmailLinks } from "./EmailLinks";
-import { InboxRouting, useRoutingRefresh } from "./InboxRouting";
+import {
+  InboxRouting,
+  useInboxCopyGate,
+  useRoutingRefresh,
+} from "./InboxRouting";
 import { selectEmailId } from "./inboxSelection";
 import { previewKindFor } from "./previewKind";
 
@@ -176,18 +180,22 @@ function useInboxActions(messages: ReturnType<typeof useInboxMessages>) {
   const [workingId, setWorkingId] = useState<string>();
   const action = useAction("Could not update the email.");
   const clipboard = useClipboard();
+  const copyGate = useInboxCopyGate();
   const clear = () => {
     action.setError(undefined);
     action.setNotice(undefined);
   };
 
   async function copyAddress() {
-    if (!messages.inboundAddress) return;
+    const address = messages.inboundAddress;
+    if (!address) return;
     clear();
-    await clipboard.copy(
-      messages.inboundAddress,
-      "Inbound email address copied.",
-      "Could not copy the email address. Please try again.",
+    await copyGate.run(() =>
+      clipboard.copy(
+        address,
+        "Inbound email address copied.",
+        "Could not copy the email address. Please try again.",
+      ),
     );
   }
 
@@ -226,6 +234,7 @@ function useInboxActions(messages: ReturnType<typeof useInboxMessages>) {
     archive,
     clear,
     copyAddress,
+    copyGate,
     copyNotice: clipboard.notice,
     error: action.error,
     moveToTrash,
@@ -263,7 +272,7 @@ function InboxView({
           </Toast>
         )}
         <div className="stack">
-          {context.canManage && <InboxRouting />}
+          {context.canManage && <InboxRouting copyGate={actions.copyGate} />}
           {messages.mailboxes.length > 0 && (
             <label className="field">
               Mailbox
@@ -288,6 +297,7 @@ function InboxView({
           )}
           <InboxToolbar
             address={messages.inboundAddress}
+            copyBusy={actions.copyGate.busy}
             disabled={Boolean(actions.workingId)}
             folder={folder}
             onCopyAddress={actions.copyAddress}
@@ -335,12 +345,14 @@ function InboxHeader({
 
 function InboxToolbar({
   address,
+  copyBusy,
   disabled,
   folder,
   onCopyAddress,
   onSelect,
 }: {
   address: string | undefined;
+  copyBusy: boolean;
   disabled: boolean;
   folder: InboxFolder;
   onCopyAddress: () => Promise<void>;
@@ -373,6 +385,7 @@ function InboxToolbar({
               {
                 icon: "copy",
                 id: "copy-address",
+                disabled: copyBusy,
                 label: "Copy email address",
                 onSelect: () => void onCopyAddress(),
               },
@@ -383,6 +396,7 @@ function InboxToolbar({
               <button
                 {...targetProps}
                 aria-label={`Copy email address ${address}`}
+                aria-disabled={copyBusy}
                 className="codeChip inboxAddressValue"
                 onClick={() => void onCopyAddress()}
                 title="Copy email address"

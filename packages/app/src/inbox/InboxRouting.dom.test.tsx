@@ -3,7 +3,6 @@ import { DialogHost } from "@balebase/ui/react";
 import { act } from "react";
 import { installDom } from "../testing/dom";
 import { Inbox } from "./Inbox";
-import { InboxRouting } from "./InboxRouting";
 
 const {
   mount,
@@ -24,19 +23,31 @@ it("keeps a released domain's delayed copy feedback out of the remaining record"
     recordValue: `balebase-verification=${domain}`,
     status: "pending",
   }));
+  let released = false;
   respond(async (url, init) => {
+    if (url.pathname === "/api/inbox")
+      return Response.json({
+        address: "upload@example.test",
+        emails: [],
+        mailboxes: [],
+      });
     if (init?.method === "DELETE" && url.pathname.endsWith("/first.example")) {
-      claims.shift();
+      released = true;
       return new Response(null, { status: 204 });
     }
+    if (released) return new Response(null, { status: 503 });
     return Response.json({ domains: claims, mailboxes: [] });
   });
   const delayed = Promise.withResolvers<void>();
-  stubClipboard(() => delayed.promise);
+  const writes: string[] = [];
+  stubClipboard(async (text) => {
+    writes.push(text);
+    await delayed.promise;
+  });
   const { container } = await mount(
     <>
       <DialogHost />
-      <InboxRouting />
+      <Inbox canManage canAccessFinance={false} onNavigate={() => {}} />
     </>,
   );
   const details = container.querySelector("details");
@@ -47,6 +58,10 @@ it("keeps a released domain's delayed copy feedback out of the remaining record"
   });
   await settle();
   await click("Copy TXT value for first.example");
+  const address = button("Copy email address upload@example.test");
+  expect(address.getAttribute("aria-disabled")).toBe("true");
+  await click(address);
+  expect(writes).toEqual(["balebase-verification=first.example"]);
   await click("Release domain");
   const dialog = document.querySelector("dialog[open]");
   if (!dialog) throw new Error("Missing release confirmation");
