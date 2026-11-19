@@ -108,10 +108,12 @@ it("shows the TXT challenge, verifies the domain, and switches to its connected 
   const valueButton = container.querySelector<HTMLButtonElement>(
     'button[aria-label="Copy TXT value for tearleads.com"]',
   );
-  expect(valueButton?.disabled).toBe(true);
+  expect(valueButton?.getAttribute("aria-disabled")).toBe("true");
+  valueButton?.focus();
+  expect(document.activeElement).toBe(valueButton);
   await click(valueButton);
   await act(async () => delayed.resolve());
-  expect(valueButton?.disabled).toBe(false);
+  expect(valueButton?.getAttribute("aria-disabled")).toBe("false");
   stubClipboard(async (text) => {
     copied.push(text);
   });

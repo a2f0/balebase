@@ -1,34 +1,22 @@
-import { useReducer, useRef } from "react";
-import { clipboardTransition } from "./clipboardState";
+import { useState } from "react";
 
 export function useClipboard() {
-  const [state, dispatch] = useReducer(clipboardTransition, { status: "idle" });
-  const sequence = useRef(0);
+  const [notice, setNotice] = useState<{
+    message: string;
+    tone: "danger" | "success";
+  }>();
   async function copy(
     text: string,
     message = "Copied to clipboard.",
     failure = "Copy failed. Select it and copy manually.",
   ) {
-    const request = ++sequence.current;
-    dispatch({ type: "copy", request });
+    setNotice(undefined);
     try {
       await navigator.clipboard.writeText(text);
-      dispatch({
-        type: "settled",
-        request,
-        notice: { message, tone: "success" },
-      });
+      setNotice({ message, tone: "success" });
     } catch {
-      dispatch({
-        type: "settled",
-        request,
-        notice: { message: failure, tone: "danger" },
-      });
+      setNotice({ message: failure, tone: "danger" });
     }
   }
-  return {
-    copy,
-    busy: state.status === "copying",
-    notice: state.status === "finished" ? state.notice : undefined,
-  };
+  return { copy, notice };
 }

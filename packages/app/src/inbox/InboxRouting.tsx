@@ -1,6 +1,6 @@
 import { Button, confirmDialog, Toast } from "@balebase/ui/react";
 import type { DomainClaim } from "@balebase/validators/inbox";
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { api } from "../shared/apiClient";
 import { useAction } from "../shared/useAction";
 import { useClipboard } from "../shared/useClipboard";
@@ -35,8 +35,26 @@ export function InboxRouting() {
   );
 }
 
+function useTxtClipboard() {
+  const { copy, notice } = useClipboard();
+  const writing = useRef(false);
+  const [busy, setBusy] = useState(false);
+  async function copyField(value: string, message: string) {
+    if (writing.current) return;
+    writing.current = true;
+    setBusy(true);
+    try {
+      await copy(value, message);
+    } finally {
+      writing.current = false;
+      setBusy(false);
+    }
+  }
+  return { copy: copyField, busy, notice };
+}
+
 function RoutingSettings() {
-  const clipboard = useClipboard();
+  const clipboard = useTxtClipboard();
   const settings = useLoad(
     api.inbox.routing,
     "Could not load inbox addresses.",
@@ -165,7 +183,7 @@ function VerificationTxt({
   clipboard,
 }: {
   claim: DomainClaim;
-  clipboard: ReturnType<typeof useClipboard>;
+  clipboard: ReturnType<typeof useTxtClipboard>;
 }) {
   return (
     <dl>
@@ -187,7 +205,7 @@ function VerificationTxt({
             <code>{value}</code>
             <Button
               aria-label={`${action} for ${claim.domain}`}
-              disabled={clipboard.busy}
+              aria-disabled={clipboard.busy}
               icon="copy"
               iconOnly
               onClick={() => void clipboard.copy(value, `${label} copied.`)}
@@ -211,7 +229,7 @@ function DomainRecord({
   release,
 }: {
   claim: DomainClaim;
-  clipboard: ReturnType<typeof useClipboard>;
+  clipboard: ReturnType<typeof useTxtClipboard>;
   mx: { host: string; priority: number } | null;
   busy: boolean;
   verify: () => Promise<boolean>;
