@@ -109,8 +109,8 @@ a2f0/nc keeps byte-identical copies of `fastlane/lib/readiness.rb`,
 `readiness_artifacts.rb`, `readiness_stores.rb`, their library test
 `fastlane/test/readiness.test.ts`, and the `skills/app-store-readiness`
 skill. Change both repositories together; the lanes, expectations, and this
-guide are each repository's own. Install the skill in a personal skill
-directory for Codex or Claude Code, as for the
+guide are each repository's own. `bun run hooks:install` links the skill into
+the personal skill directories of Codex and Claude Code, as for the
 [audit-trails skill](audit-activity.md#reviewing-coverage).
 
 ## Device and web checks
