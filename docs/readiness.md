@@ -1,9 +1,10 @@
 # Release readiness lanes
 
-Use the [app-store-readiness skill](../skills/app-store-readiness/SKILL.md)
-for an iOS, Android, and web pre-release assessment, and record each
-candidate's findings and remaining prerequisites in its PR. The readiness lanes
-below supply its artifact and store-record evidence.
+Use agent-tool's managed `app-store-readiness` skill
+(`.claude/skills/app-store-readiness/SKILL.md`) for an iOS, Android, and web
+pre-release assessment, and record each candidate's findings and remaining
+prerequisites in its PR. The readiness lanes below supply its artifact and
+store-record evidence.
 
 Run `bun run --cwd packages/app-capacitor ios:readiness` or `android:readiness`
 (`ios:readiness:staging` and `android:readiness:staging` for the staging app)
@@ -103,15 +104,15 @@ source edits during builds. Build numbering still follows the release lanes.
   identity, screenshot accuracy, and real assistive-input and device behavior
   for review; the skill covers those.
 
-## Shared with nc
+## Shared with nc and ct
 
-a2f0/nc keeps byte-identical copies of `fastlane/lib/readiness.rb`,
-`readiness_artifacts.rb`, `readiness_stores.rb`, their library test
-`fastlane/test/readiness.test.ts`, and the `skills/app-store-readiness`
-skill. Change both repositories together; the lanes, expectations, and this
-guide are each repository's own. `bun run hooks:install` links the skill into
-the personal skill directories of Codex and Claude Code, as for the
-[audit-trails skill](audit-activity.md#reviewing-coverage).
+a2f0/nc and a2f0/ct keep byte-identical copies of `fastlane/lib/readiness.rb`,
+`readiness_artifacts.rb`, `readiness_stores.rb`, and their library test
+`fastlane/test/readiness.test.ts`. Change the three repositories together; the
+lanes, expectations, and this guide are each repository's own. The
+`app-store-readiness` skill is agent-tool's: `bun run agents:sync` installs it
+from the pinned version in every repository, and changes to it go to
+a2f0/agent-tool.
 
 ## Device and web checks
 

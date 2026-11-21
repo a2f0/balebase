@@ -482,9 +482,11 @@ curl -sI https://app.balebase.com/sign/x | grep -i x-robots-tag  # noindex
 curl -sI http://balebase.com/ | grep -i -E '^(HTTP|location)'  # 301 to https
 ```
 
-For a fuller audit, or before changing these rules, use the
-[seo-optimization skill](../skills/seo-optimization/SKILL.md); its probe
-script checks every host's metadata, headers, sitemap, and links.
+For a fuller audit, or before changing these rules, use agent-tool's managed
+`seo-optimization` skill. Its probe,
+`bun run agent-tool seo probe <host> [path]`, reports a page's metadata and
+headers and the site's robots.txt and sitemap; `--sitemap` checks every
+sitemap URL, and `--links` a page's internal links.
 
 ## Click tracking deployments
 

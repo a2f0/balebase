@@ -39,7 +39,6 @@ Every workspace lives under `packages/`, and infrastructure lives in
 | Repository checks and test harnesses | `scripts/checks`, `scripts/testing` |
 | Shared script helpers | `scripts/lib` |
 | Agent review and merge policy | `agent-tool.json`, `AGENTS.md` |
-| Repository-owned audit and readiness skills | `skills/` (separate from generated `.agents/skills` and `.claude/skills`) |
 
 Package scripts remain the supported entrypoints for CI, hooks, and people.
 Group repository scripts by purpose as shown above; keep infrastructure scripts
@@ -404,14 +403,13 @@ as to `screens.ts`.
   mechanical moves; add coverage when behavior changes or a gap matters.
 - Treat [audit activity](docs/audit-activity.md) as part of a mutation's
   behavior: identify its durable history, actor, transaction boundary, reader
-  permissions, and retention. Use the [audit-trails skill](skills/audit-trails/SKILL.md)
+  permissions, and retention. Use agent-tool's managed `audit-trails` skill
   for a requested coverage review and findings report.
-- Before a store submission, use the
-  [app-store-readiness skill](skills/app-store-readiness/SKILL.md) with the
-  [readiness lanes](docs/readiness.md), and record the candidate's findings
-  in its PR.
+- Before a store submission, use agent-tool's managed `app-store-readiness`
+  skill with the [readiness lanes](docs/readiness.md), and record the
+  candidate's findings in its PR.
 - When changing page metadata, robots rules, sitemaps, or a tier's indexing,
-  use the [seo-optimization skill](skills/seo-optimization/SKILL.md) and keep
+  use agent-tool's managed `seo-optimization` skill and keep
   [search indexing](docs/operations.md#search-indexing) current.
 - Write comments for constraints and surprising choices. Put setup in the
   README, product details in [product.md](docs/product.md), and operational
@@ -438,8 +436,6 @@ Use a feature branch and a Conventional Commit subject, such as
 and signature policy in `agent-tool.json` and `commitlint.config.mts`. Run
 `bun run hooks:install` after cloning, after hook changes land, and after a
 merge returns the checkout to `main`; `bun run hooks:check` reports drift.
-It also links the repository-owned skills in `skills/` into your user skill
-directories, which [AGENTS.md](AGENTS.md) describes.
 
 The `pre-push` hook is agent-tool's push gate; `agent-tool push-gate hook`
 generates it, so do not edit it. It checks the pushed commits' branch,
