@@ -492,14 +492,14 @@ examples live in `packages/api/src`: `audits/auditActivity.test.ts`,
 `finance/financeProviderActivity.test.ts` (Plaid).
 
 For a requested coverage review, use agent-tool's managed `audit-trails`
-skill (`.claude/skills/audit-trails/SKILL.md`), which the pinned
-`@a2f0/agent-tool` installs. It reviews mutations, triggers, separate
-histories, readers, and retention, then produces a ranked report or requested
-GitHub issue, starting from the Balebase map in
-[Coverage review map](#coverage-review-map). Invoke `$audit-trails` in Codex
-or `/audit-trails` in Claude Code, with an optional focus such as access
-changes or finance. Saved reports record their revision and remaining scope so
-later runs can resume without claiming stale findings are current.
+skill, which the pinned `@a2f0/agent-tool` installs in `.claude/skills` and
+`.agents/skills`. It reviews mutations, triggers, separate histories, readers,
+and retention, then produces a ranked report or requested GitHub issue,
+starting from the Balebase map in [Coverage review map](#coverage-review-map).
+Invoke `$audit-trails` in Codex or `/audit-trails` in Claude Code, with an
+optional focus such as access changes or finance. Saved reports record their
+revision and remaining scope so later runs can resume without claiming stale
+findings are current.
 
 ## Coverage review map
 

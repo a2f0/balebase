@@ -1,8 +1,7 @@
 # Release readiness lanes
 
-Use agent-tool's managed `app-store-readiness` skill
-(`.claude/skills/app-store-readiness/SKILL.md`) for an iOS, Android, and web
-pre-release assessment, and record each candidate's findings and remaining
+Use agent-tool's managed `app-store-readiness` skill for an iOS, Android, and
+web pre-release assessment, and record each candidate's findings and remaining
 prerequisites in its PR. The readiness lanes below supply its artifact and
 store-record evidence.
 
