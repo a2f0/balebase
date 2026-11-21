@@ -68,3 +68,13 @@ run through `agent-tool bun x` in `permissions.executables` in
 `agent-tool.json` instead. After changing the pin or that section, run
 `bun run agents:sync` and commit the lockfile, skills, permission rules, and
 their manifests together.
+
+The repository-owned skills in `skills/` are user-wide: `skills.user` in
+`agent-tool.json` declares them, and `bun run hooks:install` links them with
+`agent-tool skills link --apply` into `~/.agents/skills` and the `skills`
+directory of every Claude Code config directory (`~/.claude`,
+`CLAUDE_CONFIG_DIR`, and other `~/.claude*` directories), so sessions in any
+repository find them. The links follow this checkout's working tree; run it
+from a clone that stays on `main`, not a linked worktree. `bun run hooks:check`
+runs `agent-tool skills check-links`. When either reports a `conflict`, move
+the occupying entry aside yourself; nothing is replaced.

@@ -438,6 +438,8 @@ Use a feature branch and a Conventional Commit subject, such as
 and signature policy in `agent-tool.json` and `commitlint.config.mts`. Run
 `bun run hooks:install` after cloning, after hook changes land, and after a
 merge returns the checkout to `main`; `bun run hooks:check` reports drift.
+It also links the repository-owned skills in `skills/` into your user skill
+directories, which [AGENTS.md](AGENTS.md) describes.
 
 The `pre-push` hook is agent-tool's push gate; `agent-tool push-gate hook`
 generates it, so do not edit it. It checks the pushed commits' branch,

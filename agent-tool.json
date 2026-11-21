@@ -94,6 +94,9 @@
       "wrangler": "release"
     }
   },
+  "skills": {
+    "user": ["app-store-readiness", "audit-trails", "seo-optimization"]
+  },
   "images": {
     "targets": {
       "favicons": {

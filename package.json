@@ -26,8 +26,8 @@
     "deploy:website": "bash scripts/deploy/deployWebsite.sh",
     "dev": "bunx --bun --no-install turbo run dev",
     "format": "bun --bun run lint:biome:fix && bun --bun run lint:markdown:fix",
-    "hooks:check": "agent-tool hooks check",
-    "hooks:install": "agent-tool hooks install --apply",
+    "hooks:check": "agent-tool hooks check && agent-tool skills check-links",
+    "hooks:install": "agent-tool hooks install --apply && agent-tool skills link --apply",
     "images": "agent-tool images build native && agent-tool images build favicons --out packages/ui/dist/images/web",
     "install:dependencies": "bun --bun run bun install",
     "lint": "agent-tool run-group scripts/testing/lint.json",
@@ -84,7 +84,7 @@
     "*.md": "bun --bun x markdownlint-cli2 --fix"
   },
   "devDependencies": {
-    "@a2f0/agent-tool": "0.1.65",
+    "@a2f0/agent-tool": "0.1.67",
     "@azure/storage-blob": "12.34.0",
     "@biomejs/biome": "2.6.4",
     "@commitlint/cli": "21.2.4",
