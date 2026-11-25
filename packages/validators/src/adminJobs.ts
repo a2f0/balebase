@@ -1,13 +1,38 @@
 import { z } from "zod";
 import { ActivityPageSchema, ActivityQuerySchema } from "./activity";
+import { cronExpressionMaxLength } from "./cron";
 import { route } from "./route";
+
+const AdminSnapshotSchema = z.object({
+  email: z.string(),
+  id: z.string(),
+  name: z.string(),
+});
+
+/** A maintenance job's saved schedule: a five-field cron expression in UTC. */
+const JobScheduleSchema = z.object({
+  cron: z.string(),
+  enabled: z.boolean(),
+  /** The next minute it queues the job; null while paused. */
+  nextRunAt: z.string().nullable(),
+  updatedAt: z.string().nullable(),
+  /** The admin who last changed it as they were then; null for the default. */
+  updatedBy: AdminSnapshotSchema.nullable(),
+});
+export type JobSchedule = z.infer<typeof JobScheduleSchema>;
 
 const JobDefinitionSchema = z.object({
   description: z.string(),
   id: z.string(),
   name: z.string(),
+  /**
+   * A maintenance job: it can be run or dry-run from here and has a schedule
+   * root admins edit. Bank sync is listed only for its history.
+   */
   manual: z.boolean(),
   runSchedule: z.string(),
+  /** Null for a job whose timing is not set here, such as bank sync. */
+  schedule: JobScheduleSchema.nullable(),
 });
 export type JobDefinition = z.infer<typeof JobDefinitionSchema>;
 
@@ -28,6 +53,8 @@ const JobRunSchema = z.object({
   jobId: z.string(),
   status: JobStatusSchema,
   source: z.enum(["manual", "scheduled", "daily"]),
+  /** It reported what the job would change and changed nothing. */
+  dryRun: z.boolean(),
   requestedBy: z.string().nullable(),
   /** The requester's name and email when they asked; null for older runs. */
   requestedByName: z.string().nullable(),
@@ -57,7 +84,9 @@ const JobLogSchema = z.object({
 /** One manual maintenance request, kept after its run's history expires. */
 const MaintenanceRequestSchema = z.object({
   /** The requester as they were when they asked. */
-  actor: z.object({ email: z.string(), id: z.string(), name: z.string() }),
+  actor: AdminSnapshotSchema,
+  /** A dry run, which changes nothing. */
+  dryRun: z.boolean(),
   id: z.string(),
   jobId: z.string(),
   /** The request joined a run that was already queued or running. */
@@ -66,6 +95,20 @@ const MaintenanceRequestSchema = z.object({
   runId: z.string(),
 });
 export type MaintenanceRequest = z.infer<typeof MaintenanceRequestSchema>;
+
+/** One change to a job's schedule, kept after the admin's account is purged. */
+const JobScheduleChangeSchema = z.object({
+  actor: AdminSnapshotSchema,
+  changedAt: z.string(),
+  cron: z.string(),
+  enabled: z.boolean(),
+  id: z.string(),
+  jobId: z.string(),
+  /** Null when the job had no saved schedule before. */
+  previousCron: z.string().nullable(),
+  previousEnabled: z.boolean().nullable(),
+});
+export type JobScheduleChange = z.infer<typeof JobScheduleChangeSchema>;
 
 export const adminJobsRoutes = {
   list: route({
@@ -76,8 +119,32 @@ export const adminJobsRoutes = {
   start: route({
     method: "POST",
     path: "/api/admin/jobs/:jobId/runs",
-    body: z.object({ confirm: z.string() }),
+    body: z.object({
+      confirm: z.string(),
+      /** Report what the job would change without changing anything. */
+      dryRun: z.boolean().optional(),
+    }),
     response: z.object({ run: JobRunSchema }),
+  }),
+  /** Replaces a maintenance job's schedule; the API validates the expression. */
+  schedule: route({
+    method: "PUT",
+    path: "/api/admin/jobs/:jobId/schedule",
+    body: z.object({
+      cron: z.string().max(cronExpressionMaxLength),
+      enabled: z.boolean(),
+    }),
+    response: z.object({ job: JobDefinitionSchema }),
+  }),
+  /** A job's schedule changes, newest first. */
+  scheduleChanges: route({
+    method: "GET",
+    path: "/api/admin/jobs/:jobId/schedule/changes",
+    query: z.object({ cursor: z.string().max(500).optional() }),
+    response: z.object({
+      changes: z.array(JobScheduleChangeSchema),
+      nextCursor: z.string().nullable(),
+    }),
   }),
   runs: route({
     method: "GET",

@@ -15,6 +15,17 @@ const endpoints = {
     body: "json",
     response: "json",
   }),
+  schedule: endpoint<typeof adminJobsRoutes.schedule>({
+    method: "PUT",
+    path: "/api/admin/jobs/:jobId/schedule",
+    body: "json",
+    response: "json",
+  }),
+  scheduleChanges: endpoint<typeof adminJobsRoutes.scheduleChanges>({
+    method: "GET",
+    path: "/api/admin/jobs/:jobId/schedule/changes",
+    response: "json",
+  }),
   runs: endpoint<typeof adminJobsRoutes.runs>({
     method: "GET",
     path: "/api/admin/jobs/runs",
@@ -42,13 +53,35 @@ export function adminJobsApi(transport: Transport) {
     async list() {
       return (await transport.call(endpoints.list, {})).jobs;
     },
-    async run(jobId: string) {
+    /** Queues the job; a dry run reports what it would change instead. */
+    async run(jobId: string, options: { dryRun?: boolean } = {}) {
       return (
         await transport.call(endpoints.run, {
-          body: { confirm: jobId },
+          body: options.dryRun
+            ? { confirm: jobId, dryRun: true }
+            : { confirm: jobId },
           params: { jobId },
         })
       ).run;
+    },
+    /** Saves a maintenance job's cron schedule (UTC) and returns the job. */
+    async saveSchedule(
+      jobId: string,
+      schedule: RouteInput<typeof adminJobsRoutes.schedule>["body"],
+    ) {
+      return (
+        await transport.call(endpoints.schedule, {
+          body: schedule,
+          params: { jobId },
+        })
+      ).job;
+    },
+    /** A job's schedule changes, newest first. */
+    scheduleChanges(jobId: string, cursor?: string) {
+      return transport.call(endpoints.scheduleChanges, {
+        params: { jobId },
+        query: cursor ? { cursor } : {},
+      });
     },
     runs(query: RouteInput<typeof adminJobsRoutes.runs>["query"] = {}) {
       return transport.call(endpoints.runs, { query });

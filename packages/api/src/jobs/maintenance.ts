@@ -1,17 +1,50 @@
 import type { JobOutput } from "@balebase/validators/adminJobs";
-import { purgeExpiredFreeFormRuns } from "../billing/billingRetention";
-import { reconcileSubscriptionSeats } from "../billing/billingSeats";
-import { purgeStripeWebhookReceipts } from "../billing/billingWebhook";
-import { maintainContracts } from "../contracts/contractReminders";
-import { refreshActiveCheckrScreenings } from "../employeeForms/checkrSync";
-import { purgeDiscardedFormTemplates } from "../forms/discardedTemplatePurge";
-import { purgePendingFormIssueImages } from "../forms/formIssueImageCleanup";
-import { purgeTrashedEmails } from "../inbox/trashedEmailPurge";
-import { purgeDeletedObjects } from "../library/deletedObjectCleanup";
-import { purgeDeletedOrganizations } from "../organizations/organizationPurge";
+import {
+  previewExpiredFreeFormRunPurge,
+  purgeExpiredFreeFormRuns,
+} from "../billing/billingRetention";
+import {
+  previewSubscriptionSeatReconciliation,
+  reconcileSubscriptionSeats,
+} from "../billing/billingSeats";
+import {
+  previewStripeWebhookReceiptPurge,
+  purgeStripeWebhookReceipts,
+} from "../billing/billingWebhook";
+import {
+  maintainContracts,
+  previewContractMaintenance,
+} from "../contracts/contractReminders";
+import {
+  previewCheckrScreeningRefresh,
+  refreshActiveCheckrScreenings,
+} from "../employeeForms/checkrSync";
+import {
+  previewDiscardedFormTemplatePurge,
+  purgeDiscardedFormTemplates,
+} from "../forms/discardedTemplatePurge";
+import {
+  previewPendingFormIssueImagePurge,
+  purgePendingFormIssueImages,
+} from "../forms/formIssueImageCleanup";
+import {
+  previewTrashedEmailPurge,
+  purgeTrashedEmails,
+} from "../inbox/trashedEmailPurge";
+import {
+  previewDeletedObjectPurge,
+  purgeDeletedObjects,
+} from "../library/deletedObjectCleanup";
+import {
+  previewDeletedOrganizationPurge,
+  purgeDeletedOrganizations,
+} from "../organizations/organizationPurge";
 import { captureApiError } from "../shared/diagnostics";
 import type { Bindings } from "../types";
-import { purgeRequestedUsers } from "../users/userDeletion";
+import {
+  previewRequestedUserPurge,
+  purgeRequestedUsers,
+} from "../users/userDeletion";
 import { dispatchJob, type JobRow } from "./jobRuns";
 import { MaintenanceFailure } from "./maintenanceFailure";
 
@@ -45,7 +78,6 @@ export const maintenanceJobs = [
     name: "Purge trashed email",
     description:
       "Permanently deletes up to 100 inbox emails that have been in Trash for at least 30 days, with their attachments and links, and queues their files for the Purge deleted files job. Each email's history records the purge. Restoration is no longer possible after the purge.",
-    scheduled: false,
   },
   {
     id: "purgeDeletedObjects",
@@ -84,16 +116,21 @@ export const maintenanceJobs = [
 ] as const;
 
 export type MaintenanceJobId = (typeof maintenanceJobs)[number]["id"];
+
+export function isMaintenanceJobId(id: string): id is MaintenanceJobId {
+  return maintenanceJobs.some((job) => job.id === id);
+}
+
 /** Each task receives its run's ID, the cause its system events record. */
 type MaintenanceTasks = Record<
   MaintenanceJobId,
   (runId: string) => Promise<JobOutput>
 >;
 type RunSource =
-  | { trigger: "manual"; actorUserId: string }
+  | { trigger: "manual"; actorUserId: string; dryRun?: boolean }
   | { trigger: "scheduled"; cron: string; scheduledTime: number };
 
-export function maintenanceTasks(environment: Bindings): MaintenanceTasks {
+function maintenanceTasks(environment: Bindings): MaintenanceTasks {
   return {
     purgeDeletedOrganizations: (runId) =>
       purgeDeletedOrganizations(environment, runId),
@@ -137,10 +174,45 @@ export function maintenanceTasks(environment: Bindings): MaintenanceTasks {
 }
 
 /**
+ * Each job's dry run: read-only queries that count what the job would change
+ * now, within its batch limits. They write nothing, call no provider, and
+ * send no email.
+ */
+export function maintenanceDryRuns(environment: Bindings): MaintenanceTasks {
+  return {
+    purgeDeletedOrganizations: () =>
+      previewDeletedOrganizationPurge(environment),
+    purgeRequestedUsers: () => previewRequestedUserPurge(environment),
+    purgeDeletedObjects: () => previewDeletedObjectPurge(environment),
+    purgeExpiredFreeFormRuns: () => previewExpiredFreeFormRunPurge(environment),
+    purgeDiscardedFormTemplates: () =>
+      previewDiscardedFormTemplatePurge(environment),
+    purgeTrashedEmails: () => previewTrashedEmailPurge(environment),
+    purgePendingFormIssueImages: () =>
+      previewPendingFormIssueImagePurge(environment),
+    purgeStripeWebhookReceipts: () =>
+      previewStripeWebhookReceiptPurge(environment),
+    reconcileSubscriptionSeats: () =>
+      previewSubscriptionSeatReconciliation(environment),
+    maintainContracts: () => previewContractMaintenance(environment),
+    refreshCheckrScreenings: () => previewCheckrScreeningRefresh(environment),
+  };
+}
+
+/** The task a claimed maintenance run performs: the job, or its dry run. */
+export function maintenanceTask(environment: Bindings, job: JobRow) {
+  if (!isMaintenanceJobId(job.job_id)) return undefined;
+  return (job.dry_run ? maintenanceDryRuns : maintenanceTasks)(environment)[
+    job.job_id
+  ];
+}
+
+/**
  * Saves a run, or reuses the job's active run, and dispatches it. A manual
  * request is recorded with the requester's snapshot in the same transaction,
  * including when it joins an active run. It returns null, writing nothing,
- * when the requester is no longer a root admin.
+ * when the requester is no longer a root admin. A dry run only joins an
+ * active dry run, and a real run only a real one.
  */
 export async function enqueueMaintenance(
   env: Bindings,
@@ -162,19 +234,25 @@ export async function enqueueMaintenance(
   if (!env.FINANCE_SYNC_QUEUE)
     throw new Error("Background job queue is not configured.");
   const scheduled = source.trigger === "scheduled" ? source : null;
+  const dryRun = source.trigger === "manual" && source.dryRun === true;
   const id = scheduled
     ? `scheduled:${jobId}:${scheduled.scheduledTime}`
     : crypto.randomUUID();
   const now = new Date().toISOString();
   const selectRun = env.DB.prepare(`SELECT * FROM job_runs WHERE job_id = ?
-      AND (id = ? OR status IN ('queued', 'running'))
-      ORDER BY created_at DESC, rowid DESC LIMIT 1`).bind(jobId, id);
+      AND (id = ? OR (status IN ('queued', 'running') AND dry_run = ?))
+      ORDER BY created_at DESC, rowid DESC LIMIT 1`).bind(
+    jobId,
+    id,
+    Number(dryRun),
+  );
   const results = await env.DB.batch(
     source.trigger === "manual"
       ? [
           ...manualRequestStatements(env.DB, {
             actorUserId: source.actorUserId,
             dependsOn,
+            dryRun,
             id,
             jobId,
             now,
@@ -205,8 +283,8 @@ export async function enqueueMaintenance(
 }
 
 // The requester's stored role, not the session's, so a demoted admin's request
-// records and starts nothing.
-const requesterGuard = `actor.id = ?
+// records and starts nothing. Binds the requester's ID; the user is `actor`.
+export const requesterGuard = `actor.id = ?
   AND instr(',' || replace(COALESCE(actor.role, ''), ' ', '') || ',', ',admin,') > 0`;
 
 function manualRequestStatements(
@@ -214,43 +292,52 @@ function manualRequestStatements(
   input: {
     actorUserId: string;
     dependsOn: string | null;
+    dryRun: boolean;
     id: string;
     jobId: MaintenanceJobId;
     now: string;
   },
 ) {
   const { actorUserId, dependsOn, id, jobId, now } = input;
+  const dryRun = Number(input.dryRun);
   // The new run, or the active run that the unique index kept it from adding.
   const requestedRun = `FROM job_runs AS run JOIN user AS actor ON ${requesterGuard}
-    WHERE run.job_id = ? AND (run.id = ? OR run.status IN ('queued', 'running'))
+    WHERE run.job_id = ? AND (run.id = ?
+      OR (run.status IN ('queued', 'running') AND run.dry_run = ?))
     ORDER BY run.created_at DESC, run.rowid DESC LIMIT 1`;
+  const [requested, joined] = input.dryRun
+    ? [
+        "Manual dry run requested.",
+        "Manual request joined this active dry run.",
+      ]
+    : ["Manual run requested.", "Manual request joined this active run."];
   return [
     database
       .prepare(`SELECT actor.id FROM user AS actor WHERE ${requesterGuard}`)
       .bind(actorUserId),
     database
       .prepare(`INSERT OR IGNORE INTO job_runs
-      (id, job_id, source, requested_by, requested_by_name, requested_by_email,
-       depends_on, available_at, created_at)
-      SELECT ?, ?, 'manual', actor.id, actor.name, actor.email, ?, ?, ?
+      (id, job_id, source, dry_run, requested_by, requested_by_name,
+       requested_by_email, depends_on, available_at, created_at)
+      SELECT ?, ?, 'manual', ?, actor.id, actor.name, actor.email, ?, ?, ?
       FROM user AS actor WHERE ${requesterGuard}`)
-      .bind(id, jobId, dependsOn, now, now, actorUserId),
+      .bind(id, jobId, dryRun, dependsOn, now, now, actorUserId),
     database
       .prepare(`INSERT INTO job_logs (run_id, occurred_at, level, message, details_json)
       SELECT run.id, ?, 'info',
-        CASE WHEN run.id = ? THEN 'Manual run requested.'
-          ELSE 'Manual request joined this active run.' END,
+        CASE WHEN run.id = ? THEN ? ELSE ? END,
         json_object('requestedBy',
           json_object('id', actor.id, 'name', actor.name, 'email', actor.email))
       ${requestedRun}`)
-      .bind(now, id, actorUserId, jobId, id),
+      .bind(now, id, requested, joined, actorUserId, jobId, id, dryRun),
     database
       .prepare(`INSERT INTO maintenance_requests
-      (id, job_id, run_id, joined_active_run, requested_at,
+      (id, job_id, run_id, joined_active_run, dry_run, requested_at,
        actor_user_id, actor_name, actor_email)
-      SELECT ?, run.job_id, run.id, run.id <> ?, ?, actor.id, actor.name, actor.email
+      SELECT ?, run.job_id, run.id, run.id <> ?, run.dry_run, ?, actor.id,
+        actor.name, actor.email
       ${requestedRun}`)
-      .bind(crypto.randomUUID(), id, now, actorUserId, jobId, id),
+      .bind(crypto.randomUUID(), id, now, actorUserId, jobId, id, dryRun),
   ];
 }
 
@@ -263,6 +350,7 @@ export async function runMaintenanceJob(
     event: "background_job",
     runId: job.id,
     jobId: job.job_id,
+    dryRun: Boolean(job.dry_run),
     status: "running",
   });
   let output: JobOutput | null = null;
@@ -301,33 +389,4 @@ export async function runMaintenanceJob(
     output,
     errorCode,
   });
-}
-
-export async function runScheduledMaintenance(
-  env: Bindings,
-  source: Extract<RunSource, { trigger: "scheduled" }>,
-) {
-  const retention = await enqueueMaintenance(
-    env,
-    "purgeExpiredFreeFormRuns",
-    source,
-  );
-  // Newly scheduled cleanup waits for retention. An existing active manual run
-  // is reused and can overlap; its per-object claims and grace periods still apply.
-  for (const job of maintenanceJobs) {
-    const { id } = job;
-    // Trashed email is purged only on request, as the operator script did.
-    if (id !== "purgeExpiredFreeFormRuns" && isScheduled(job))
-      await enqueueMaintenance(
-        env,
-        id,
-        source,
-        id === "purgeDeletedObjects" ? retention.id : null,
-      );
-  }
-}
-
-/** Whether hourly maintenance queues the job; others run only on request. */
-export function isScheduled(job: (typeof maintenanceJobs)[number]) {
-  return !("scheduled" in job) || job.scheduled;
 }

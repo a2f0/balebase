@@ -1,19 +1,16 @@
 import { expect, it } from "bun:test";
 
-it("routes the finance cron independently from hourly maintenance and exposes the queue consumer", async () => {
+it("routes the finance cron independently from scheduled maintenance and exposes the queue consumer", async () => {
   const { spyOn } = await import("bun:test");
   const jobs = await import("./jobs/jobScheduler");
   const consumer = await import("./jobs/jobWorker");
-  const maintenance = await import("./jobs/maintenance");
+  const schedules = await import("./jobs/jobSchedules");
   const worker = (await import("./index")).default;
   const finance = spyOn(jobs, "scheduleJobs").mockResolvedValue({
     scheduled: 0,
     dispatched: 0,
   });
-  const hourly = spyOn(
-    maintenance,
-    "runScheduledMaintenance",
-  ).mockResolvedValue(undefined);
+  const hourly = spyOn(schedules, "runDueMaintenance").mockResolvedValue([]);
   const queue = spyOn(consumer, "consumeJobs").mockResolvedValue(undefined);
   const environment = {} as import("./types").Bindings;
   const pending: Promise<unknown>[] = [];
@@ -32,13 +29,13 @@ it("routes the finance cron independently from hourly maintenance and exposes th
     expect(finance).toHaveBeenCalledWith(environment);
     expect(hourly).not.toHaveBeenCalled();
     worker.scheduled(
-      { cron: "17 * * * *", scheduledTime: 456 } as ScheduledController,
+      { cron: "* * * * *", scheduledTime: 456 } as ScheduledController,
       environment,
       context,
     );
     await Promise.all(pending.splice(0));
     expect(finance).toHaveBeenCalledTimes(1);
-    expect(hourly).toHaveBeenCalledTimes(1);
+    expect(hourly).toHaveBeenCalledWith(environment, 456);
     const batch = { messages: [] } as unknown as MessageBatch<{
       jobId: string;
     }>;

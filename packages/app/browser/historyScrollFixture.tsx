@@ -10,6 +10,7 @@ function run(index: number): JobRun {
     jobId: "test-job",
     status: "succeeded",
     source: "scheduled",
+    dryRun: false,
     requestedBy: null,
     requestedByName: null,
     requestedByEmail: null,

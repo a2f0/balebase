@@ -142,19 +142,47 @@ function subscriptionLockId(record: BillingRow) {
   );
 }
 
+/** Paid subscriptions, least recently reconciled first. */
+const reconcilableSubscriptions = `FROM organization_billing AS billing
+  WHERE billing.stripe_subscription_item_id IS NOT NULL
+    AND billing.stripe_status IN ${paidStatusList}
+  ORDER BY billing.last_reconciled_at IS NOT NULL ASC,
+           billing.last_reconciled_at ASC,
+           billing.organization_id ASC
+  LIMIT ?`;
+
+/**
+ * What `reconcileSubscriptionSeats` would check now; it changes nothing and
+ * does not call Stripe. `storedSeatChanges` counts the checked subscriptions
+ * whose saved quantity differs from their member count; a run also corrects
+ * any that Stripe holds differently.
+ */
+export async function previewSubscriptionSeatReconciliation(
+  environment: Pick<Bindings, "DB">,
+) {
+  const { results } = await environment.DB.prepare(
+    `SELECT billing.seat_quantity,
+            max(1, (SELECT count(*) FROM member
+                    WHERE member.organizationId = billing.organization_id))
+              AS members
+     ${reconcilableSubscriptions}`,
+  )
+    .bind(subscriptionSeatReconciliationLimit)
+    .all<{ members: number; seat_quantity: number | null }>();
+  return {
+    wouldCheck: results.length,
+    storedSeatChanges: results.filter(
+      (row) => row.seat_quantity !== row.members,
+    ).length,
+  };
+}
+
 export async function reconcileSubscriptionSeats(
   environment: SeatEnvironment,
   runId?: string,
 ) {
   const rows = await environment.DB.prepare(
-    `SELECT organization_id
-     FROM organization_billing
-     WHERE stripe_subscription_item_id IS NOT NULL
-       AND stripe_status IN ${paidStatusList}
-     ORDER BY last_reconciled_at IS NOT NULL ASC,
-              last_reconciled_at ASC,
-              organization_id ASC
-     LIMIT ?`,
+    `SELECT billing.organization_id ${reconcilableSubscriptions}`,
   )
     .bind(subscriptionSeatReconciliationLimit)
     .all<{ organization_id: string }>();

@@ -13,6 +13,24 @@ const purgeableEmail = `inbound_emails.id IN (SELECT value FROM json_each(?))
   AND inbound_emails.deleted_at IS NOT NULL
   AND julianday(inbound_emails.deleted_at) <= julianday(?)`;
 
+/** What `purgeTrashedEmails` would purge now; it changes nothing. */
+export async function previewTrashedEmailPurge(
+  environment: Pick<Bindings, "DB">,
+  now = new Date(),
+) {
+  const cutoff = new Date(
+    now.getTime() - trashRetentionDays * 86400000,
+  ).toISOString();
+  const row = await environment.DB.prepare(
+    `SELECT count(*) AS eligible FROM inbound_emails
+     WHERE deleted_at IS NOT NULL AND julianday(deleted_at) <= julianday(?)`,
+  )
+    .bind(cutoff)
+    .first<{ eligible: number }>();
+  const eligible = row?.eligible ?? 0;
+  return { eligible, wouldPurge: Math.min(eligible, batchSize) };
+}
+
 /**
  * Permanently deletes up to 100 emails that have been in Trash for at least
  * 30 days, replacing the old `emails:purge` operator script. One batch records

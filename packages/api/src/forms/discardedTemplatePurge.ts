@@ -16,6 +16,26 @@ const discardedFamilies = `SELECT family.id
   WHERE family.scope = 'global' AND version.status = 'discarded'
     AND julianday(version.created_at) <= julianday(?)`;
 
+function templateCutoff(now: Date) {
+  return new Date(
+    now.getTime() - discardedTemplateRetentionDays * 86400000,
+  ).toISOString();
+}
+
+/** What `purgeDiscardedFormTemplates` would purge now; it changes nothing. */
+export async function previewDiscardedFormTemplatePurge(
+  environment: Pick<Bindings, "DB">,
+  now = new Date(),
+) {
+  const row = await environment.DB.prepare(
+    `SELECT count(*) AS eligible FROM (${discardedFamilies})`,
+  )
+    .bind(templateCutoff(now))
+    .first<{ eligible: number }>();
+  const eligible = row?.eligible ?? 0;
+  return { eligible, wouldPurge: Math.min(eligible, batchSize) };
+}
+
 /**
  * Permanently deletes up to 100 global templates discarded at least 30 days ago,
  * with their versions and history. Forms started from them keep their
@@ -29,9 +49,7 @@ export async function purgeDiscardedFormTemplates(
   runId: string,
   now = new Date(),
 ) {
-  const cutoff = new Date(
-    now.getTime() - discardedTemplateRetentionDays * 86400000,
-  ).toISOString();
+  const cutoff = templateCutoff(now);
   const database = environment.DB;
   const candidates = await database
     .prepare(

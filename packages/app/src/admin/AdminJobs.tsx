@@ -1,6 +1,4 @@
 import {
-  Button,
-  confirmDialog,
   LoadingState,
   Page,
   PageBody,
@@ -9,62 +7,65 @@ import {
   Toast,
   useSectionTabs,
 } from "@balebase/ui/react";
-import type { JobDefinition, JobRun } from "@balebase/validators/adminJobs";
-import { useCallback, useState } from "react";
+import { useState } from "react";
 import { ActivityFeed } from "../activity/ActivityFeed";
-import { api } from "../shared/apiClient";
-import { errorMessage } from "../shared/errors";
-import { useLoad } from "../shared/useLoad";
+import { adminJobIdForPath } from "../workspace/workspacePaths";
+import { AdminJobDetail } from "./AdminJobDetail";
 import { AdminJobHistory } from "./AdminJobHistory";
+import { AdminJobRow } from "./AdminJobRow";
 import { AdminMaintenanceRequests } from "./AdminMaintenanceRequests";
+import { useJobActions } from "./useJobActions";
+import { type StartedRun, useJobCatalog } from "./useJobCatalog";
 
-export function AdminJobs() {
-  const loaded = useLoad(
-    useCallback(() => api.adminJobs.list(), []),
-    "Could not load jobs.",
+/** Every background job, or one job's schedule and history. */
+export function AdminJobs({
+  onNavigate,
+  pathname,
+}: {
+  onNavigate: (pathname: string) => void;
+  pathname: string;
+}) {
+  const jobId = adminJobIdForPath(pathname);
+  return jobId ? (
+    <AdminJobDetail jobId={jobId} key={jobId} onNavigate={onNavigate} />
+  ) : (
+    <AdminJobList onNavigate={onNavigate} />
   );
-  const jobs = loaded.data;
-  const [busy, setBusy] = useState<string>();
-  const [failure, setFailure] = useState<string>();
-  const error = failure ?? loaded.error;
-  const [startedRun, setStartedRun] = useState<{
-    run: JobRun;
-    request: number;
-  }>();
+}
+
+function AdminJobList({
+  onNavigate,
+}: {
+  onNavigate: (pathname: string) => void;
+}) {
+  const catalog = useJobCatalog();
+  const jobs = catalog.data;
+  const [startedRun, setStartedRun] = useState<StartedRun>();
   const sections = useSectionTabs([
     { id: "jobs", label: "Available jobs" },
     { id: "history", label: "Run history" },
     { id: "requests", label: "Manual requests" },
     { id: "purges", label: "Purge history" },
   ]);
-
-  async function trigger(job: JobDefinition) {
-    if (!(await confirmJobRun(job))) return;
-    setBusy(job.id);
-    setFailure(undefined);
-    try {
-      const run = await api.adminJobs.run(job.id);
+  const actions = useJobActions({
+    onJobChanged: catalog.replaceJob,
+    onRunStarted: (run) => {
       setStartedRun((previous) => ({
         run,
         request: (previous?.request ?? 0) + 1,
       }));
       // The new run opens in the history.
       sections.select("history");
-    } catch (cause) {
-      setFailure(
-        `${errorMessage(cause, "Could not start the job.")} Check recent runs before trying again.`,
-      );
-    } finally {
-      setBusy(undefined);
-    }
-  }
+    },
+  });
+  const error = actions.error ?? catalog.error;
 
   return (
     <Page>
       <PageHeader
         eyebrow="Root Admin"
         title="Jobs"
-        description="Run maintenance and inspect background jobs, logs, and saved output."
+        description="Run, dry-run, and schedule maintenance, and inspect background jobs, logs, and saved output."
         tabs={sections.tabs}
         tabsKind="panels"
         tabsLabel="Job sections"
@@ -73,12 +74,26 @@ export function AdminJobs() {
         {error && <Toast tone="danger">{error}</Toast>}
         {sections.panel(
           "jobs",
-          <AvailableJobs
-            busy={busy}
-            failed={Boolean(error)}
-            jobs={jobs}
-            onRun={trigger}
-          />,
+          <PageSection title="Available jobs">
+            <p className="textSm textSubtle">
+              Maintenance applies across the platform. Jobs continue after you
+              close this page. Completed runs and their logs are kept for 30
+              days. Schedules show when jobs are queued; actual start times
+              depend on queue availability and any preceding jobs. A dry run
+              reports what a job would change without changing anything.
+            </p>
+            {!jobs && !catalog.error && <LoadingState label="Loading jobs…" />}
+            <div className="stack stackMd">
+              {jobs?.map((job) => (
+                <AdminJobRow
+                  actions={actions}
+                  job={job}
+                  key={job.id}
+                  onNavigate={onNavigate}
+                />
+              ))}
+            </div>
+          </PageSection>,
         )}
         {sections.panel(
           "history",
@@ -105,59 +120,4 @@ export function AdminJobs() {
       </PageBody>
     </Page>
   );
-}
-
-function AvailableJobs({
-  busy,
-  failed,
-  jobs,
-  onRun,
-}: {
-  busy: string | undefined;
-  failed: boolean;
-  jobs: JobDefinition[] | undefined;
-  onRun: (job: JobDefinition) => Promise<void>;
-}) {
-  return (
-    <PageSection title="Available jobs">
-      <p className="textSm textSubtle">
-        Maintenance applies across the platform. Jobs continue after you close
-        this page. Completed runs and their logs are kept for 30 days. Schedules
-        show when jobs are queued; actual start times depend on queue
-        availability and any preceding jobs.
-      </p>
-      {!jobs && !failed && <LoadingState label="Loading jobs…" />}
-      <div className="stack stackMd">
-        {jobs?.map((job) => (
-          <div className="adminJobRow" key={job.id}>
-            <div className="adminJobSummary">
-              <strong>{job.name}</strong>
-              <p className="textSm textSubtle">{job.description}</p>
-              <p className="textSm">
-                <strong>Run schedule:</strong>{" "}
-                {job.runSchedule ?? "Schedule unavailable."}
-              </p>
-            </div>
-            {job.manual && (
-              <Button
-                busy={busy === job.id}
-                disabled={busy !== undefined}
-                onClick={() => void onRun(job)}
-              >
-                Run now
-              </Button>
-            )}
-          </div>
-        ))}
-      </div>
-    </PageSection>
-  );
-}
-
-function confirmJobRun(job: JobDefinition) {
-  return confirmDialog({
-    confirmLabel: "Run job",
-    message: `${job.description}\n\nThis affects all eligible organizations. Existing retention periods still apply. An active run of this job will be reused.`,
-    title: `Run ${job.name}?`,
-  });
 }

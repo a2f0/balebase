@@ -1,7 +1,8 @@
 import { expect, it, spyOn } from "bun:test";
 import { fixture, post } from "../testing/maintenanceFixture";
 import { claimJob, recoverJobs } from "./jobRuns";
-import { runMaintenanceJob, runScheduledMaintenance } from "./maintenance";
+import { runDueMaintenance } from "./jobSchedules";
+import { runMaintenanceJob } from "./maintenance";
 
 it("requires root admin access, trusted origin, a known job, and explicit confirmation", async () => {
   const regular = fixture("user");
@@ -148,13 +149,10 @@ it("deduplicates active requests, recovers failed sends, and never replays inter
 it("keeps hourly scheduling idempotent and gates cleanup on retention even when messages arrive out of order", async () => {
   const f = fixture();
   f.insertActor();
-  const source = {
-    trigger: "scheduled" as const,
-    cron: "17 * * * *",
-    scheduledTime: Date.now(),
-  };
-  await runScheduledMaintenance(f.bindings, source);
-  await runScheduledMaintenance(f.bindings, source);
+  // The seeded schedules run at 17 past each hour; a trigger's seconds do not matter.
+  const minute = Date.UTC(2026, 10, 25, 10, 17);
+  await runDueMaintenance(f.bindings, minute + 2_000);
+  await runDueMaintenance(f.bindings, minute);
   expect(
     f.database.query("SELECT count(*) AS count FROM job_runs").get(),
   ).toEqual({ count: 10 });

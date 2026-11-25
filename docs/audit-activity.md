@@ -444,11 +444,19 @@ Some histories are not organization activity:
   kind, from **View history** on the Users page
   (`GET /api/admin/users/:userId/history`).
 - `maintenance_requests` records every manual maintenance request, including
-  one that joins an active run, with the requester's snapshot. It outlives the
-  30-day job history and the requester's account. Each request also logs a line
-  on its run, and the run keeps the first requester's name and email. Root
-  admins read it under **Manual requests** on the Jobs page
+  one that joins an active run and each dry run (`dry_run`), with the
+  requester's snapshot. It outlives the 30-day job history and the requester's
+  account. Each request also logs a line on its run, and the run keeps the
+  first requester's name and email. Root admins read it under **Manual
+  requests** on the Jobs page and on each job's page
   (`GET /api/admin/jobs/requests`).
+- `job_schedule_changes` records every change to a maintenance job's schedule
+  (its cron expression or whether it is paused): the previous and new values
+  and the admin's snapshot, written in the transaction that saves the
+  schedule, which itself keeps who last changed it. A save that changes
+  nothing records nothing. It outlives the admin's account. Root admins read
+  it under **Schedule changes** on the job's page
+  (`GET /api/admin/jobs/:jobId/schedule/changes`).
 - Platform purge history: when the purge jobs delete an account or an
   organization, they record `user.purged` or `organization.purged` as activity
   with no organization, by the job, in the transaction that deletes it. It
@@ -468,8 +476,8 @@ Some histories are not organization activity:
   person reads it under Account settings → Security; root admins read it in
   D1.
 
-The role, deletion, and maintenance request readers are for root admins only,
-never organization feeds; impersonated sessions are refused.
+The role, deletion, maintenance request, and schedule change readers are for
+root admins only, never organization feeds; impersonated sessions are refused.
 
 Better Auth's admin endpoints that would change another person's account or
 act as them (`set-user-password`, `ban-user`, `unban-user`,
@@ -492,6 +500,7 @@ examples live in `packages/api/src`: `forms/formActivity.test.ts`,
 `library/libraryActivity.test.ts`, `library/recordHistory.test.ts`,
 `inbox/inboxActivity.test.ts`,
 `businesses/businessActivity.test.ts`, `jobs/maintenanceRequests.test.ts`,
+`jobs/jobSchedules.test.ts`, `jobs/maintenanceDryRuns.test.ts`,
 `admin/setUserRole.test.ts`, `admin/platformHistory.test.ts`,
 `admin/discardedFormTemplates.test.ts`, `users/securityEvents.test.ts`,
 `contracts/contractActivity.test.ts`,

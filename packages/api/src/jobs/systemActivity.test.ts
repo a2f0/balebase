@@ -12,7 +12,7 @@ import {
 import { fixture, now, post } from "../testing/maintenanceFixture";
 import { seedProject, seedUser } from "../testing/seed";
 import { purgeRequestedUsers } from "../users/userDeletion";
-import { isScheduled, maintenanceJobs } from "./maintenance";
+import { readJobSchedules } from "./jobSchedules";
 
 type Fixture = ReturnType<typeof fixture>;
 
@@ -640,9 +640,9 @@ describe("trashed email purge", () => {
   });
 
   it("runs only on request and keeps the email when a restore wins or history fails", async () => {
-    const job = maintenanceJobs.find(({ id }) => id === "purgeTrashedEmails");
-    expect(job && isScheduled(job)).toBe(false);
     const f = emailFixture();
+    const schedules = await readJobSchedules(f.bindings.DB);
+    expect(schedules.get("purgeTrashedEmails")?.enabled).toBe(0);
     f.database.exec(
       "UPDATE inbound_emails SET deleted_at = NULL WHERE id = 'old'",
     );

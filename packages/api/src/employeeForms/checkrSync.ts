@@ -105,6 +105,38 @@ export async function handleCheckrWebhook(
 // screenings that Checkr has not finished or that a webhook asked to refresh.
 // Also retries completion emails and reports their delivery outcome to admins.
 // What the run finds changed at Checkr is Checkr's, caused by the run.
+/** Reports still changing, or ones a person asked to read again. */
+const refreshableScreenings = `FROM employee_requirements
+  WHERE checkr_report_id IS NOT NULL
+    AND (checkr_refresh_requested_at IS NOT NULL OR (
+      status <> 'complete'
+      AND (checkr_report_status IS NULL OR checkr_report_status NOT IN
+             ('canceled', 'partially_canceled'))))`;
+
+/**
+ * What `refreshCheckrScreenings` would do now; it changes nothing, calls no
+ * provider, and sends no email. `pendingNotifications` counts completion
+ * emails waiting to be sent or retried.
+ */
+export async function previewCheckrScreeningRefresh(env: Bindings) {
+  const [refreshable, notifications] = await env.DB.batch<{ count: number }>([
+    env.DB.prepare(`SELECT count(*) AS count ${refreshableScreenings}`),
+    env.DB.prepare(
+      `SELECT count(*) AS count FROM employee_screening_notifications
+       WHERE sent_at IS NULL AND abandoned_at IS NULL AND next_attempt_at <= ?`,
+    ).bind(new Date().toISOString()),
+  ]);
+  const eligible = refreshable?.results[0]?.count ?? 0;
+  return {
+    skipped: !env.CHECKR_API_KEY,
+    eligible,
+    wouldRefresh: env.CHECKR_API_KEY
+      ? Math.min(eligible, screeningRefreshLimit)
+      : 0,
+    pendingNotifications: notifications?.results[0]?.count ?? 0,
+  };
+}
+
 export async function refreshActiveCheckrScreenings(
   env: Bindings,
   runId: string,
@@ -117,12 +149,7 @@ export async function refreshActiveCheckrScreenings(
   const { results } = await env.DB.prepare(
     `SELECT id, organization_id, status, checkr_report_id,
             checkr_report_status, checkr_refresh_revision
-     FROM employee_requirements
-     WHERE checkr_report_id IS NOT NULL
-       AND (checkr_refresh_requested_at IS NOT NULL OR (
-         status <> 'complete'
-         AND (checkr_report_status IS NULL OR checkr_report_status NOT IN
-                ('canceled', 'partially_canceled'))))
+     ${refreshableScreenings}
      ORDER BY checkr_checked_at ASC, updated_at ASC
      LIMIT ?`,
   )

@@ -67,6 +67,8 @@ userDeletion.delete("/", async (context) => {
   return respond(context, accountSettingsRoutes.cancelDeletion, { ok: true });
 });
 
+const purgeBatchSize = 25;
+
 /**
  * An account whose deletion request is past its 30-day window and that
  * nothing retained still needs. Unqualified columns are the user row's.
@@ -100,9 +102,9 @@ export async function purgeRequestedUsers(
   const eligible = await environment.DB.prepare(
     `SELECT user_id FROM user_deletion_requests
      WHERE julianday(requested_at) <= julianday(?)
-     ORDER BY last_attempted_at IS NOT NULL, last_attempted_at, requested_at, user_id LIMIT 25`,
+     ORDER BY last_attempted_at IS NOT NULL, last_attempted_at, requested_at, user_id LIMIT ?`,
   )
-    .bind(cutoff)
+    .bind(cutoff, purgeBatchSize)
     .all<{ user_id: string }>();
   let purged = 0;
   let blocked = 0;
@@ -142,6 +144,46 @@ export async function purgeRequestedUsers(
     }
   }
   return { purged, blocked };
+}
+
+/**
+ * What `purgeRequestedUsers` would do now; it changes nothing. Records that
+ * restrictive foreign keys keep are found only by trying, so a run may
+ * block more accounts than this predicts.
+ */
+export async function previewRequestedUserPurge(
+  environment: Pick<Bindings, "DB">,
+  now = new Date(),
+) {
+  const cutoff = new Date(
+    now.getTime() - 30 * 24 * 60 * 60 * 1000,
+  ).toISOString();
+  const database = environment.DB;
+  const { results } = await database
+    .prepare(
+      `SELECT user_id, count(*) OVER () AS eligible
+       FROM user_deletion_requests
+       WHERE julianday(requested_at) <= julianday(?)
+       ORDER BY last_attempted_at IS NOT NULL, last_attempted_at, requested_at, user_id
+       LIMIT ?`,
+    )
+    .bind(cutoff, purgeBatchSize)
+    .all<{ eligible: number; user_id: string }>();
+  const checks = results.length
+    ? await database.batch(
+        results.map(({ user_id: userId }) =>
+          database
+            .prepare(`SELECT 1 FROM user WHERE ${purgeableUser}`)
+            .bind(userId, cutoff),
+        ),
+      )
+    : [];
+  const wouldPurge = checks.filter((check) => check.results.length).length;
+  return {
+    eligible: results[0]?.eligible ?? 0,
+    wouldPurge,
+    wouldBlock: results.length - wouldPurge,
+  };
 }
 
 function purgeRecord(

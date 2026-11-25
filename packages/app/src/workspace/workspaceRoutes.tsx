@@ -29,6 +29,7 @@ import type { useOrganizationAccess } from "../organizations/useOrganizationAcce
 import { Projects } from "../projects/Projects";
 import type { WorkspacePage } from "./WorkspaceShell";
 import {
+  adminJobPath,
   adminOrganizationPath,
   adminUserPath,
   globalTemplatesPath,
@@ -195,9 +196,11 @@ const routes: WorkspaceRoute[] = [
     ),
   },
   {
-    matches: exactly("/root/jobs"),
+    matches: within(adminJobPath()),
     page: "rootJobs",
-    render: () => <AdminJobs />,
+    render: ({ navigate, pathname }) => (
+      <AdminJobs onNavigate={navigate} pathname={pathname} />
+    ),
   },
   {
     matches: within(adminUserPath()),

@@ -71,6 +71,35 @@ export async function attemptPendingObjectCleanup(
   }
 }
 
+/** Abandoned uploads no live cleanup or upload holds; binds cutoff twice, then the lease cutoff. */
+const pendingImages = `FROM objects
+  WHERE kind = 'form_issue_image' AND deletion_pending = 1
+    AND datetime(created_at) <= datetime(?)
+    AND (cleanup_token IS NULL OR datetime(cleanup_claimed_at) <= datetime(?))
+    AND (
+      upload_token IS NULL OR (
+        upload_lease_expires_at IS NOT NULL
+        AND datetime(upload_lease_expires_at) <= datetime(?)
+      )
+    )`;
+
+/** What `purgePendingFormIssueImages` would delete now; it changes nothing. */
+export async function previewPendingFormIssueImagePurge(
+  environment: Pick<Bindings, "DB">,
+  cutoff = new Date(
+    Date.now() - formIssueImageUploadGraceMilliseconds,
+  ).toISOString(),
+  uploadLeaseCutoff = new Date().toISOString(),
+) {
+  const row = await environment.DB.prepare(
+    `SELECT count(*) AS eligible ${pendingImages}`,
+  )
+    .bind(cutoff, cutoff, uploadLeaseCutoff)
+    .first<{ eligible: number }>();
+  const eligible = row?.eligible ?? 0;
+  return { eligible, wouldPurge: Math.min(eligible, pendingCleanupBatchSize) };
+}
+
 /** Retry durable R2 cleanup tombstones without racing an in-flight upload. */
 export async function purgePendingFormIssueImages(
   environment: Pick<Bindings, "DB" | "STORAGE">,
@@ -80,16 +109,7 @@ export async function purgePendingFormIssueImages(
   uploadLeaseCutoff = new Date().toISOString(),
 ) {
   const result = await environment.DB.prepare(
-    `SELECT id FROM objects
-     WHERE kind = 'form_issue_image' AND deletion_pending = 1
-       AND datetime(created_at) <= datetime(?)
-       AND (cleanup_token IS NULL OR datetime(cleanup_claimed_at) <= datetime(?))
-       AND (
-         upload_token IS NULL OR (
-           upload_lease_expires_at IS NOT NULL
-           AND datetime(upload_lease_expires_at) <= datetime(?)
-         )
-       )
+    `SELECT id ${pendingImages}
      ORDER BY created_at ASC, id ASC
      LIMIT ?`,
   )

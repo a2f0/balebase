@@ -22,7 +22,8 @@ export function AdminJobHistoryRow({
         <div className="adminJobSummary">
           <strong>{name}</strong>
           <p className="textSm textSubtle">
-            {run.status} · {run.source} · {createdAt}
+            {run.status} · {run.source}
+            {run.dryRun && " · dry run"} · {createdAt}
           </p>
           {run.organizationId && (
             <p className="textSm">Organization: {run.organizationId}</p>

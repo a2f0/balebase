@@ -62,18 +62,35 @@ async function purgeDeletedObject(
   return Number(deleted.meta.changes) > 0;
 }
 
+/** Queued files past their grace period that no live cleanup has claimed. */
+const purgeableObjects = `FROM deleted_object_cleanup
+  WHERE datetime(deleted_at) <= datetime(?)
+    AND (
+      cleanup_token IS NULL
+      OR datetime(cleanup_claimed_at) <= datetime(?)
+    )`;
+
+/** What `purgeDeletedObjects` would delete now; it changes nothing. */
+export async function previewDeletedObjectPurge(
+  environment: Pick<Bindings, "DB">,
+  cutoffs = defaultCleanupCutoffs(),
+) {
+  const row = await environment.DB.prepare(
+    `SELECT count(*) AS eligible ${purgeableObjects}`,
+  )
+    .bind(cutoffs.deletedBefore, cutoffs.abandonedClaimedBefore)
+    .first<{ eligible: number }>();
+  const eligible = row?.eligible ?? 0;
+  return { eligible, wouldPurge: Math.min(eligible, cleanupBatchSize) };
+}
+
 /** Delete R2 bytes whose D1 object rows were removed by a cascade. */
 export async function purgeDeletedObjects(
   environment: Pick<Bindings, "DB" | "STORAGE">,
   cutoffs = defaultCleanupCutoffs(),
 ) {
   const result = await environment.DB.prepare(
-    `SELECT id FROM deleted_object_cleanup
-     WHERE datetime(deleted_at) <= datetime(?)
-       AND (
-         cleanup_token IS NULL
-         OR datetime(cleanup_claimed_at) <= datetime(?)
-       )
+    `SELECT id ${purgeableObjects}
      ORDER BY deleted_at ASC, id ASC
      LIMIT ?`,
   )

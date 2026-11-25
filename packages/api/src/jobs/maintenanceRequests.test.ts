@@ -2,7 +2,8 @@ import { expect, it } from "bun:test";
 import { fixture, post } from "../testing/maintenanceFixture";
 import { seedUser } from "../testing/seed";
 import { recoverJobs } from "./jobRuns";
-import { enqueueMaintenance, runScheduledMaintenance } from "./maintenance";
+import { runDueMaintenance } from "./jobSchedules";
+import { enqueueMaintenance } from "./maintenance";
 
 const requests = (f: ReturnType<typeof fixture>) =>
   f.database
@@ -159,11 +160,7 @@ it("rolls back the run when its request cannot be recorded", async () => {
 
 it("keeps scheduled runs attributed to the scheduler", async () => {
   const f = fixture();
-  await runScheduledMaintenance(f.bindings, {
-    trigger: "scheduled",
-    cron: "17 * * * *",
-    scheduledTime: Date.now(),
-  });
+  await runDueMaintenance(f.bindings, Date.UTC(2026, 10, 25, 10, 17));
   expect(
     f.database
       .query(
