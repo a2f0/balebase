@@ -1298,17 +1298,17 @@ Waiting for details (requested, waiting on the person), Submitting to Checkr,
 Report in progress, Report canceled, or Complete. Forms and checks tracked by
 hand keep their plain status.
 
-**Records → Background checks** (`/background-checks`) is the background
-check page, shown in the sidebar only to members of a group with Background
-checks access. It lists every background check with the person, due date, and
-stage, and **Request a check** adds one for a member (or, for owners and
-admins, a pending invitee) with a due date, then opens it. Only owners and
-admins see pending invitations or ask an invitee for anything, but a check
-already requested of an invitee shows their invited address to everyone with
-Background checks access. Each check's page (`/background-checks/<request>`)
-is the request page described below, with the Checkr request, refresh, result,
-and history. Without that access the path explains that Background checks
-group membership is required.
+**Records → Background checks** (`/background-checks`) is the background check
+page, shown in the sidebar only to members of a group with Background checks
+access. It lists every background check with the person, due date, and stage,
+and **Request a check** adds one for a member (or, for owners and admins, a
+pending invitee) with a due date, then opens it. Only owners and admins see
+pending invitations or request a check of an invitee; once it exists, everyone
+with Background checks access handles it, including its Checkr request, and sees
+the invited address. Each check's page (`/background-checks/<request>`) is the
+request page described below, with the Checkr request, refresh, result, and
+history. Without that access the path explains that Background checks group
+membership is required.
 
 Each request's title opens its own page. In
 My documents (`/me/requests/<request>`) it shows the person what was asked,

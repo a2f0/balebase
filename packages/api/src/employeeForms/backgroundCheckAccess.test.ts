@@ -309,6 +309,34 @@ describe("background check access", () => {
     ).toEqual({ count: 0 });
   });
 
+  it("lets an HR member who isn't a manager handle a check an owner requested of an invitee", async () => {
+    const fixture = await createFixture();
+    configureCheckr(fixture);
+    const recruiter = addRecruiter(fixture);
+    const created = await fixture
+      .app("owner", "owner")
+      .request(
+        "/",
+        jsonPost({ invitationId: "invite", requirements: [backgroundCheck] }),
+      );
+    expect(created.status).toBe(201);
+    const [checkId = ""] = ((await created.json()) as { ids: string[] }).ids;
+
+    const listed = await recruiter.request("/");
+    expect(
+      ((await listed.json()) as { requirements: unknown[] }).requirements,
+    ).toMatchObject([{ id: checkId, targetEmail: "invitee@example.com" }]);
+    // Once requested, the Checkr request is theirs to send.
+    expect(
+      (
+        await recruiter.request(
+          `/${checkId}/checkr/request`,
+          jsonPost({ state: "CA" }),
+        )
+      ).status,
+    ).toBe(200);
+  });
+
   it("assigns an invitee nothing when the owner stops managing mid-request", async () => {
     const fixture = await createFixture();
     fixture.beforeRun("INSERT INTO employee_requirements", () => {
