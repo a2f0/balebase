@@ -1049,12 +1049,12 @@ transactions. Each transaction row's menu (its menu button, a right-click, or
 the menu key) offers **Annotate** (or **Edit note**), **Raise issue**, and
 **Show only** with its name, such as **Show only “Shell”**, which lists every
 transaction shown under that name (the merchant's name, else the bank's
-description); the name filter combines with the others. Select an account tile
-to focus on it; Shift-click adds
-or removes individual accounts from the selection. No selection shows all
-accounts. The transaction toolbar combines account selection with the current
-calendar year, previous calendar year, or all time, and an uncategorized-expense
-filter. That filter follows the Reports rules: posted outflows without an
+description); the name filter combines with the others. Selecting an account
+tile adds it to the selection, and selecting it again removes it, so several
+accounts can be shown together. No selection shows all accounts. The
+transaction toolbar combines account selection with the current calendar year,
+previous calendar year, or all time, and an uncategorized-expense filter.
+That filter follows the Reports rules: posted outflows without an
 expense category, excluding transfers and loan or card payments, and it has the
 bookmarkable path `/finance/expenses/category/uncategorized`. Filters search
 all imported history. Scrolling near the end shows the next 250 matches,

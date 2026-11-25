@@ -174,13 +174,10 @@ function button(label: string) {
   if (!match) throw new Error(`Missing button: ${label}`);
   return match;
 }
-async function click(label: string, shiftKey = false) {
+async function click(label: string) {
   await act(async () => {
     button(label).dispatchEvent(
-      new dom.MouseEvent("click", {
-        bubbles: true,
-        shiftKey,
-      }) as unknown as MouseEvent,
+      new dom.MouseEvent("click", { bubbles: true }) as unknown as MouseEvent,
     );
   });
 }
@@ -315,7 +312,7 @@ describe("Finance filters", () => {
     expect(selectedAccounts()).toEqual(["Checking"]);
     expect(rowNames()).toEqual(["Fuel"]);
     expect(moneyTotals()).toEqual(["$0.00", "$10.00"]);
-    await click("Savings", true);
+    await click("Savings");
     expect(selectedAccounts()).toEqual(["Checking", "Savings"]);
     await click("Current year");
     await click("Uncategorized expenses");
@@ -323,7 +320,8 @@ describe("Finance filters", () => {
     // Uncategorized expenses leave out categorized rows, transfers, and refunds.
     expect(rowNames()).toEqual(["Fuel", "Rent"]);
     expect(moneyTotals()).toEqual(["$0.00", "$20.00"]);
-    await click("Checking", true);
+    await click("Checking");
+    expect(selectedAccounts()).toEqual(["Savings"]);
     expect(rowNames()).toEqual(["Rent"]);
     await click("Previous year");
     expect(button("Current year").getAttribute("aria-pressed")).toBe("false");
@@ -341,8 +339,9 @@ describe("Finance filters", () => {
     expect(button("Uncategorized expenses").getAttribute("aria-pressed")).toBe(
       "false",
     );
-    await click("Card", true);
-    await click("Card", true);
+    await click("Card");
+    expect(selectedAccounts()).toEqual(["Card"]);
+    await click("Card");
     expect(selectedAccounts()).toEqual([]);
     expect(requests).toBe(2);
   });
