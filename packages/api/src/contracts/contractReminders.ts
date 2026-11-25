@@ -23,6 +23,50 @@ export async function maintainContracts(
   return reminded;
 }
 
+/** Sent contracts with no signer left to email; binds the attempt limit. */
+const stalledContracts = `FROM contracts AS contract
+  JOIN organization ON organization.id = contract.organization_id
+  WHERE contract.status = 'sent' AND organization.deletedAt IS NULL
+    AND contract.resume_attempts < ?
+    AND NOT EXISTS (
+      SELECT 1 FROM contract_recipients
+      WHERE contract_id = contract.id AND status IN ('sent', 'viewed')
+    )`;
+
+/** Signers whose reminder interval has passed; binds the current time. */
+const dueReminders = `FROM contract_recipients AS recipient
+  JOIN contracts AS contract ON contract.id = recipient.contract_id
+  JOIN organization ON organization.id = contract.organization_id
+  WHERE contract.status = 'sent' AND organization.deletedAt IS NULL
+    AND contract.reminder_interval_days IS NOT NULL
+    AND recipient.status IN ('sent', 'viewed')
+    AND julianday(?) - julianday(
+      COALESCE(recipient.last_reminded_at, recipient.notified_at)
+    ) >= contract.reminder_interval_days`;
+
+/**
+ * What `maintainContracts` would do now; it changes nothing and sends no
+ * email. `wouldRemind` counts signers due a reminder, `wouldResume` the
+ * stalled contracts a run would try to advance.
+ */
+export async function previewContractMaintenance(
+  environment: Pick<ContractEnvironment, "DB">,
+  now = new Date(),
+) {
+  const [due, stalled] = await environment.DB.batch<{ count: number }>([
+    environment.DB.prepare(
+      `SELECT count(*) AS count FROM (SELECT recipient.id ${dueReminders} LIMIT ?)`,
+    ).bind(now.toISOString(), reminderBatchSize),
+    environment.DB.prepare(
+      `SELECT count(*) AS count FROM (SELECT contract.id ${stalledContracts} LIMIT ?)`,
+    ).bind(maxResumeAttempts, resumeBatchSize),
+  ]);
+  return {
+    wouldRemind: due?.results[0]?.count ?? 0,
+    wouldResume: stalled?.results[0]?.count ?? 0,
+  };
+}
+
 /**
  * Finishes what a signature started when it could not: emails the next
  * sequential signers, or completes a contract everyone has signed. Each
@@ -36,14 +80,7 @@ export async function resumeStalledContracts(
   const database = environment.DB;
   const stalled = await database
     .prepare(
-      `SELECT contract.id FROM contracts AS contract
-       JOIN organization ON organization.id = contract.organization_id
-       WHERE contract.status = 'sent' AND organization.deletedAt IS NULL
-         AND contract.resume_attempts < ?
-         AND NOT EXISTS (
-           SELECT 1 FROM contract_recipients
-           WHERE contract_id = contract.id AND status IN ('sent', 'viewed')
-         )
+      `SELECT contract.id ${stalledContracts}
        ORDER BY contract.resume_attempted_at IS NOT NULL,
                 contract.resume_attempted_at ASC
        LIMIT ?`,
@@ -88,15 +125,7 @@ export async function sendContractReminders(
       `SELECT recipient.id, recipient.contract_id,
               COALESCE(recipient.last_reminded_at, recipient.notified_at)
                 AS last_emailed_at
-       FROM contract_recipients AS recipient
-       JOIN contracts AS contract ON contract.id = recipient.contract_id
-       JOIN organization ON organization.id = contract.organization_id
-       WHERE contract.status = 'sent' AND organization.deletedAt IS NULL
-         AND contract.reminder_interval_days IS NOT NULL
-         AND recipient.status IN ('sent', 'viewed')
-         AND julianday(?) - julianday(
-           COALESCE(recipient.last_reminded_at, recipient.notified_at)
-         ) >= contract.reminder_interval_days
+       ${dueReminders}
        ORDER BY last_emailed_at ASC
        LIMIT ?`,
     )

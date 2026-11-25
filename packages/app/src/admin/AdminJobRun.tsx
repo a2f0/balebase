@@ -76,6 +76,12 @@ export function AdminJobRun({ runId }: { runId: string }) {
             <strong>{run.status}</strong> · {run.attempts} processing attempt(s)
             · {run.source}
           </p>
+          {run.dryRun && (
+            <Banner tone="info">
+              Dry run: the output counts what the job would change. Nothing was
+              changed.
+            </Banner>
+          )}
           <p className="textSm">Run ID: {run.runId}</p>
           <p className="textSm">Requested by: {requester(run)}</p>
           {run.connectionId && (

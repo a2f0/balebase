@@ -9,8 +9,14 @@ const jobs: JobDefinition[] = [
     description:
       "Permanently deletes accounts requested for deletion at least 30 days ago. Skips admins, active organization members, and accounts required by retained form, financial, or contract records.",
     manual: true,
-    runSchedule:
-      "Every hour at 17 minutes past the hour (UTC) in production. Manual only in staging.",
+    runSchedule: "Every hour at 17 minutes past the hour (UTC).",
+    schedule: {
+      cron: "17 * * * *",
+      enabled: true,
+      nextRunAt: "2026-10-26T19:17:00.000Z",
+      updatedAt: "2026-10-26T12:00:00.000Z",
+      updatedBy: null,
+    },
   },
   {
     id: "purgeDeletedObjects",
@@ -18,8 +24,14 @@ const jobs: JobDefinition[] = [
     description:
       "Deletes a batch of queued files from storage after their upload grace period.",
     manual: true,
-    runSchedule:
-      "Every hour at 17 minutes past the hour (UTC) in production. Manual only in staging.",
+    runSchedule: "Every hour at 17 minutes past the hour (UTC).",
+    schedule: {
+      cron: "17 * * * *",
+      enabled: true,
+      nextRunAt: "2026-10-26T19:17:00.000Z",
+      updatedAt: "2026-10-26T12:00:00.000Z",
+      updatedBy: null,
+    },
   },
 ];
 const run: JobRun = {
@@ -27,6 +39,7 @@ const run: JobRun = {
   jobId: "purgeRequestedUsers",
   status: "succeeded",
   source: "scheduled",
+  dryRun: false,
   requestedBy: null,
   requestedByName: null,
   requestedByEmail: null,
@@ -72,5 +85,7 @@ export function mount(element: HTMLElement) {
     });
   };
   window.fetch = Object.assign(fetchJobs, { preconnect: () => {} });
-  createRoot(element).render(<AdminJobs />);
+  createRoot(element).render(
+    <AdminJobs onNavigate={() => {}} pathname="/root/jobs" />,
+  );
 }

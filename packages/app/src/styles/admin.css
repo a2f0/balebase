@@ -120,6 +120,18 @@
   overflow-wrap: anywhere;
 }
 
+/* A job's name opens its own page. */
+.adminJobName {
+  color: var(--color-text);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.adminJobName:hover {
+  color: var(--color-text-subtle);
+}
+
 .adminJobHistoryItem {
   display: grid;
   min-width: 0;

@@ -19,13 +19,13 @@ test("production Worker entrypoints report failures without changing their behav
       import { testBindings } from ${JSON.stringify(resolve(import.meta.dir, "../testing/bindings.ts"))};
       const reports = [];
       const email = await import(${JSON.stringify(resolve(import.meta.dir, "../inbox/email.ts"))});
-      const maintenance = await import(${JSON.stringify(resolve(import.meta.dir, "../jobs/maintenance.ts"))});
+      const schedules = await import(${JSON.stringify(resolve(import.meta.dir, "../jobs/jobSchedules.ts"))});
       const requestError = new TypeError("request failure");
       const emailError = new TypeError("email failure");
       const scheduledError = new TypeError("scheduled failure");
       mock.module(${JSON.stringify(resolve(import.meta.dir, "diagnostics.ts"))}, () => ({ captureApiError: async (error, source) => { reports.push({ error, source }); } }));
       mock.module(${JSON.stringify(resolve(import.meta.dir, "../inbox/email.ts"))}, () => ({ ...email, handleEmail: async () => { throw emailError; } }));
-      mock.module(${JSON.stringify(resolve(import.meta.dir, "../jobs/maintenance.ts"))}, () => ({ ...maintenance, maintenanceTasks: () => [], runScheduledMaintenance: async () => { throw scheduledError; } }));
+      mock.module(${JSON.stringify(resolve(import.meta.dir, "../jobs/jobSchedules.ts"))}, () => ({ ...schedules, runDueMaintenance: async () => { throw scheduledError; } }));
       const { app } = await import(${JSON.stringify(resolve(import.meta.dir, "../app.ts"))});
       const { default: worker } = await import(${JSON.stringify(resolve(import.meta.dir, "../index.ts"))});
       app.get("/__diagnostics_test__", () => { throw requestError; });

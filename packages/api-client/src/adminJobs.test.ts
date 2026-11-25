@@ -15,6 +15,7 @@ const run: JobRun = {
   runId: "run-1",
   status: "queued",
   source: "manual",
+  dryRun: false,
   requestedBy: "actor",
   requestedByName: "Admin Actor",
   requestedByEmail: "actor@example.com",
@@ -84,4 +85,67 @@ it("requests the job catalog", async () => {
   });
   expect(await api.adminJobs.list()).toEqual([]);
   expect(requested).toBe("https://api.test/api/admin/jobs");
+});
+
+it("sends dry runs and schedule changes to their routes", async () => {
+  const requests: { body: unknown; method: string; url: string }[] = [];
+  const job = {
+    description: "Purges.",
+    id: "purge",
+    manual: true,
+    name: "Purge",
+    runSchedule: "Every day at 03:00 UTC.",
+    schedule: {
+      cron: "0 3 * * *",
+      enabled: true,
+      nextRunAt: "2026-10-22T03:00:00.000Z",
+      updatedAt: "2026-10-21T12:00:00.000Z",
+      updatedBy: null,
+    },
+  };
+  const api = new ApiClient({
+    baseUrl: "https://api.test",
+    fetch: async (url, init) => {
+      requests.push({
+        body: init?.body ? JSON.parse(String(init.body)) : undefined,
+        method: init?.method ?? "GET",
+        url,
+      });
+      if (url.endsWith("/runs"))
+        return Response.json(
+          { run: { ...run, dryRun: true } },
+          { status: 202 },
+        );
+      if (url.includes("/changes"))
+        return Response.json({ changes: [], nextCursor: null });
+      return Response.json({ job });
+    },
+  });
+  expect((await api.adminJobs.run("purge", { dryRun: true })).dryRun).toBe(
+    true,
+  );
+  expect(
+    await api.adminJobs.saveSchedule("purge", {
+      cron: "0 3 * * *",
+      enabled: true,
+    }),
+  ).toEqual(job);
+  await api.adminJobs.scheduleChanges("purge", "next");
+  expect(requests).toEqual([
+    {
+      body: { confirm: "purge", dryRun: true },
+      method: "POST",
+      url: "https://api.test/api/admin/jobs/purge/runs",
+    },
+    {
+      body: { cron: "0 3 * * *", enabled: true },
+      method: "PUT",
+      url: "https://api.test/api/admin/jobs/purge/schedule",
+    },
+    {
+      body: undefined,
+      method: "GET",
+      url: "https://api.test/api/admin/jobs/purge/schedule/changes?cursor=next",
+    },
+  ]);
 });

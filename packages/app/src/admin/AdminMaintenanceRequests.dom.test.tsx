@@ -13,8 +13,14 @@ afterEach(() => {
   IntersectionObserverFixture.instances.length = 0;
 });
 
-const request = (id: string, joinedActiveRun: boolean, name: string) => ({
+const request = (
+  id: string,
+  joinedActiveRun: boolean,
+  name: string,
+  dryRun = false,
+) => ({
   actor: { email: `${id}@example.com`, id, name },
+  dryRun,
   id,
   jobId: "purgeRequestedUsers",
   joinedActiveRun,
@@ -32,7 +38,7 @@ it("lists who requested each manual maintenance run, page by page", async () => 
         : {
             nextCursor: "next",
             requests: [
-              request("second", true, "Second Admin"),
+              request("second", true, "Second Admin", true),
               request("first", false, "First Admin"),
             ],
           },
@@ -47,6 +53,7 @@ it("lists who requested each manual maintenance run, page by page", async () => 
           manual: true,
           name: "Purge requested users",
           runSchedule: "",
+          schedule: null,
         },
       ]}
     />,
@@ -62,8 +69,10 @@ it("lists who requested each manual maintenance run, page by page", async () => 
   expect(rows()[0]).toContain("Purge requested users");
   expect(rows()[0]).toContain("Second Admin");
   expect(rows()[0]).toContain("Joined a run in progress");
+  expect(rows()[0]).toContain("Dry run");
   expect(rows()[1]).toContain("First Admin");
   expect(rows()[1]).not.toContain("Joined a run in progress");
+  expect(rows()[1]).not.toContain("Dry run");
   await act(async () => IntersectionObserverFixture.intersect());
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 0));

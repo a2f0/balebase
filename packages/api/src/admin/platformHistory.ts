@@ -24,6 +24,7 @@ interface MaintenanceRequestRow {
   actor_email: string;
   actor_name: string;
   actor_user_id: string;
+  dry_run: number;
   id: string;
   job_id: string;
   joined_active_run: number;
@@ -126,6 +127,7 @@ export async function listMaintenanceRequests(
         id: row.actor_user_id,
         name: row.actor_name,
       },
+      dryRun: Boolean(row.dry_run),
       id: row.id,
       jobId: row.job_id,
       joinedActiveRun: Boolean(row.joined_active_run),

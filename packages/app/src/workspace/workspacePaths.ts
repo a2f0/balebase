@@ -314,7 +314,7 @@ export function organizationSettingsPage(
 
 export function isRootAdminPath(pathname: string) {
   return (
-    pathname === "/root/jobs" ||
+    isWithin(pathname, adminJobPath()) ||
     isWithin(pathname, adminUserPath()) ||
     isWithin(pathname, adminOrganizationPath()) ||
     isWithin(pathname, globalTemplatesPath())
@@ -326,6 +326,15 @@ export function organizationPathRequiresAccess(pathname: string) {
     !["/account", "/account/security", "/invite"].includes(pathname) &&
     !isRootAdminPath(pathname)
   );
+}
+
+/** Root admin's jobs, or one job's schedule and run history there. */
+export function adminJobPath(jobId?: string) {
+  return jobId ? `/root/jobs/${encodeURIComponent(jobId)}` : "/root/jobs";
+}
+
+export function adminJobIdForPath(pathname: string) {
+  return recordIdForPath(pathname, adminJobPath());
 }
 
 /** Root admin's user list, or one person's platform history there. */

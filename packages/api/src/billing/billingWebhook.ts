@@ -84,11 +84,33 @@ export async function handleStripeWebhook(context: Context<ApiEnv>) {
   return context.json({ received: true });
 }
 
+function receiptCutoff() {
+  return new Date(
+    Date.now() - stripeWebhookReceiptRetentionDays * 24 * 60 * 60 * 1_000,
+  ).toISOString();
+}
+
+/** What `purgeStripeWebhookReceipts` would delete now; it changes nothing. */
+export async function previewStripeWebhookReceiptPurge(
+  environment: Pick<Bindings, "DB">,
+  retainedAfter = receiptCutoff(),
+) {
+  const row = await environment.DB.prepare(
+    `SELECT count(*) AS eligible FROM stripe_webhook_events
+     WHERE datetime(COALESCE(processed_at, received_at)) < datetime(?)`,
+  )
+    .bind(retainedAfter)
+    .first<{ eligible: number }>();
+  const eligible = row?.eligible ?? 0;
+  return {
+    eligible,
+    wouldPurge: Math.min(eligible, stripeWebhookReceiptCleanupLimit),
+  };
+}
+
 export async function purgeStripeWebhookReceipts(
   environment: Pick<Bindings, "DB">,
-  retainedAfter = new Date(
-    Date.now() - stripeWebhookReceiptRetentionDays * 24 * 60 * 60 * 1_000,
-  ).toISOString(),
+  retainedAfter = receiptCutoff(),
 ) {
   const deleted = await environment.DB.prepare(
     `DELETE FROM stripe_webhook_events

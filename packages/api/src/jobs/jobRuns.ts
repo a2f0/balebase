@@ -8,6 +8,8 @@ export interface JobRow {
   connection_id: string | null;
   organization_id: string | null;
   source: JobRun["source"];
+  /** 1 for a dry run, which changes nothing. */
+  dry_run: number;
   requested_by: string | null;
   requested_by_name: string | null;
   requested_by_email: string | null;
@@ -37,6 +39,7 @@ export function toJobRun(row: JobRow): JobRun {
     jobId: row.job_id,
     status: row.status,
     source: row.source,
+    dryRun: Boolean(row.dry_run),
     requestedBy: row.requested_by,
     requestedByName: row.requested_by_name,
     requestedByEmail: row.requested_by_email,

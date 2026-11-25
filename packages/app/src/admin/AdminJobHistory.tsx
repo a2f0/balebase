@@ -14,12 +14,15 @@ import { useJobHistory } from "./useJobHistory";
 type Props = {
   jobs: JobDefinition[];
   initialRun: JobRun | undefined;
+  /** Shows only this job's runs, with no job filter to change. */
+  fixedJobId?: string | undefined;
 };
 
-export function AdminJobHistory({ jobs, initialRun }: Props) {
+export function AdminJobHistory({ fixedJobId, jobs, initialRun }: Props) {
   const [selectedRun, setSelectedRun] = useState(initialRun?.runId);
   const [pendingRun, setPendingRun] = useState(initialRun);
-  const [jobId, setJobId] = useState("");
+  const [chosenJobId, setJobId] = useState("");
+  const jobId = fixedJobId ?? chosenJobId;
   const [status, setStatus] = useState<JobRun["status"] | "">("");
   const { data, error, loadMoreError, loadingMore, refreshing, loadMore } =
     useJobHistory(jobId, status);
@@ -31,7 +34,7 @@ export function AdminJobHistory({ jobs, initialRun }: Props) {
   // A newly requested run is visible immediately, even before history refreshes.
   const visibleRuns =
     pendingRun &&
-    !jobId &&
+    (!jobId || jobId === pendingRun.jobId) &&
     !status &&
     !runs.some((run) => run.runId === pendingRun.runId)
       ? [pendingRun, ...runs]
@@ -39,22 +42,24 @@ export function AdminJobHistory({ jobs, initialRun }: Props) {
   return (
     <PageSection title="Run history">
       <div className="cluster">
-        <Field label="Job">
-          <Select
-            value={jobId}
-            onChange={(event) => {
-              setJobId(event.target.value);
-              setSelectedRun(undefined);
-            }}
-          >
-            <option value="">All jobs</option>
-            {jobs.map((job) => (
-              <option key={job.id} value={job.id}>
-                {job.name}
-              </option>
-            ))}
-          </Select>
-        </Field>
+        {fixedJobId === undefined && (
+          <Field label="Job">
+            <Select
+              value={jobId}
+              onChange={(event) => {
+                setJobId(event.target.value);
+                setSelectedRun(undefined);
+              }}
+            >
+              <option value="">All jobs</option>
+              {jobs.map((job) => (
+                <option key={job.id} value={job.id}>
+                  {job.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        )}
         <Field label="Status">
           <Select
             value={status}

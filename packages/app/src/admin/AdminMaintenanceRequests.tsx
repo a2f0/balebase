@@ -21,11 +21,24 @@ import { AdminIdentity } from "./AdminIdentity";
  * a run already in progress. Requests outlive the 30-day run history and the
  * requester's account.
  */
-export function AdminMaintenanceRequests({ jobs }: { jobs: JobDefinition[] }) {
-  const fetchPage = useCallback(async (cursor?: string) => {
-    const page = await api.adminJobs.requests(cursor ? { cursor } : {});
-    return { items: page.requests, nextCursor: page.nextCursor };
-  }, []);
+export function AdminMaintenanceRequests({
+  jobId,
+  jobs,
+}: {
+  /** Shows only this job's requests. */
+  jobId?: string | undefined;
+  jobs: JobDefinition[];
+}) {
+  const fetchPage = useCallback(
+    async (cursor?: string) => {
+      const page = await api.adminJobs.requests({
+        ...(jobId ? { jobId } : {}),
+        ...(cursor ? { cursor } : {}),
+      });
+      return { items: page.requests, nextCursor: page.nextCursor };
+    },
+    [jobId],
+  );
   const requests = useCursorPages(
     fetchPage,
     "Could not load maintenance requests.",
@@ -51,7 +64,7 @@ export function AdminMaintenanceRequests({ jobs }: { jobs: JobDefinition[] }) {
         </ul>
       ) : requests.items ? (
         <EmptyState compact icon="list" title="No manual requests">
-          Jobs started with Run now appear here.
+          Jobs started with Run now or Dry run appear here.
         </EmptyState>
       ) : (
         !requests.error && <LoadingState label="Loading requests…" />
@@ -89,6 +102,7 @@ function RequestRow({
       </span>
       <span className="rowActions">
         <AdminIdentity detail={request.actor.email} name={request.actor.name} />
+        {request.dryRun && <Badge tone="info">Dry run</Badge>}
         {request.joinedActiveRun && (
           <Badge tone="neutral">Joined a run in progress</Badge>
         )}

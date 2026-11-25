@@ -227,18 +227,41 @@ a 20-minute lease expires and the next five-minute scheduler marks it failed wit
 `INTERRUPTED`; it is not automatically replayed. Review its effects before starting
 a new run. Finance pages retain their existing retry and checkpoint behavior.
 
-Production's hourly trigger enqueues one run of each maintenance job. Scheduled
-IDs deduplicate repeated cron events, and active jobs are shared with manual
-requests. Newly scheduled deleted-file cleanup waits for form-retention work to
-finish, including failure, even when queue messages arrive out of order. An
-already-active manual cleanup is reused and can overlap that retention run;
+Maintenance schedules live in D1 (`job_schedules`), not in Wrangler: root
+admins edit them at **Root Admin → Jobs**, and each tier follows its own. A
+Cron Trigger runs every minute (`* * * * *`) in both tiers and queues each
+enabled job whose expression matches that UTC minute. Scheduled IDs name the
+job and the minute, so repeated or overlapping trigger events queue nothing
+twice, and active jobs are shared with manual requests (a dry run shares only
+with a dry run). One job that cannot be queued does not keep the others due
+that minute from being queued. Newly scheduled deleted-file cleanup waits for
+form-retention work to finish, including failure, even when queue messages
+arrive out of order. An already-active manual cleanup is reused and can
+overlap that retention run;
 existing per-object claims and grace periods still apply. Every five minutes, both
 tiers recover pending deliveries and expired finance leases and remove up to 500
 terminal runs completed more than 30 days ago, cascading their logs. Active runs
 are never expired by history retention. Domain activity history is separate.
 
+Migration `0109_job_schedules.sql` creates `job_schedules`, seeded with the
+hourly `17 * * * *` schedule for every maintenance job but **Purge trashed
+email** (paused), and `job_schedule_changes`, and adds `dry_run` to
+`job_runs` and `maintenance_requests`. The previous Worker keeps working
+against it: its runs are real runs, and the active-run index still allows one
+of each. Once the new API is published, staging starts running maintenance
+hourly as production does, against its own data. To keep staging manual,
+pause its schedules at **Root Admin → Jobs** right after deploying. Until the
+Cron Trigger change propagates, the old `17 * * * *` trigger may still fire;
+it reaches the same schedule check, and run IDs keep it from queueing
+anything twice. Before rolling the API back past this release, cancel
+or let finish every queued dry run: the previous Worker does not know dry
+runs, so it would run one as a real run, and it can join a manual request to
+an active dry run.
+
 After deployment, start a small maintenance job, close and reopen the page, and
-verify its queued/running/completed history and named output. Check a manual bank
+verify its queued/running/completed history and named output. Start a dry run
+of **Purge deleted files** and check that its output counts eligible files and
+that nothing was removed. Check a manual bank
 sync in the same history, confirm duplicate requests share an active run, and
 verify a non-admin session cannot access run history or details. Manual
 requests also appear in `maintenance_requests`, which job history retention does
@@ -259,11 +282,12 @@ consumer bindings and Cron Triggers. Apply `0072_finance_sync_jobs.sql` before
 deploying the API, then deploy the app. The normal API deployment applies D1
 migrations. A merge alone does not provision resources or deploy.
 
-Both API Workers run the finance scheduler every five minutes (`*/5 * * * *`).
-Staging uses only its own D1 database, queue, and Plaid Sandbox credentials; it
-still excludes production's hourly maintenance schedule. Production keeps that
-hourly schedule in addition to finance scheduling. The staging config generator
-preserves this separation. Cron changes can take up to 15 minutes to propagate.
+Both API Workers run the finance scheduler every five minutes (`*/5 * * * *`)
+and the maintenance schedules every minute (`* * * * *`). Staging uses only its
+own D1 database, queue, and Plaid Sandbox credentials, and its maintenance
+follows the schedules saved in its own D1 database. The staging config
+generator keeps production's Cron Triggers. Cron changes can take up to 15
+minutes to propagate.
 See [Cloudflare Cron Triggers](https://developers.cloudflare.com/workers/configuration/cron-triggers/).
 
 Manual requests first commit a job to D1, then await a Queue send before returning
@@ -802,12 +826,12 @@ can initiate the same lifecycle from the admin organization list.
 The **Purge deleted organizations** job (`purgeDeletedOrganizations`) permanently
 deletes up to 25 organizations per run once their deletion is at least 30 days
 old. Untouched organizations are processed oldest first; previous attempts rotate
-behind them so failures do not block later organizations. It runs with hourly
-maintenance at :17 UTC in production and can be started from
-**Root Admin → Jobs → Run now** in either tier. Staging
-maintenance is manual. The run's saved output reports `purged`, `skipped` (no
-longer eligible), and `failed`. A partial failure marks the run failed while
-preserving its counts. Worker logs record purged and failed organization IDs.
+behind them so failures do not block later organizations. It runs on its
+schedule (hourly at :17 UTC by default) and can be started from
+**Root Admin → Jobs → Run now** in either tier. The run's saved output reports
+`purged`, `skipped` (no longer eligible), and `failed`. A partial failure
+marks the run failed while preserving its counts. Worker logs record purged and
+failed organization IDs.
 The purge queues the organization's uploads, raw messages and attachments,
 contract documents, templates, employee forms, and screening consents for file
 cleanup.
@@ -819,8 +843,9 @@ User accounts are retained. The purge record (`organization.purged`, like
 `user.purged` for accounts) appears under **Root Admin → Jobs → Purge
 history** with who deleted the organization and how, but not its name.
 The **Purge deleted files** job removes the queued R2 objects in later batches,
-after its 15-minute upload grace period, and retries storage failures. In staging,
-run that job manually after the grace period to finish file deletion.
+after its 15-minute upload grace period, and retries storage failures. If its
+schedule is paused, run it from **Root Admin → Jobs** after the grace period to
+finish file deletion.
 File cleanup processes 25 objects per run, so a large backlog can take days to
 drain; the grace period is a minimum wait, not a deletion deadline. Additional
 manual cleanup runs can drain eligible files sooner. If the tier accepts
@@ -831,7 +856,7 @@ Root admins can restore discarded global templates from **Global templates →
 Discarded templates**. The **Purge discarded global templates** job
 (`purgeDiscardedFormTemplates`) permanently deletes up to 100 per run once their
 discard is at least 30 days old, with their versions and activity; its saved
-output reports `purged`. It runs with hourly maintenance in production and from
+output reports `purged`. It runs on its schedule (hourly by default) and from
 **Root Admin → Jobs → Run now** in either tier. Each run is one D1 batch
 that rechecks eligibility, so a restore committed first keeps the template.
 Forms started from a purged template keep their snapshot, and each project that
@@ -841,8 +866,9 @@ Inbox messages can be moved to Trash and restored by organization members.
 Deleted messages retain their deletion time and initiating user in D1, while
 their raw message and attachments remain in R2. The **Purge trashed email** job
 (`purgeTrashedEmails`) permanently deletes up to 100 messages per run that have
-been in Trash for at least 30 days. It is not scheduled: start it from
-**Root Admin → Jobs → Run now**, which records who requested it. Each run
+been in Trash for at least 30 days. Its schedule is paused by default: start it
+from **Root Admin → Jobs → Run now**, which records who requested it, or give
+it a schedule there. Each run
 records every purge in the email's history and every link it removes on the
 linked record, deletes the D1 rows (attachments and links cascade), and queues
 the raw message and attachments for the **Purge deleted files** job, which

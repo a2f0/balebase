@@ -6,6 +6,8 @@ import {
 } from "../shared/systemActivity";
 import type { Bindings } from "../types";
 
+const purgeBatchSize = 25;
+
 /** A deleted organization past its 30-day restoration window. */
 const purgeable = `organization.id = ? AND organization.deletedAt IS NOT NULL
   AND julianday(organization.deletedAt) <= julianday(?)`;
@@ -28,9 +30,9 @@ export async function purgeDeletedOrganizations(
     `SELECT id FROM organization
      WHERE deletedAt IS NOT NULL AND julianday(deletedAt) <= julianday(?)
      ORDER BY purgeAttemptedAt IS NOT NULL, purgeAttemptedAt, julianday(deletedAt), id
-     LIMIT 25`,
+     LIMIT ?`,
   )
-    .bind(cutoff)
+    .bind(cutoff, purgeBatchSize)
     .all<{ id: string }>();
   const output = { purged: 0, skipped: 0, failed: 0 };
   let firstFailure: unknown;
@@ -66,6 +68,22 @@ export async function purgeDeletedOrganizations(
   }
   if (output.failed) throw new MaintenanceFailure(output, firstFailure);
   return output;
+}
+
+/** What `purgeDeletedOrganizations` would purge now; it changes nothing. */
+export async function previewDeletedOrganizationPurge(
+  environment: Pick<Bindings, "DB">,
+  now = new Date(),
+) {
+  const cutoff = new Date(now.getTime() - 30 * 86400000).toISOString();
+  const row = await environment.DB.prepare(
+    `SELECT count(*) AS eligible FROM organization
+     WHERE deletedAt IS NOT NULL AND julianday(deletedAt) <= julianday(?)`,
+  )
+    .bind(cutoff)
+    .first<{ eligible: number }>();
+  const eligible = row?.eligible ?? 0;
+  return { eligible, wouldPurge: Math.min(eligible, purgeBatchSize) };
 }
 
 function purgeRecord(

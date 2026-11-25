@@ -150,23 +150,51 @@ manual loading and retries. Logs have their own pagination. It is restricted to
 root admins, including the history endpoints
 `GET /api/admin/jobs/runs` and `GET /api/admin/jobs/runs/:runId`.
 
+Each job row has an actions menu (the menu button, or right-click): **Run
+now**, **Dry run**, **Edit schedule**, **Pause schedule** or **Resume
+schedule**, and **View history**; bank sync offers only **View history**. A
+job's name, or **View history**, opens its own page (`/root/jobs/<job-id>`):
+its schedule, when it next runs, and who last changed it, with **Dry run**,
+**Run now**, and the schedule actions, and tabs for only that job's run
+history, schedule changes, and manual requests.
+
 Each maintenance **Run now** action requires confirmation and uses the same
-retention rules and batch sizes as hourly production maintenance
-(`17 * * * *`, UTC). `POST /api/admin/jobs/:jobId/runs` accepts JSON
-`{"confirm":"<jobId>"}`, an authenticated admin session, and the configured
-client `Origin` header. It responds with 202 and the saved run; an active run
-of the same job is reused. The request is refused with 403, recording nothing,
+retention rules and batch sizes as scheduled runs. **Dry run** queues a run
+marked as a dry run: read-only queries count what the job would change now,
+within its batch limits (such as `eligible` and `wouldPurge`), and it deletes
+nothing, sends no email, and calls no provider. A dry run never joins an
+active real run, or a real run an active dry run. History marks dry runs, and
+their details say nothing was changed. `POST /api/admin/jobs/:jobId/runs`
+accepts JSON `{"confirm":"<jobId>"}`, with `"dryRun": true` for a dry run, an
+authenticated admin session, and the configured client `Origin` header. It
+responds with 202 and the saved run; an active run of the same job and kind
+is reused. The request is refused with 403, recording nothing,
 when the caller's stored role is no longer `admin`. Each accepted request,
 including one that joins an active run, adds a log line to the run naming the
 requester and a row to `maintenance_requests` (job, run, whether it joined an
-active run, time, and the requester's ID, name, and email) in the same
-transaction. That history is kept after job history expires and after the
-requester's account is purged, so destructive runs stay attributable. Root
-admins read it under **Manual requests** on the Jobs page
-(`GET /api/admin/jobs/requests`). Closing the page does not stop execution. Staging
-supports manual maintenance and five-minute queue recovery, but does not enqueue
-hourly maintenance. Bank sync is listed here for inspection; it is requested
-from Finance for a specific connection or through daily sync settings.
+active run, whether it was a dry run, time, and the requester's ID, name, and
+email) in the same transaction. That history is kept after job history expires
+and after the requester's account is purged, so destructive runs stay
+attributable. Root admins read it under **Manual requests** on the Jobs page
+(`GET /api/admin/jobs/requests`). Closing the page does not stop execution.
+Bank sync is listed here for inspection; it is requested from Finance for a
+specific connection or through daily sync settings.
+
+Maintenance schedules are five-field cron expressions in UTC saved in D1
+(`job_schedules`), so each tier follows its own. By default every maintenance
+job runs hourly at 17 minutes past the hour except **Purge trashed email**,
+which runs only on request. Root admins change a job's expression with **Edit
+schedule** and stop or restart it with **Pause schedule** and **Resume
+schedule**; a paused job runs only on request. `PUT
+/api/admin/jobs/:jobId/schedule` takes `{"cron": "...", "enabled": true}`
+with the client `Origin` header, refuses an expression that is not valid or
+never runs with 400, and refuses with 403, changing nothing, a caller whose
+stored role is no longer `admin` or an impersonated session. Each change is
+recorded with the admin's name and email and the previous schedule in
+`job_schedule_changes`, in the transaction that makes it, and kept after the
+admin's account is purged; the job's page lists them under **Schedule
+changes** (`GET /api/admin/jobs/:jobId/schedule/changes`). Saving the schedule
+a job already has records nothing.
 Runs start only through `POST /api/admin/jobs/:jobId/runs`, which answers 202
 with the queued run; there is no endpoint that waits for a result.
 `GET /api/admin/jobs` lists every job, bank sync included.
@@ -242,7 +270,7 @@ per run once they have been deleted for at least 30 days. Root admins can run it
 from **Root Admin → Jobs**, where its saved output shows purged, skipped, and
 failed counts, including partial progress on failed runs. Failures are isolated
 per organization and previous attempts rotate behind untouched organizations. It
-also runs with production hourly maintenance. Restoring an organization before
+also runs on its schedule, hourly by default. Restoring an organization before
 the purge protects it; after the purge it cannot be restored. Organization records
 for each organization are removed together and their files are queued for
 **Purge deleted files**, which waits at least 15 minutes for uploads to finish

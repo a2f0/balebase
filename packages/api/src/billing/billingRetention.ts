@@ -82,6 +82,43 @@ export async function purgeExpiredFreeFormRuns(
   return deleted;
 }
 
+/**
+ * What `purgeExpiredFreeFormRuns` would purge now; it changes nothing. A run
+ * first settles pending checkouts with Stripe, which a dry run skips, so an
+ * organization mid-checkout is left out of both.
+ */
+export async function previewExpiredFreeFormRunPurge(
+  environment: Pick<Bindings, "DB" | "STRIPE_PRO_PRICE_ID">,
+  retainedAfter = new Date(
+    Date.now() - freeRetentionDays * dayMilliseconds,
+  ).toISOString(),
+  paidEndedAfter = new Date(
+    Date.now() - lapsedRetentionGraceDays * dayMilliseconds,
+  ).toISOString(),
+) {
+  if (!environment.STRIPE_PRO_PRICE_ID) {
+    throw new Error(
+      "Stripe Pro price configuration is required for retention cleanup.",
+    );
+  }
+  const row = await environment.DB.prepare(
+    `SELECT count(*) AS eligible,
+            count(DISTINCT expired.organization_id) AS organizations
+     FROM (${expiredForms}) AS expired`,
+  )
+    .bind(paidEndedAfter, retainedAfter)
+    .first<{ eligible: number; organizations: number }>();
+  const eligible = row?.eligible ?? 0;
+  return {
+    eligible,
+    organizations: row?.organizations ?? 0,
+    wouldPurge: Math.min(
+      eligible,
+      retentionBatchSize * retentionBatchesPerInvocation,
+    ),
+  };
+}
+
 async function purgeRetentionBatch(
   database: D1Database,
   runId: string,

@@ -15,7 +15,9 @@
     "head_sampling_rate": 1
   },
   "triggers": {
-    "crons": ["17 * * * *", "*/5 * * * *"]
+    // Every minute: maintenance schedules saved in D1 (Root Admin -> Jobs).
+    // Every five minutes: queue recovery and daily bank sync.
+    "crons": ["* * * * *", "*/5 * * * *"]
   },
   "queues": {
     "producers": [

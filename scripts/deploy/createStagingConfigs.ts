@@ -72,8 +72,8 @@ api.d1_databases = [
 api.r2_buckets = [
   { binding: "STORAGE", bucket_name: required("STAGING_R2_BUCKET_NAME") },
 ];
-// Only finance scheduling runs in staging, against its isolated sandbox queue.
-api.triggers = { crons: ["*/5 * * * *"] };
+// Staging keeps production's Cron Triggers: maintenance follows the schedules
+// saved in staging's own D1 database, and its queue is the sandbox one below.
 if (api.queues) {
   for (const queue of [...api.queues.producers, ...api.queues.consumers]) {
     queue.queue = "balebase-api-staging-finance-sync";

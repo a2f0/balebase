@@ -8,16 +8,18 @@ import { runPollMs } from "./AdminJobRun";
 import { AdminJobs } from "./AdminJobs";
 import { historyPollMs } from "./useJobHistory";
 
-const { button, mount, respond } = installDom({
+const { button, click, fill, mount, respond } = installDom({
   url: "http://localhost:5173/root/jobs",
   globals: () => ({
     IntersectionObserver: IntersectionObserverFixture,
   }),
 });
 let container: HTMLElement;
+let navigations: string[] = [];
 
 afterEach(() => {
   IntersectionObserverFixture.instances.length = 0;
+  navigations = [];
 });
 
 const queued: JobRun = {
@@ -25,6 +27,7 @@ const queued: JobRun = {
   jobId: "purgeRequestedUsers",
   status: "queued",
   source: "manual",
+  dryRun: false,
   requestedBy: "actor",
   requestedByName: "Admin Actor",
   requestedByEmail: "actor@example.com",
@@ -46,8 +49,14 @@ const definitions: JobDefinition[] = [
     name: "Purge requested user accounts",
     description: "Purges eligible accounts.",
     manual: true,
-    runSchedule:
-      "Every hour at 17 minutes past the hour (UTC) in production. Manual only in staging.",
+    runSchedule: "Every hour at 17 minutes past the hour (UTC).",
+    schedule: {
+      cron: "17 * * * *",
+      enabled: true,
+      nextRunAt: "2026-10-26T12:17:00.000Z",
+      updatedAt: "2026-10-01T00:00:00.000Z",
+      updatedBy: null,
+    },
   },
   {
     id: "syncFinanceConnection",
@@ -56,6 +65,7 @@ const definitions: JobDefinition[] = [
     manual: false,
     runSchedule:
       "Once per UTC day for connections with daily sync enabled; checked every 5 minutes from 00:00 UTC. Manual sync from Finance.",
+    schedule: null,
   },
 ];
 
@@ -144,15 +154,33 @@ it("keeps saved job output visible while retrying a failed poll", async () => {
   expect(container.textContent).toContain('"progress": 2');
 });
 
-async function render() {
+async function render(pathname = "/root/jobs") {
   const view = await mount(
     <>
-      <AdminJobs />
+      <AdminJobs
+        onNavigate={(path) => navigations.push(path)}
+        pathname={pathname}
+      />
       <DialogHost />
     </>,
   );
   container = view.container;
   return view;
+}
+
+/** Opens a job's row menu and picks one of its actions. */
+async function chooseAction(
+  label: string,
+  jobName = "Purge requested user accounts",
+) {
+  await act(async () => button(`Actions for ${jobName}`).click());
+  await act(async () => button(label).click());
+}
+
+function menuItems() {
+  return [
+    ...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'),
+  ].map((item) => item.textContent);
 }
 
 it("queues confirmed maintenance, exposes persisted output after remount, and filters bank jobs", async () => {
@@ -202,12 +230,12 @@ it("queues confirmed maintenance, exposes persisted output after remount, and fi
     const row = jobRows.find((item) => item.textContent?.includes(job.name));
     expect(row?.textContent).toContain(`Run schedule: ${job.runSchedule}`);
   }
-  expect(
-    [...container.querySelectorAll("button")].filter(
-      (item) => item.textContent === "Run now",
-    ),
-  ).toHaveLength(1);
-  await act(async () => button("Run now").click());
+  expect(container.textContent).not.toContain("Manual only in staging");
+  await act(async () => button("Actions for Sync bank accounts").click());
+  expect(menuItems()).toEqual(["View history"]);
+  await act(async () => button("View history").click());
+  expect(navigations).toEqual(["/root/jobs/syncFinanceConnection"]);
+  await chooseAction("Run now");
   expect(requests.filter((request) => request.startsWith("POST"))).toHaveLength(
     0,
   );
@@ -309,7 +337,7 @@ it("opens a requested run inline immediately and resets older filtered history",
   expect(requests).toContain(
     "GET /api/admin/jobs/runs?jobId=syncFinanceConnection&cursor=older",
   );
-  await act(async () => button("Run now").click());
+  await chooseAction("Run now");
   await act(async () => button("Run job").click());
   expect(container.querySelector("select")?.value).toBe("");
   expect(
@@ -318,7 +346,7 @@ it("opens a requested run inline immediately and resets older filtered history",
   expect(container.textContent).not.toContain("No runs match");
   // Reusing the same active job must reopen its inline details after a collapse.
   await act(async () => button("Hide run").click());
-  await act(async () => button("Run now").click());
+  await chooseAction("Run now");
   await act(async () => button("Run job").click());
   expect(button("Hide run").getAttribute("aria-expanded")).toBe("true");
 });
@@ -335,7 +363,7 @@ it("does not restore a requested run after history has shown it and newer runs r
     return Response.json({ jobs: definitions });
   });
   await render();
-  await act(async () => button("Run now").click());
+  await chooseAction("Run now");
   await act(async () => button("Run job").click());
   expect(container.textContent).toContain("Run ID: run-1");
   historyRuns = [{ ...queued, runId: "newer-run", status: "succeeded" }];
@@ -561,4 +589,185 @@ it("refreshes through the oldest loaded run when new jobs shift page boundaries"
   } finally {
     timer.mockRestore();
   }
+});
+
+it("offers run, dry run, and schedule actions in each maintenance job's menu", async () => {
+  respond(async (url) => {
+    if (url.pathname.endsWith("/runs"))
+      return Response.json({ runs: [], nextCursor: null });
+    return Response.json({ jobs: definitions });
+  });
+  await render();
+  const row = button("Actions for Purge requested user accounts").closest(
+    ".adminJobRow",
+  );
+  expect(row?.textContent).toContain(
+    "Run schedule: Every hour at 17 minutes past the hour (UTC).",
+  );
+  expect(row?.textContent).toContain("Next run:");
+  await act(async () =>
+    button("Actions for Purge requested user accounts").click(),
+  );
+  expect(menuItems()).toEqual([
+    "Run now",
+    "Dry run",
+    "Edit schedule",
+    "Pause schedule",
+    "View history",
+  ]);
+  await act(async () => button("View history").click());
+  expect(navigations).toEqual(["/root/jobs/purgeRequestedUsers"]);
+  const link = [...container.querySelectorAll("a")].find(
+    (item) => item.textContent === "Purge requested user accounts",
+  );
+  expect(link?.getAttribute("href")).toBe("/root/jobs/purgeRequestedUsers");
+});
+
+it("queues a confirmed dry run and marks it in the history", async () => {
+  const bodies: unknown[] = [];
+  const dryRun: JobRun = { ...queued, dryRun: true };
+  respond(async (url, init) => {
+    if (init?.method === "POST") {
+      bodies.push(JSON.parse(String(init.body)));
+      return Response.json({ run: dryRun }, { status: 202 });
+    }
+    if (url.pathname.endsWith("/runs/run-1"))
+      return Response.json({ run: dryRun, logs: [], nextBefore: null });
+    if (url.pathname.endsWith("/runs"))
+      return Response.json({ runs: [], nextCursor: null });
+    return Response.json({ jobs: definitions });
+  });
+  await render();
+  await chooseAction("Dry run");
+  expect(document.querySelector("dialog")?.textContent).toContain(
+    "changes nothing",
+  );
+  await act(async () => button("Cancel").click());
+  expect(bodies).toEqual([]);
+  await chooseAction("Dry run");
+  await act(async () => button("Start dry run").click());
+  expect(bodies).toEqual([{ confirm: "purgeRequestedUsers", dryRun: true }]);
+  const item = button("Hide run").closest(".adminJobHistoryItem");
+  expect(item?.textContent).toContain("queued · manual · dry run");
+  expect(item?.textContent).toContain("Nothing was changed.");
+});
+
+it("edits, validates, and pauses a job's schedule", async () => {
+  const saves: unknown[] = [];
+  let current = definitions[0] as JobDefinition;
+  respond(async (url, init) => {
+    if (init?.method === "PUT") {
+      const body = JSON.parse(String(init.body)) as {
+        cron: string;
+        enabled: boolean;
+      };
+      saves.push(body);
+      current = {
+        ...current,
+        runSchedule: body.enabled
+          ? "Every day at 03:00 UTC."
+          : "Not scheduled; runs only on request.",
+        schedule: {
+          cron: body.cron,
+          enabled: body.enabled,
+          nextRunAt: body.enabled ? "2026-10-27T03:00:00.000Z" : null,
+          updatedAt: "2026-10-26T12:00:00.000Z",
+          updatedBy: {
+            email: "actor@example.com",
+            id: "actor",
+            name: "Admin Actor",
+          },
+        },
+      };
+      return Response.json({ job: current });
+    }
+    if (url.pathname.endsWith("/runs"))
+      return Response.json({ runs: [], nextCursor: null });
+    return Response.json({ jobs: definitions });
+  });
+  await render();
+  await chooseAction("Edit schedule");
+  const input = document.querySelector<HTMLInputElement>("dialog input");
+  expect(input?.value).toBe("17 * * * *");
+  await fill(input, "every day");
+  await click("Save schedule");
+  expect(saves).toEqual([]);
+  // The prompt asks again, keeping what was typed and saying what is wrong.
+  expect(document.querySelector("dialog")?.textContent).toContain(
+    "Enter five cron fields in UTC",
+  );
+  expect(document.querySelector<HTMLInputElement>("dialog input")?.value).toBe(
+    "every day",
+  );
+  await fill(document.querySelector("dialog input"), "0 3 * * *");
+  await click("Save schedule");
+  expect(saves).toEqual([{ cron: "0 3 * * *", enabled: true }]);
+  expect(container.textContent).toContain(
+    "Run schedule: Every day at 03:00 UTC.",
+  );
+
+  await chooseAction("Pause schedule");
+  await click("Pause schedule");
+  expect(saves.at(-1)).toEqual({ cron: "0 3 * * *", enabled: false });
+  expect(container.textContent).toContain(
+    "Run schedule: Not scheduled; runs only on request.",
+  );
+  await act(async () =>
+    button("Actions for Purge requested user accounts").click(),
+  );
+  expect(menuItems()).toContain("Resume schedule");
+});
+
+it("shows one job's schedule, its own run history, and its schedule changes", async () => {
+  const requests: string[] = [];
+  respond(async (url) => {
+    requests.push(`${url.pathname}${url.search}`);
+    if (url.pathname.endsWith("/schedule/changes"))
+      return Response.json({
+        changes: [
+          {
+            actor: {
+              email: "actor@example.com",
+              id: "actor",
+              name: "Admin Actor",
+            },
+            changedAt: "2026-10-26T12:00:00.000Z",
+            cron: "17 * * * *",
+            enabled: false,
+            id: "change-1",
+            jobId: "purgeRequestedUsers",
+            previousCron: "17 * * * *",
+            previousEnabled: true,
+          },
+        ],
+        nextCursor: null,
+      });
+    if (url.pathname.endsWith("/requests"))
+      return Response.json({ requests: [], nextCursor: null });
+    if (url.pathname.endsWith("/runs"))
+      return Response.json({ runs: [queued], nextCursor: null });
+    return Response.json({ jobs: definitions });
+  });
+  await render("/root/jobs/purgeRequestedUsers");
+  expect(container.querySelector("h1")?.textContent).toBe(
+    "Purge requested user accounts",
+  );
+  expect(container.textContent).toContain("Cron (UTC): 17 * * * *");
+  // Its history keeps the status filter but has no job filter to change.
+  expect(container.textContent).not.toContain("All jobs");
+  expect(container.textContent).toContain("All statuses");
+  expect(requests).toContain("/api/admin/jobs/runs?jobId=purgeRequestedUsers");
+  expect(requests).toContain(
+    "/api/admin/jobs/requests?jobId=purgeRequestedUsers",
+  );
+  expect(container.textContent).toContain("Paused");
+  expect(container.textContent).toContain("Admin Actor");
+  await act(async () => button("Jobs").click());
+  expect(navigations).toEqual(["/root/jobs"]);
+});
+
+it("reports a job that does not exist", async () => {
+  respond(async () => Response.json({ jobs: definitions }));
+  await render("/root/jobs/missing");
+  expect(container.textContent).toContain("Job not found");
 });
