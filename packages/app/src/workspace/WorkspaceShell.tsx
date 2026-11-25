@@ -93,8 +93,8 @@ export function WorkspaceShell({
     session,
     value: readSidebarWidth(),
   }));
-  // Another account reads the width afresh: after a sign-out cleared it, the
-  // account left signed in starts from the default.
+  // Another account reads the width afresh, whether switched to (the same
+  // stored width) or left signed in after a sign-out cleared it (the default).
   if (width.session !== session)
     setWidth({ session, value: readSidebarWidth() });
   const shellStyle = {

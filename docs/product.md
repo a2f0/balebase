@@ -133,9 +133,10 @@ transactions** switch, and the grid or list layout of template lists (a list
 unless the person picks the grid) are kept in the browser instead. They
 belong to the device rather than an account, so switching accounts keeps
 them and signing out of any account clears them, even with another account
-still signed in; the next person starts from the defaults. Offline work,
-saved bank transactions, and pending Plaid repair reports follow their own
-sign-out rules.
+still signed in; the next person starts from the defaults. Other open tabs
+follow the theme at once and read the rest again when they reload or change
+accounts. Offline work, saved bank transactions, and pending Plaid repair
+reports follow their own sign-out rules.
 
 Root admins use `/root/jobs` to run platform maintenance and inspect maintenance
 and bank sync history. Every run uses the shared background queue and D1 run

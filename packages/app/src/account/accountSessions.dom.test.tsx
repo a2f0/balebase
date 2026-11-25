@@ -96,6 +96,22 @@ describe("signing out", () => {
     expect(document.documentElement.getAttribute("data-theme")).toBe("light");
   });
 
+  it("clears them too when the device falls back to a plain sign-out", async () => {
+    const { requests, result } = await signOut(() =>
+      Response.json(
+        { code: "INVALID_SESSION_TOKEN", message: "Invalid session token" },
+        { status: 401 },
+      ),
+    );
+    await result;
+
+    expect(requests).toContain("/api/auth/sign-out");
+    expect(stored(settings)).toEqual(
+      Object.fromEntries(Object.keys(settings).map((key) => [key, null])),
+    );
+    expect(stored(kept)).toEqual(kept);
+  });
+
   it("keeps the settings when the sign-out is refused", async () => {
     const { result } = await signOut(() =>
       Response.json({ message: "Try again." }, { status: 500 }),
