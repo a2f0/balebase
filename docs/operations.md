@@ -605,8 +605,8 @@ to the person's screening under My documents, use the configured application
 host for links and the logo, and keep report results out of the email. Migration
 `0068_notify_screening_completion.sql` queues future completions without
 backfilling old ones. Failed deliveries retry in **Refresh Checkr screenings**
-under admin maintenance, or through the production hourly job. This job can
-also be run manually in staging, which has no scheduled jobs.
+under admin maintenance: on its schedule (hourly by default, in each tier) or
+when an admin runs it.
 Its result includes email counts for `sent`, `failed`, and `abandoned`, and a
 `queueUnavailable` flag for queue access failures. Delivery retries stop after
 ten attempts or seven days. Investigate provider failures before arranging
