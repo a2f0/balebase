@@ -347,19 +347,25 @@ bun run deploy:verify   # check all production URLs
 `deploy:email:verify`; `bun run deploy:staging:verify` is the shortcut.
 
 Apps built before migration `0108_hr_background_checks.sql` know only the
-Finance capability. Their group saves name no `managedCapabilities`, so the API
-changes only Finance access and keeps a group's Background checks access. An
-organization created between the migration and the new API Worker has no HR
-group; after the deploy, this should list none:
+Finance capability. Their group saves name no `managedCapabilities`, so the
+new API changes only Finance access and keeps a group's Background checks
+access. The API applies the migration just before publishing its Worker; in
+between, the previous Worker still creates organizations without an HR group
+and replaces every capability on a group save. After the deploy, this should
+list no organization:
 
 ```sh
 bunx wrangler d1 execute <database> --remote --command \
-  "SELECT id FROM organization WHERE id NOT IN
-   (SELECT organization_id FROM organization_builtin_group WHERE kind = 'hr')"
+  "SELECT id FROM organization WHERE id NOT IN (
+     SELECT builtin.organization_id FROM organization_builtin_group AS builtin
+     JOIN organization_group_capability AS access
+       ON access.team_id = builtin.team_id
+      AND access.capability = 'background_checks'
+     WHERE builtin.kind = 'hr')"
 ```
 
-For any it lists, an owner or admin can make a group with Background checks
-access in Organization → Access.
+For any it lists, an owner or admin turns on Background checks access for a
+group, such as HR, in Organization → Access.
 
 Website builds publish the shared screenshot capture
 ([screenshots](../CONTRIBUTING.md#screenshots)) and refuse one that is

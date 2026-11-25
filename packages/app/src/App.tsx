@@ -7,7 +7,6 @@ import {
   PageBody,
   PageHeader,
 } from "@balebase/ui/react";
-import type { OrganizationCapability } from "@balebase/validators/organizationGroups";
 import { type ReactNode, useEffect, useState } from "react";
 import {
   accountReturnPath,
@@ -36,6 +35,7 @@ import { PaidFeaturesContext } from "./organizations/PaidFeatures";
 import { useOrganizationAccess } from "./organizations/useOrganizationAccess";
 import { authClient } from "./shared/authClient";
 import { authCallbackUrl } from "./shared/config";
+import { capabilityGate } from "./workspace/capabilityGate";
 import {
   guardWorkspaceChange,
   useDismissDialogsOnWorkspaceChange,
@@ -47,7 +47,6 @@ import {
 } from "./workspace/useWorkspaceOrganizations";
 import { WorkspaceShell, type WorkspaceUser } from "./workspace/WorkspaceShell";
 import {
-  capabilityForPath,
   isRootAdminPath,
   movedWorkspacePath,
   organizationPathRequiresAccess,
@@ -386,46 +385,36 @@ function blockedWorkspaceContent(
   if (organizationPathRequiresAccess(pathname) && access.isPending) {
     return <LoadingScreen />;
   }
-  const capability = capabilityForPath(pathname);
-  if (
-    capability &&
-    !access.twoFactorRequirement &&
-    !access.seatRequirement &&
-    !access.can(capability)
-  ) {
-    // Background checks don't need paid features to be read.
-    if (
-      capability === "finance" &&
-      access.confirmed &&
-      !access.paidFeaturesEnabled
-    ) {
-      const canManage = canManageOrganization(access.memberRole);
-      return (
-        <FatalState
-          action={
-            canManage ? "Open organization settings" : "Return to your library"
-          }
-          message="Paid features are disabled for this organization. An owner or admin can enable them in Organization settings."
-          onAction={() => navigate(canManage ? "/organization" : "/")}
-        />
-      );
-    }
+  const gate = capabilityGate(pathname, {
+    can: access.can,
+    confirmed: access.confirmed,
+    paidFeaturesEnabled: access.paidFeaturesEnabled,
+    requirementPending: Boolean(
+      access.twoFactorRequirement || access.seatRequirement,
+    ),
+  });
+  if (gate?.reason === "paidFeaturesDisabled") {
+    const canManage = canManageOrganization(access.memberRole);
+    return (
+      <FatalState
+        action={
+          canManage ? "Open organization settings" : "Return to your library"
+        }
+        message="Paid features are disabled for this organization. An owner or admin can enable them in Organization settings."
+        onAction={() => navigate(canManage ? "/organization" : "/")}
+      />
+    );
+  }
+  if (gate) {
     return (
       <FeatureAccessDenied
-        message={capabilityDenials[capability]}
+        message={gate.message}
         onNavigate={() => navigate("/")}
       />
     );
   }
   return undefined;
 }
-
-/** What someone outside every group granting a page's capability reads. */
-const capabilityDenials: Record<OrganizationCapability, string> = {
-  background_checks:
-    "Background checks group membership is required. An owner or admin can add you to a group with Background checks access, such as HR.",
-  finance: "Finance group membership is required.",
-};
 
 function NoOrganization() {
   return (

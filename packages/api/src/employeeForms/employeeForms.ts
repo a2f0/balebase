@@ -90,6 +90,11 @@ employeeForms.get("/", async (context) => {
 });
 
 employeeForms.post("/", async (context) => {
+  // Someone who handles nothing is refused before the body is read.
+  const access = await requirementAccess(context);
+  if (!access.forms && !access.backgroundChecks) {
+    return context.json({ error: handlerRequired("form") }, 403);
+  }
   const body = await readBody(
     context,
     employeeFormsRoutes.create,
@@ -99,7 +104,7 @@ employeeForms.post("/", async (context) => {
   const memberId = body.memberId || null;
   const invitationId = body.invitationId || null;
   const refusal = assignmentRefusal(
-    await requirementAccess(context),
+    access,
     body.requirements,
     Boolean(invitationId),
   );

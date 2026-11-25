@@ -50,6 +50,30 @@ function addRecruiter(fixture: Fixture) {
   return fixture.app("other", "member");
 }
 
+/** A signed authorization for `requirementId`, with its stored PDF. */
+function signConsent(fixture: Fixture, requirementId: string) {
+  const key = `consents/${requirementId}.pdf`;
+  fixture.files.set(
+    key,
+    new File(["%PDF-1.7"], "consent.pdf", { type: "application/pdf" }),
+  );
+  fixture.database
+    .query(
+      `INSERT INTO employee_screening_consents
+       (id, organization_id, requirement_id, user_id, signature_name,
+        signed_at, disclosure_version, state_notices, document_key,
+        created_at)
+       VALUES ('consent-1', ?, ?, 'employee', 'Homer Simpson', '2026-10-01',
+               'test', '[]', ?, '2026-10-01')`,
+    )
+    .run(orgId, requirementId, key);
+  fixture.database
+    .query(
+      "UPDATE employee_requirements SET checkr_consent_id = 'consent-1' WHERE id = ?",
+    )
+    .run(requirementId);
+}
+
 function json(method: string, body: unknown): RequestInit {
   return {
     body: JSON.stringify(body),
@@ -172,6 +196,24 @@ describe("background check access", () => {
     ]);
   });
 
+  it("gives a check's signed authorization to those with Background checks access, whatever their role", async () => {
+    const fixture = await createFixture();
+    const recruiter = addRecruiter(fixture);
+    const id = await orderedScreening(fixture);
+    signConsent(fixture, id);
+    const download = (client: ReturnType<Fixture["app"]>) =>
+      client.request(`/${id}/checkr/consent`);
+
+    expect((await download(recruiter)).status).toBe(200);
+    expect((await download(fixture.app("owner", "owner"))).status).toBe(200);
+    // The person it's about keeps their own copy.
+    expect((await download(fixture.app("employee", "member"))).status).toBe(
+      200,
+    );
+    setHrMember(fixture, "owner", false);
+    expect((await download(fixture.app("owner", "owner"))).status).toBe(404);
+  });
+
   it("keeps background checks from an owner outside every group that grants them", async () => {
     const fixture = await createFixture();
     configureCheckr(fixture);
@@ -235,6 +277,8 @@ describe("background check access", () => {
       ["/missing/activity", undefined],
       [`/${checkId}/checkr/refresh`, { method: "POST" }],
       ["/missing/checkr/refresh", { method: "POST" }],
+      // Refused before its body is read, valid or not.
+      ["/", jsonPost({ requirements: "nonsense" })],
     ] as const) {
       const response = await employee.request(path, init);
       expect(response.status).toBe(403);
