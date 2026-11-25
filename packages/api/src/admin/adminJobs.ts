@@ -23,13 +23,19 @@ import { listMaintenanceRequests } from "./platformHistory";
 
 const purgeActions = ["user.purged", "organization.purged"] as const;
 
-/** Every job root admins see, maintenance with its saved schedule. */
-async function jobDefinitions(database: D1Database) {
+/**
+ * Every job root admins see, maintenance with its saved schedule. Like the
+ * schedule change reader, an impersonated session does not see who last
+ * changed each schedule.
+ */
+async function jobDefinitions(database: D1Database, impersonated: boolean) {
   const schedules = await readJobSchedules(database);
   const now = new Date();
   return [
     ...maintenanceJobs.map((job) => {
-      const schedule = toJobSchedule(schedules.get(job.id), now);
+      const saved = toJobSchedule(schedules.get(job.id), now);
+      const schedule =
+        saved && impersonated ? { ...saved, updatedBy: null } : saved;
       return {
         description: job.description,
         id: job.id,
@@ -55,7 +61,10 @@ async function jobDefinitions(database: D1Database) {
 const adminJobs = new Hono<ApiEnv>();
 adminJobs.get("/", async (context) =>
   respond(context, adminJobsRoutes.list, {
-    jobs: await jobDefinitions(context.env.DB),
+    jobs: await jobDefinitions(
+      context.env.DB,
+      Boolean(context.get("authSession").session.impersonatedBy),
+    ),
   }),
 );
 adminJobs.get("/runs", async (context) => {
@@ -217,8 +226,11 @@ adminJobs.get("/:jobId/schedule/changes", async (context) => {
   return respond(context, adminJobsRoutes.scheduleChanges, page);
 });
 
+/** One job, for the schedule save, which impersonated sessions cannot make. */
 async function jobDefinition(database: D1Database, jobId: MaintenanceJobId) {
-  const job = (await jobDefinitions(database)).find(({ id }) => id === jobId);
+  const job = (await jobDefinitions(database, false)).find(
+    ({ id }) => id === jobId,
+  );
   if (!job) throw new Error(`Missing job definition for ${jobId}.`);
   return job;
 }

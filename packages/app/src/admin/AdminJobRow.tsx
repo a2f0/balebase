@@ -89,8 +89,8 @@ export function AdminJobRow({
   const menuLabel = `Actions for ${job.name}`;
   const nextRunAt = job.schedule?.nextRunAt;
   return (
+    // While any job action runs, its items are disabled but View history is not.
     <ContextMenu
-      disabled={actions.jobId !== undefined}
       items={jobMenuItems(job, actions, () => onNavigate(adminJobPath(job.id)))}
       label={menuLabel}
     >
@@ -117,7 +117,6 @@ export function AdminJobRow({
           <MenuButton
             {...menuButton}
             busy={actions.jobId === job.id}
-            disabled={actions.jobId !== undefined}
             label={menuLabel}
           />
         </div>

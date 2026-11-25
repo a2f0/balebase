@@ -123,6 +123,8 @@ export async function runDueMaintenance(env: Bindings, scheduledTime: number) {
     }
   }
   const queued = retention ? [retention] : [];
+  // If retention could not be queued, cleanup runs on its own: each file still
+  // waits out its grace period, and the next retention run queues the rest.
   for (const [jobId, cron] of due) {
     if (jobId === "purgeExpiredFreeFormRuns") continue;
     try {
@@ -143,17 +145,16 @@ export async function runDueMaintenance(env: Bindings, scheduledTime: number) {
 }
 
 /**
- * Saves a job's schedule and records the change with the admin's snapshot
- * in one transaction. Returns false, writing nothing, when the admin's
- * stored role is no longer `admin`. Saving the schedule it already has
- * records nothing.
- */
-/**
- * What saving a schedule did: `refused` when the requester's stored role is no
- * longer admin, `unchanged` when the job already had it, and `saved` otherwise.
+ * What saving a schedule did: `refused`, writing nothing, when the requester's
+ * stored role is no longer admin; `unchanged`, recording nothing, when the job
+ * already had that schedule; and `saved` otherwise.
  */
 export type JobScheduleSave = "refused" | "saved" | "unchanged";
 
+/**
+ * Saves a job's schedule and records the change with the admin's snapshot in
+ * one transaction.
+ */
 export async function saveJobSchedule(
   database: D1Database,
   input: {

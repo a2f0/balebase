@@ -692,9 +692,13 @@ it("edits, validates, and pauses a job's schedule", async () => {
   await fill(input, "every day");
   await click("Save schedule");
   expect(saves).toEqual([]);
-  expect(container.textContent).toContain("Enter five cron fields in UTC");
-
-  await chooseAction("Edit schedule");
+  // The prompt asks again, keeping what was typed and saying what is wrong.
+  expect(document.querySelector("dialog")?.textContent).toContain(
+    "Enter five cron fields in UTC",
+  );
+  expect(document.querySelector<HTMLInputElement>("dialog input")?.value).toBe(
+    "every day",
+  );
   await fill(document.querySelector("dialog input"), "0 3 * * *");
   await click("Save schedule");
   expect(saves).toEqual([{ cron: "0 3 * * *", enabled: true }]);

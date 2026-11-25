@@ -334,6 +334,17 @@ it("changes nothing for a demoted admin or an impersonated session", async () =>
 
   const impersonated = fixture("admin", "another-admin");
   impersonated.insertActor();
+  impersonated.database.exec(`UPDATE job_schedules SET updated_by = 'actor',
+    updated_by_name = 'Admin Actor', updated_by_email = 'actor@example.com'
+    WHERE job_id = 'purgeRequestedUsers'`);
+  // The catalog still lists the schedule, but not who last changed it.
+  expect(
+    (await catalog(impersonated)).jobs.find(
+      ({ id }) => id === "purgeRequestedUsers",
+    )?.schedule,
+  ).toMatchObject({ cron: "17 * * * *", updatedBy: null });
+  impersonated.database.exec(`UPDATE job_schedules SET updated_by = NULL,
+    updated_by_name = NULL, updated_by_email = NULL`);
   for (const response of [
     await impersonated.request(
       "/jobs/purgeRequestedUsers/schedule",

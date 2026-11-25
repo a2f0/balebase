@@ -46,22 +46,8 @@ export function useJobActions({
   }
 
   async function editSchedule(job: JobDefinition) {
-    const answer = await promptDialog({
-      title: `Edit the schedule for ${job.name}`,
-      message: scheduleHelp(job),
-      label: "Cron schedule (UTC)",
-      defaultValue: job.schedule?.cron ?? "17 * * * *",
-      placeholder: "17 * * * *",
-      maxLength: 100,
-      required: true,
-      confirmLabel: "Save schedule",
-    });
+    const answer = await askForSchedule(job);
     if (answer === null) return;
-    const problem = cronProblem(answer);
-    if (problem) {
-      action.setError(problem);
-      return;
-    }
     await act(job, async () =>
       onJobChanged(
         await api.adminJobs.saveSchedule(job.id, {
@@ -108,6 +94,30 @@ export function useJobActions({
     setError: action.setError,
     setScheduleEnabled,
   };
+}
+
+/** Asks until the answer is a schedule that runs, or the admin cancels. */
+async function askForSchedule(job: JobDefinition) {
+  let value = job.schedule?.cron ?? "17 * * * *";
+  let problem: string | null = null;
+  for (;;) {
+    const answer = await promptDialog({
+      title: `Edit the schedule for ${job.name}`,
+      message: problem
+        ? `${problem}\n\n${scheduleHelp(job)}`
+        : scheduleHelp(job),
+      label: "Cron schedule (UTC)",
+      defaultValue: value,
+      placeholder: "17 * * * *",
+      maxLength: 100,
+      required: true,
+      confirmLabel: "Save schedule",
+    });
+    if (answer === null) return null;
+    problem = cronProblem(answer);
+    if (!problem) return answer;
+    value = answer;
+  }
 }
 
 function scheduleHelp(job: JobDefinition) {

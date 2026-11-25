@@ -253,7 +253,10 @@ hourly as production does, against its own data. To keep staging manual,
 pause its schedules at **Root Admin → Jobs** right after deploying. Until the
 Cron Trigger change propagates, the old `17 * * * *` trigger may still fire;
 it reaches the same schedule check, and run IDs keep it from queueing
-anything twice.
+anything twice. Before rolling the API back past this release, cancel
+or let finish every queued dry run: the previous Worker does not know dry
+runs, so it would run one as a real run, and it can join a manual request to
+an active dry run.
 
 After deployment, start a small maintenance job, close and reopen the page, and
 verify its queued/running/completed history and named output. Start a dry run
