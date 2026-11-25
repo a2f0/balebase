@@ -149,6 +149,9 @@ it.
 
 - D1 counts rows that triggers write in `meta.changes`, and the test D1 does
   too, so check a guarded write's count as zero or non-zero, never `!== 1`.
+- `bun run test:d1` (part of `bun run test`) applies every migration to a
+  throwaway local D1. The API tests use bun:sqlite, which accepts SQL that D1
+  refuses, such as a compound SELECT of more than five terms.
 - Migrations run before the new Worker is published
   ([deploy production](docs/operations.md#deploy-production)), so a migration
   must not drop a trigger, column, or constraint the previous Worker relies

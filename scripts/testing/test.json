@@ -6,6 +6,10 @@
       "command": ["bunx", "--bun", "--no-install", "turbo", "run", "test"]
     },
     {
+      "label": "test:d1",
+      "command": ["bun", "--bun", "run", "test:d1"]
+    },
+    {
       "label": "test:deploy",
       "command": ["bun", "--bun", "run", "test:deploy"]
     },

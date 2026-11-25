@@ -1418,8 +1418,8 @@ Delivery checks that the original person still belongs to the active
 organization and the same report remains complete, with no newer webhook
 waiting to be reconciled. Concurrent deliveries claim the email before sending;
 failed sends retry with delays starting at five minutes and doubling up to one
-day, through the hourly Checkr maintenance job
-(or its manual admin action in staging, where scheduled jobs are disabled).
+day, through the Checkr maintenance job, which runs on its schedule (hourly
+by default) or when an admin runs it.
 Retries stop after ten attempts or seven days. Maintenance reports delivery
 failures and abandoned messages separately from report refreshes; a mail
 failure does not mark otherwise successful report maintenance as failed.
