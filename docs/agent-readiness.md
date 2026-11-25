@@ -47,7 +47,7 @@ separate the effect of the documentation from model variation.
   example, cookies and CORS, `fetch` outside a browser, and the shared and
   native wrappers.
 - CONTRIBUTING links the issue and offline product documentation and names the
-  general, audit, and offline entry points.
+  general, form, and offline entry points.
 - The assessment tooling recovers from stale configuration, validates
   calibration output, and isolates worker transcripts.
 

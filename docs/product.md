@@ -221,7 +221,7 @@ Apply migration `0048_create_user_deletion_requests.sql` before deploying this
 feature. The `purgeRequestedUsers` job processes up to 25 requests per run after
 30 days, both hourly and on demand. Accounts remain active during the waiting
 period. Admin and system accounts, members of active organizations, and users
-referenced by retained audit, financial, or contract records are skipped. Contract
+referenced by retained form, financial, or contract records are skipped. Contract
 creators, senders, and event actors remain linked to their history. Blocked requests
 rotate through the batch so they do not starve later requests. Organizations and
 their retained records must be managed separately; this does not erase all data
@@ -366,7 +366,7 @@ them, or their leaving revokes their unexpired keys, recorded as
 `api_key.revoked` naming who made the change and why, and the API keys page
 shows the reason; regaining the role or rejoining does not bring a key back.
 Send it as `Authorization: Bearer <key>`. Keys reach
-the workspace routes: activity, audits, businesses, contracts, employee forms,
+the workspace routes: activity, forms, businesses, contracts, employee forms,
 equipment, finance, inbox, library folders and files, groups, `/api/me`, the
 people list, and (read-only) projects. Read keys may only use `GET`. Account
 settings, billing, organization settings, API key management, root
@@ -482,30 +482,31 @@ soft delete.
 ## Projects
 
 The organization-scoped Projects page at `/projects` groups members around the
-audit forms they use. Each project has a name, an optional description, members,
-and the audit forms turned on for it: published global forms and the
-organization's own published forms. A form stays turned on as it gets new
-versions, so members always receive its current version. Every member can view
-projects; organization owners and admins create, edit, delete, and restore them,
-add and remove members, and turn forms on and off. Deleting a project hides it:
-its audits keep belonging to it, it takes no new audits, its members and forms
-stay, and it is listed under **Deleted projects** on the Projects page, where
-owners and admins restore it (`GET /api/projects/deleted`,
+form templates they use. Each project has a name, an optional description,
+members, and the templates turned on for it: published global templates and
+the organization's own published templates. A template stays turned on as it
+gets new versions, so members always receive its current version. Every member
+can view projects; organization owners and admins create, edit, delete, and
+restore them, add and remove members, and turn templates on and off. Deleting a
+project hides it: its forms keep belonging to it, it takes no new forms, its
+members and templates stay, and it is listed under **Deleted projects** on the
+Projects page, where owners and admins restore it (`GET /api/projects/deleted`,
 `POST /api/projects/:id/restore`). A person who leaves or is removed
 from the organization drops out of its projects' members without the projects
 being changed, and appears in them again on rejoining. Editing a project's name
 or description requires `expectedRevision` from its latest response; an edit
-made from an older revision returns 409. Drafts and unpublished forms are not
-offered, and turned-on forms that are later unpublished or discarded stay turned
-on but are no longer listed, counted, or downloaded; publishing an unpublished
-form again restores it. Each project page has four tabs: **Members**, **Audit
-forms** (start audits from the forms turned on; see [Audits on this
-device](#audits-on-this-device)), **Project setup** (owners and admins turn
-published forms on and off), and **Activity**. For owners and admins, each
-project on the Projects page has a menu (its menu button, or right-click) with
-**Edit** and **Delete**, each deleted project one with **Restore**, and each
-member on **Members** one with **Remove from project**. Creating, editing,
-deleting, and restoring a project, membership changes, and form changes are
+made from an older revision returns 409. Drafts and unpublished templates are
+not offered, and turned-on templates that are later unpublished or discarded
+stay turned on but are no longer listed, counted, or downloaded; publishing an
+unpublished template again restores it. Each project page has four tabs:
+**Members**, **Forms** (start forms from the templates turned on; see
+[Forms on this device](#forms-on-this-device)), **Project setup** (owners and
+admins turn published templates on and off), and **Activity**. For owners and
+admins, each project on the Projects page has a menu (its menu button, or
+right-click) with **Edit** and **Delete**, each deleted project one with
+**Restore**, and each member on **Members** one with **Remove from project**.
+Creating, editing, deleting, and restoring a project, membership changes, and
+template changes are
 recorded in Activity, which keeps a deleted project's history. Migration
 `0078_create_projects.sql` adds the project tables, and
 `0091_require_audit_projects.sql` the soft delete, with a trigger that refuses
@@ -652,10 +653,10 @@ organization queues them in `deleted_object_cleanup` for the scheduled purge.
 ## Audit activity
 
 The workspace **Activity** page (`/activity`) brings together changes to forms,
-audits, issues, equipment, organization roles, API keys, transaction
+forms, issues, equipment, organization roles, API keys, transaction
 annotations and categories, contracts, and the forms and checks requested of
 people. Filter by resource to follow a particular area;
-audit and transaction filters include their attached issues, while **Workspace
+form and transaction filters include their attached issues, while **Workspace
 issues** shows standalone issues. Transactions are available only to people
 with Finance access, and requested forms and checks only to organization
 owners and admins. Events show the actor, time, resource, and recorded change
@@ -672,66 +673,67 @@ Historical events are labeled **From existing records**; unknown past edits
 cannot be reconstructed. See [audit activity](audit-activity.md) for the model,
 producer and reader requirements, and the coverage review skill.
 
-## Audits and checklists
+## Forms and templates
 
-Authenticated users curate organization-scoped checklist templates at
-`/audits` and review the organization's audits there; audits are not started
-from `/audits`. Every audit belongs to a project: `audits.project_id` is a
-required foreign key to `projects`, and an audit starts from a project's
-**Audit forms** tab (see [Audits on this device](#audits-on-this-device)), or
-through `POST /api/audits/templates/:id/runs` with a `projectId` the form is
-turned on for, which is how API keys and the MCP `start_audit` tool start one.
-Audit lists and pages name each audit's project, marking a deleted one.
-Each form on `/audits` has a menu (its menu button, or right-click) with
+Authenticated users curate the organization's form templates at `/forms` and
+review the organization's forms there; forms are not started from `/forms`.
+Every form belongs to a project: `forms.project_id` is a required foreign key
+to `projects`, and a form starts from a project's **Forms** tab (see
+[Forms on this device](#forms-on-this-device)), or through
+`POST /api/forms/templates/:id/runs` with a `projectId` the template is turned
+on for, which is how API keys and the MCP `start_form` tool start one.
+Form lists and pages name each form's project, marking a deleted one.
+Each template on `/forms` has a menu (its menu button, or right-click) with
 **Assign projects** and **Customize** (**Edit** for the organization's own
-forms). Each form's page on `/audits` has a **Projects** tab listing the organization's
-projects with whether the form is on for each; owners and admins turn a
-published form on or off per project there, as each project's **Project
-setup** does (`GET /api/projects/forms/:templateId`).
+templates). Each template's page on `/forms` has a **Projects** tab listing the
+organization's projects with whether the template is on for each; owners and
+admins turn a published template on or off per project there, as each
+project's **Project setup** does (`GET /api/projects/templates/:templateId`).
 Migration `0091_require_audit_projects.sql` makes the column required and
-removes the audits that had no project, with their issues and history. Audits
-record pass/fail/N/A or text responses and
-raise issues with priorities and optional organization-member assignees. Audit
-issues can include a description, be reassigned, and have up to ten JPEG, PNG,
-GIF, or WebP images attached. Image metadata is organization-scoped in D1 and
-the private image bytes are stored under organization and issue prefixes in R2.
-The Cloudflare Images binding validates image structure, type, and dimensions
-and normalizes uploads to a single non-animated frame before anything is written
-to storage.
-Audit runs snapshot their template so later template edits do not rewrite
-history. Each forms list shows how many audits were started from each form,
-from any of its versions, not counting discarded audits: the active
-organization's audits on the Audits page, and every organization's in
-**Global Audits**.
-Organization forms start as drafts. Organization owners and admins publish and
-unpublish them from the form's editor; publication saves a new version like any
-other save, and later saves keep the form's status. Only published forms can be
-turned on for [projects](#projects); drafts and unpublished forms stay usable
-within the organization.
-Root admins manage global forms in **Global Audits**. New forms are private
-drafts until published. Published forms can be unpublished and published again;
-unpublishing hides them from organizations and prevents new runs and copies,
-while preserving versions and existing audit runs. Drafts and unpublished forms
-can be discarded; published forms must be unpublished first. Discarded forms
-leave the admin list for its **Discarded forms** section, which shows who
-discarded each one and when it will be deleted. Restoring a discarded form saves
-a new version with the status it had before, a draft or an unpublished form; a
-restore never publishes it. The **Purge discarded global forms** job
-(`purgeDiscardedAuditForms`) permanently deletes up to 100 forms discarded at
-least 30 days ago per run, with their versions and history, as part of hourly
-production maintenance or from **Root Admin → Jobs**. Audits started from a
-purged form keep their own copy of it, and projects it was turned on for lose
-it; each such project's activity shows the removal by Balebase maintenance.
-The deletion rechecks eligibility, so a restore committed first keeps the
-form. Discards and restores appear in the form's Activity as their own events.
-Until the purge, **History** on a discarded form shows its Activity, so root
-admins can see who made and published it before restoring it, and its
-versions stay readable through `/api/admin/audit-templates/:id/versions`.
+removes the forms that had no project, with their issues and history. Forms
+record pass/fail/N/A or text responses and raise issues with priorities and
+optional organization-member assignees. Form issues can include a description,
+be reassigned, and have up to ten JPEG, PNG, GIF, or WebP images attached.
+Image metadata is organization-scoped in D1 and the private image bytes are
+stored under organization and issue prefixes in R2. The Cloudflare Images
+binding validates image structure, type, and dimensions and normalizes uploads
+to a single non-animated frame before anything is written to storage.
+Each form snapshots its template so later template edits do not rewrite
+history. Each template list shows how many forms were started from each
+template, from any of its versions, not counting discarded forms: the active
+organization's templates on the Forms page, and every organization's in
+**Global templates**.
+Organization templates start as drafts. Organization owners and admins publish
+and unpublish them from the template's editor; publication saves a new version
+like any other save, and later saves keep the template's status. Only published
+templates can be turned on for [projects](#projects); drafts and unpublished
+templates stay usable within the organization.
+Root admins manage global templates in **Global templates**. New templates are
+private drafts until published. Published templates can be unpublished and
+published again; unpublishing hides them from organizations and prevents new
+forms and copies, while preserving versions and existing forms. Drafts and
+unpublished templates can be discarded; published templates must be
+unpublished first. Discarded templates leave the admin list for its
+**Discarded templates** section, which shows who discarded each one and when it
+will be deleted. Restoring a discarded template saves a new version with the
+status it had before, a draft or an unpublished template; a restore never
+publishes it. The **Purge discarded global templates** job
+(`purgeDiscardedFormTemplates`) permanently deletes up to 100 templates
+discarded at least 30 days ago per run, with their versions and history, as
+part of hourly production maintenance or from **Root Admin → Jobs**. Forms
+started from a purged template keep their own copy of it, and projects it was
+turned on for lose it; each such project's activity shows the removal by
+Balebase maintenance. The deletion rechecks eligibility, so a restore committed
+first keeps the template. Discards and restores appear in the template's
+Activity as their own events. Until the purge, **History** on a discarded
+template shows its Activity, so root admins can see who made and published it
+before restoring it, and its versions stay readable through
+`/api/admin/form-templates/:id/versions`.
 Apply migration `0079_restore_discarded_audit_forms.sql`, which names those
-events, before deploying. Its job run keeps the number of forms purged.
-Publishing and unpublishing a form, organization or global, appear in its
+events, before deploying. Its job run keeps the number of templates purged.
+Publishing and unpublishing a template, organization or global, appear in its
 Activity as their own events; a save that keeps the status is an ordinary saved
-version. Organizations see a global form's publications but not its
+version. Organizations see a global template's publications but not its
 unpublications, which name unpublished versions.
 Publication changes save a new version, including the editor's current changes,
 and reject stale versions just like other template saves. Organizations can only
@@ -740,43 +742,49 @@ private to root admins.
 Apply migration `0058_publish_legacy_global_audits.sql` before deploying these
 controls. Earlier global versions were shared regardless of their stored draft
 status; the migration marks them published to preserve their existing availability.
-The workspace **Activity** page and each form and audit's Activity section show
-who created forms, started audits, changed answers, completed or reopened audits,
-raised or reassigned issues, resolved or reopened issues, and attached or removed
-images. Answer history includes the previous and new values; each question also
-shows its last saved editor. Unsaved answers are labeled, and concurrent edits
-require reloading before overwriting another person's saved work.
+The workspace **Activity** page and each form and template's Activity section
+show who created templates, started forms, changed answers, completed or
+reopened forms, raised or reassigned issues, resolved or reopened issues, and
+attached or removed images. Answer history includes the previous and new
+values; each question also shows its last saved editor. Unsaved answers are
+labeled, and concurrent edits require reloading before overwriting another
+person's saved work.
 
 Record pages put each part of the record on its own tab, with **Activity**
-last: a project's **Members**, **Audit forms**, and **Activity**; a library
-folder's **Files**, **Emails**, and **Activity**; an audit's **Checklist**,
-**Issues**, and **Activity**. Equipment, businesses, issues, contract and audit
+last: a project's **Members**, **Forms**, and **Activity**; a library
+folder's **Files**, **Emails**, and **Activity**; a form's **Questions**,
+**Issues**, and **Activity**. Equipment, businesses, issues, contract and form
 templates, finance connections, accounts, and transactions, inbox messages,
 requests, members, and root admin organizations and jobs follow the same
 pattern. Switching tabs keeps unsaved edits on the others.
 
-`/api/audits/templates/:id/activity` and `/api/audits/runs/:id/activity`
-provide resource histories. Shared global form activity is visible through
-its form history.
-Saving a run requires `expectedRevision` from its latest detail response; stale
-revisions return 409, and missing or invalid revisions return 400.
+`/api/forms/templates/:id/activity` and `/api/forms/runs/:id/activity`
+provide resource histories. Shared global template activity is visible through
+its template history.
+Saving a form requires `expectedRevision` from its latest detail response;
+stale revisions return 409, and missing or invalid revisions return 400.
 Migration `0049_create_activity_events.sql` imports known creators and template
 versions as historical records. Earlier answer edits and completion actors
 were not stored and cannot be reconstructed.
 
-Customizing a global template creates a new organization-scoped form instead
-of changing the shared template or its version history. The copy records the
-global form and the published version the editor started from (`sourceVersion`,
-which may be older than the current one), and its Activity names them; a
-client that names no version records only the form, named as currently
-published. A draft or unpublished source version returns 404, and a global
-form changed since it was read returns 409. Apply migration
+Customizing a global template creates a new organization-scoped template
+instead of changing the shared template or its version history. The copy
+records the global template and the published version the editor started from
+(`sourceVersion`, which may be older than the current one), and its Activity
+names them; a client that names no version records only the template, named as
+currently published. A draft or unpublished source version returns 404, and a
+global template changed since it was read returns 409. Apply migration
 `0080_record_form_publication_and_copies.sql`, which adds that source and the
 publication events, before deploying. Platform administrators
 use a separate management action when they intentionally publish a new global
 version.
 
-The global NFPA 70E readiness checklist is a shared starting point based on
+Migration `0107_rename_audits_to_forms.sql` renamed the feature from audits to
+forms: its tables, the stored type, action, and job names in activity history
+and job runs, and the template library's actor. Each one carries its rows over
+rather than recreating them, so nothing stored before it is lost.
+
+The global NFPA 70E readiness template is a shared starting point based on
 broad electrical-safety themes. It is not an official checklist,
 certification, or substitute for the current standard, an employer's required
 risk assessment, or qualified professional judgment. Consult the
@@ -787,33 +795,33 @@ when adapting it to a workplace.
 The global U.S. residential construction baseline adds a jurisdiction-portable
 starting point for detached one- and two-family dwellings and townhouses. Its
 253 controls retain source, applicability, trade, phase, hazard, evidence, and
-risk metadata before being compiled into the current checklist format. It is a
+risk metadata before being compiled into the current template format. It is a
 baseline rather than a code-compliance certification; see the
-[residential audit library](residential-audit-library.md) for its source,
+[residential template library](residential-template-library.md) for its source,
 licensing, validation, and jurisdiction-overlay rules.
 
-## Audits on this device
+## Forms on this device
 
-Project audits are device-first. The device keeps the signed-in member's
-projects, the published forms turned on for them, and the organization's people
-(for issue assignees), and audits start on the device whether or not it is
+Project forms are device-first. The device keeps the signed-in member's
+projects, the published templates turned on for them, and the organization's people
+(for issue assignees), and forms start on the device whether or not it is
 online. There is no separate offline page: the Projects page shows a status
-line for this device's work, and each project's **Audit forms** tab lists its
-forms with **Start audit** and, under **On this device**, the audits started
+line for this device's work, and each project's **Forms** tab lists its
+templates with **Start form** and, under **On this device**, the forms started
 here for that project: drafts, in progress (progress waiting to sync, synced,
 or changed since the last sync), completed and waiting to sync, not synced
-(with the reason), or synced (opening the server audit).
+(with the reason), or synced (opening the server form).
 
 The device syncs its projects after each sign-in, when the app regains focus or
 the device reconnects, and every minute while online. `GET /api/offline/sync`
 returns the whole set with a cursor, or `changed: false` when the device's
 cursor is current. The cursor is a pair of counters, one for the organization
-and one for global forms, in `offline_sync_revisions` (migration
+and one for global templates, in `offline_sync_revisions` (migration
 `0090_device_first_projects.sql`); triggers advance them in the same transaction
-as any change to a project, its members or forms, a form's versions, the
+as any change to a project, its members or templates, a template's versions, the
 organization's membership, or a member's name. Counters rather than timestamps
 mean clock skew or two writes in one millisecond cannot hide a change, and a
-removal (a form unbound or unpublished, the person leaving the project or the
+removal (a template unbound or unpublished, the person leaving the project or the
 organization) changes the cursor without leaving a row to read. The set and
 its counters are read in one batch, so the cursor names the state the set came
 from. The device stores the set and its cursor in one IndexedDB transaction,
@@ -827,29 +835,29 @@ any active transport as online, because Android reports unvalidated networks as
 disconnected) and from the browser elsewhere. A request that fails while the
 device is online means the API is unreachable, and sync keeps retrying.
 
-An audit started on the device keeps the form version it started from, so a
-form unpublished, edited, discarded, or turned off for the project after
-download does not strand it: the API accepts an audit against any version
-that was published until the form is purged. Answers save to the device as
-they are entered, each with the UTC time it was given, and drafts survive
-reopening the app. A draft stays on the device until its progress is saved,
+A form started on the device keeps the template version it started from, so a
+template unpublished, edited, discarded, or turned off for the project after
+download does not strand it: the API accepts a form against any template
+version that was published until the template is purged. Answers save to the
+device as they are entered, each with the UTC time it was given, and drafts
+survive reopening the app. A draft stays on the device until its progress is saved,
 an issue is raised on it, or it is completed.
 
-**Save progress** shares a draft: it puts the audit on the server as an
-in-progress audit the organization can see. From then on its answers sync
+**Save progress** shares a draft: it puts the form on the server as an
+in-progress form the organization can see. From then on its answers sync
 both ways while the device is online. Answers given on the device go out on
 the next sync, together, and the device reads the server's copy on every
 sync of its projects and with each confirmed write, so answers given online
 or on another device show here. Answering continues on the device
-throughout, offline or not, and **Open synced audit** opens the server's
-copy. **Complete audit** validates required answers, seals the audit, and
+throughout, offline or not, and **Open synced form** opens the server's
+copy. **Complete form** validates required answers, seals the form, and
 syncs its completion, putting it on the server first if it is not there
-yet; an audit completed elsewhere is sealed on the device once nothing from
+yet; a form completed elsewhere is sealed on the device once nothing from
 it is still on its way, and an answer the device was still saving when it was
 sealed is sent anyway, so the server records it as discarded rather than the
-device dropping it. The device keeps reading completed audits too, so one
+device dropping it. The device keeps reading completed forms too, so one
 reopened online opens on the device again once no completion from the device
-is still on its way. Raise issues from an audit's items, at any point:
+is still on its way. Raise issues from a form's items, at any point:
 saving an issue shares a draft with the server, so the issue syncs onto it
 without waiting for completion. Each issue supports up to ten JPEG, PNG, GIF,
 or WebP photos of at most 10 MB, the same limits as online. A non-empty photo
@@ -859,7 +867,7 @@ together.
 
 Answers merge last writer wins, per item, by the time each was given: the
 device's UTC clock for answers given on a device, the server's for answers
-saved online (`audits.answer_meta`, migration
+saved online (`forms.answer_meta`, migration
 `0099_record_answer_times.sql`). Each stored answer also keeps the version of
 the write that set it: the operation ID for a device's write, a fresh ID for
 each online save. Each answer a device sends names the version of the server
@@ -867,45 +875,45 @@ answer shown when it was given, captured at that moment, so two answers given
 in the same millisecond still tell apart. When the server's answer is still
 that one, the device's answer replaces it as an ordinary change. When someone
 else answered the item in between, the two collide: the later answer stays
-(the server's on a tie), and an `audit.answer_conflict_resolved` event records
+(the server's on a tie), and a `form.answer_conflict_resolved` event records
 both answers with who gave each and when. Agreeing answers never collide, but
 the answer keeps the later time, so the outcome does not depend on the order
 answers arrive in. A cleared answer keeps its time, version, and who cleared
 it, so it collides the same way and an older answer cannot bring it back
-unnoticed. A completed audit keeps its answers, so each differing answer a
+unnoticed. A completed form keeps its answers, so each differing answer a
 device sends after completion is recorded as discarded. The device shows the
 kept answer and notes under the item that the server did not keep its own;
 answering the item again clears the note. Answer history is dated by the
 time each answer was given. Since device clocks are trusted, a device whose
 clock runs ahead wins collisions it should lose.
 
-Each sync of an audit is an operation in `POST /api/offline/operations`:
-`auditStart` creates the audit in progress with its answers so far, and
-`auditSave` merges the answers given since the device's last write,
-completing the audit when it carries the device-reported start and
+Each sync of a form is an operation in `POST /api/offline/operations`:
+`formStart` creates the form in progress with its answers so far, and
+`formSave` merges the answers given since the device's last write,
+completing the form when it carries the device-reported start and
 completion times and every required item is still answered after the merge.
-When a required answer was cleared elsewhere, the answers save, the audit
+When a required answer was cleared elsewhere, the answers save, the form
 stays in progress, and the device opens it again for that answer; it does
-the same when the newest copy it holds shows the audit reopened. Both
+the same when the newest copy it holds shows the form reopened. Both
 operations answer with the server's copy, which
-`GET /api/offline/audits/:auditId` also serves. A merge commits with its
+`GET /api/offline/forms/:formId` also serves. A merge commits with its
 history and receipt only over the revision it read; a write landing in
 between makes it merge again over the newer copy, and after three tries the
-device retries later. A discarded audit refuses saves; the device keeps its
-answers and shows the reason. A write whose receipt outlived its audit
+device retries later. A discarded form refuses saves; the device keeps its
+answers and shows the reason. A write whose receipt outlived its form
 replays without a copy; the device keeps that write unsynced, with its
-answers, and says the audit is no longer on the server.
+answers, and says the form is no longer on the server.
 
 Queued work is sent while the app is open and online: right away, on focus, on
-reconnecting, and on a 30-second timer. It creates the audit first, recorded
-against its project (`audits.project_id`; a project deleted since still takes
+reconnecting, and on a 30-second timer. It creates the form first, recorded
+against its project (`forms.project_id`; a project deleted since still takes
 it, and one outside the organization is refused), then its saves in order,
 and its issues, then each issue's photos. **Retry sync** on the status line
 restarts held-back work; temporary failures back off to five minutes. Repeated
 requests carry the same IDs; the server commits a receipt with each mutation,
 including image activation, so a lost response does not duplicate records or
-activity. The server stamps its own times on audits, so audit lists and their
-cursors stay in server order; audit history separately records the
+activity. The server stamps its own times on forms, so form lists and their
+cursors stay in server order; form history separately records the
 device-reported start and completion times.
 
 Device data belongs to the original account, organization, and API
@@ -913,24 +921,24 @@ environment. Sign-out or account and organization switching locks the local view
 without deleting pending work; signing back in to that account and organization
 unlocks it. When the session cannot be confirmed (opening the app without a
 connection), or Projects cannot load from the API, Projects shows the device's
-copy: the project list, each project's forms and device audits, and open
-audits; other pages need a connection. A page already open when coverage drops
+copy: the project list, each project's templates and device forms, and open
+forms; other pages need a connection. A page already open when coverage drops
 stays as it is, so nothing typed into it is lost. Session expiry
 keeps the local editor open, including unsaved issue details and selected
 photos. The API rechecks authentication, organization access, and assignees
 before accepting writes; an expired session or rejected operation keeps local
 data and stops its dependents.
 
-Audits started for a project the device no longer lists (deleted, or one the
-person left) stay under **Other audits on this device** on the Projects page,
+Forms started for a project the device no longer lists (deleted, or one the
+person left) stay under **Other forms on this device** on the Projects page,
 where they can still be finished and synced.
 
 Device-first projects are a deliberate clean break, made while the product is
-pre-release: each new version of the device store starts empty,
-`/api/offline/forms` is gone, and the API accepts only audits that name their
-project. There are no compatibility paths for older clients.
+pre-release: each new version of the device store starts empty, the earlier
+offline template download is gone, and the API accepts only forms that name
+their project. There are no compatibility paths for older clients.
 
-Existing server audits, template editing, transaction issues, and edits to
+Existing server forms, template editing, transaction issues, and edits to
 queued issues require connectivity. Open a synced record to make further
 changes.
 Sync does not run while the app is closed. Local copies use the browser or
@@ -941,7 +949,7 @@ copies, including unsynced work.
 
 ## Issues and transaction activity
 
-The sidebar's **Issues** page (`/issues`) brings audit issues, transaction issues,
+The sidebar's **Issues** page (`/issues`) brings form issues, transaction issues,
 and standalone workspace issues into one list. Filter by status or source and
 search titles. Issues have a title, description, priority, assignee, open/resolved
 status, and their own activity history. Updates require `expectedRevision` and
@@ -952,10 +960,10 @@ Transaction detail pages show related issues and annotation activity, plus a
 codes, payment channel, institution and account, and Plaid transaction IDs.
 
 The shared `issues` table uses `target_type` and `target_id`,
-with an optional audit item ID. Existing audit issue IDs, images, and activity
-are preserved; audit image management remains in the source audit. Unavailable
+with an optional form item ID. Existing form issue IDs, images, and activity
+are preserved; form image management remains in the source form. Unavailable
 sources hide their issues from the list and make details read only. Purging a
-source removes its issues, and audit image cleanup still queues stored files.
+source removes its issues, and form image cleanup still queues stored files.
 The `/api/issues` routes and matching MCP tools support listing, creating,
 editing, assigning, resolving, reopening, and reading issue history.
 
@@ -1388,12 +1396,12 @@ never returns them.
 ## Billing and plans
 
 Every organization starts on the cardless Free plan with one usable member
-seat, up to five organization form templates, and 30 days of audit-run history.
-An hourly Worker task removes older Free-plan audit runs and their associated
-issue images, and records on the organization's activity how many runs it
-removed (`organization.audit_runs_purged`, by Balebase maintenance). Balebase
+seat, up to five organization form templates, and 30 days of form history.
+An hourly Worker task removes older Free-plan forms and their associated
+issue images, and records on the organization's activity how many forms it
+removed (`organization.form_runs_purged`, by Balebase maintenance). Balebase
 Pro costs $10 per active organization member each month
-and includes unlimited form templates and audit history. Membership hooks update
+and includes unlimited form templates and form history. Membership hooks update
 the licensed Stripe subscription quantity, and an hourly reconciliation repairs
 any quantity drift.
 

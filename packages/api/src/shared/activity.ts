@@ -123,7 +123,7 @@ export async function findActivity(
     bindings.push(root.type, root.id);
     if (root.issueId) {
       filters.push(
-        "((subject_type IN ('issue', 'audit_issue') AND subject_id = ?) OR (subject_type = 'audit_issue_image' AND json_extract(details, '$.issueId') = ?))",
+        "((subject_type IN ('issue', 'form_issue') AND subject_id = ?) OR (subject_type = 'form_issue_image' AND json_extract(details, '$.issueId') = ?))",
       );
       bindings.push(root.issueId, root.issueId);
     }
@@ -134,7 +134,7 @@ export async function findActivity(
   }
   if (root?.publishedTemplateOnly) {
     filters.push(`EXISTS (
-      SELECT 1 FROM audit_template_versions AS version
+      SELECT 1 FROM form_template_versions AS version
       WHERE version.template_id = activity_events.root_id
         AND version.version = json_extract(activity_events.details, '$.version')
         AND version.status = 'published'
@@ -155,10 +155,10 @@ export async function findActivity(
   };
 }
 
-export function auditAnswerActivityStatement(
+export function formAnswerActivityStatement(
   database: D1Database,
   organizationId: string,
-  auditId: string,
+  formId: string,
 ) {
   return database
     .prepare(
@@ -166,14 +166,14 @@ export function auditAnswerActivityStatement(
          SELECT activity_events.*,
                 ROW_NUMBER() OVER (PARTITION BY subject_id ORDER BY id DESC) AS latest
          FROM activity_events
-         WHERE organization_id = ? AND root_type = 'audit_run' AND root_id = ?
-           AND action = 'audit.answer_changed'
+         WHERE organization_id = ? AND root_type = 'form_run' AND root_id = ?
+           AND action = 'form.answer_changed'
        ) WHERE latest = 1`,
     )
-    .bind(organizationId, auditId);
+    .bind(organizationId, formId);
 }
 
-export function toAuditAnswerActivity(rows: ActivityRow[]) {
+export function toFormAnswerActivity(rows: ActivityRow[]) {
   return Object.fromEntries(
     rows.map((row) => [
       row.subject_id,

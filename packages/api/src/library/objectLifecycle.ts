@@ -1,1 +1,1 @@
-export const auditIssueImageUploadGraceMilliseconds = 15 * 60 * 1000;
+export const formIssueImageUploadGraceMilliseconds = 15 * 60 * 1000;

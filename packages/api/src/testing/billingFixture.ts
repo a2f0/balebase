@@ -152,7 +152,7 @@ export async function webhookSignature(
   return [...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-export function insertAudit(
+export function insertForm(
   database: Database,
   id: string,
   target: string,
@@ -160,7 +160,7 @@ export function insertAudit(
 ) {
   database
     .query(
-      `INSERT INTO audits
+      `INSERT INTO forms
        (id, organization_id, project_id, template_name, definition, responses,
         status, started_by, created_at, updated_at)
        VALUES (?, ?, ?, 'Example form', '{"version":1,"sections":[]}', '{}',

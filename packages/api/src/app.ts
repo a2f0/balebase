@@ -3,11 +3,10 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { version as apiVersion } from "../package.json";
 import { activity } from "./activity/activity";
-import { adminAuditTemplates } from "./admin/adminAuditTemplates";
+import { adminFormTemplates } from "./admin/adminFormTemplates";
 import { adminJobs } from "./admin/adminJobs";
 import { adminOrganizations } from "./admin/adminOrganizations";
 import { adminUsers } from "./admin/adminUsers";
-import { audits } from "./audits/audits";
 import type { ApiEnv } from "./auth/apiEnv";
 import { apiKeys, mcpToolRequest } from "./auth/apiKeys";
 import { createAuth } from "./auth/auth";
@@ -30,6 +29,7 @@ import { handleCheckrWebhook } from "./employeeForms/checkrSync";
 import { employeeForms } from "./employeeForms/employeeForms";
 import { equipment } from "./equipment/equipment";
 import { finance } from "./finance/finance";
+import { forms } from "./forms/forms";
 import { inbox } from "./inbox/inbox";
 import { smtpIngress } from "./inbox/smtpIngress";
 import { issues } from "./issues/issues";
@@ -154,7 +154,7 @@ app.get("/api/admin", (context) =>
   }),
 );
 app.route("/api/admin/jobs", adminJobs);
-app.route("/api/admin/audit-templates", adminAuditTemplates);
+app.route("/api/admin/form-templates", adminFormTemplates);
 app.route("/api/admin/organizations", adminOrganizations);
 app.route("/api/admin/users", adminUsers);
 
@@ -162,9 +162,9 @@ app.use("/api/account-settings/*", requireAuth);
 app.route("/api/account-settings", accountSettings);
 app.route("/api/account-settings/deletion", userDeletion);
 
-app.use("/api/audits", requireAuth, requireOrganization);
-app.use("/api/audits/*", requireAuth, requireOrganization);
-app.route("/api/audits", audits);
+app.use("/api/forms", requireAuth, requireOrganization);
+app.use("/api/forms/*", requireAuth, requireOrganization);
+app.route("/api/forms", forms);
 
 app.use("/api/activity", requireAuth, requireOrganization);
 app.use("/api/activity/*", requireAuth, requireOrganization);

@@ -11,8 +11,8 @@ import { testApp } from "../testing/session";
 import { projects } from "./projects";
 
 const timestamp = "2026-10-01T12:00:00.000Z";
-/** A stored checklist with one item, as published forms have. */
-const formDefinition = JSON.stringify({
+/** A stored definition with one question, as published templates have. */
+const templateDefinition = JSON.stringify({
   sections: [
     {
       id: "exits",
@@ -35,14 +35,14 @@ afterEach(() => {
 });
 
 interface Detail {
-  availableForms: Array<{ id: string; name: string; scope: string }>;
+  availableTemplates: Array<{ id: string; name: string; scope: string }>;
   canManage: boolean;
   directory: Array<{ id: string }>;
   project: Project;
 }
 
 describe("projects", () => {
-  it("lets managers create a project, add members, and turn audit forms on", async () => {
+  it("lets managers create a project, add members, and turn form templates on", async () => {
     const { as, events } = fixture();
     const owner = as("owner-user", "owner");
 
@@ -53,7 +53,7 @@ describe("projects", () => {
     expect(created.status).toBe(201);
     expect(created.body.project).toMatchObject({
       description: "North wing",
-      formCount: 0,
+      templateCount: 0,
       isMember: false,
       memberCount: 0,
       name: "Hospital renovation",
@@ -62,14 +62,16 @@ describe("projects", () => {
 
     const detail = await owner<Detail>("GET", `/api/projects/${id}`);
     expect(detail.body.canManage).toBe(true);
-    // Published global forms and the organization's own published forms;
-    // not other organizations' forms or drafts and unpublished forms.
-    // Migrations also seed the starter library's global forms.
-    const offered = detail.body.availableForms.map((form) => form.id);
-    expect(offered).toContain("org-form");
+    // Published global templates and the organization's own published templates;
+    // not other organizations' templates or drafts and unpublished templates.
+    // Migrations also seed the starter library's global templates.
+    const offered = detail.body.availableTemplates.map(
+      (template) => template.id,
+    );
+    expect(offered).toContain("org-template");
     expect(offered).toContain("global-published");
     for (const hidden of [
-      "other-org-form",
+      "other-org-template",
       "global-draft",
       "org-draft",
       "org-unpublished",
@@ -87,28 +89,33 @@ describe("projects", () => {
       );
       expect(added.status).toBe(200);
     }
-    for (const form of ["org-form", "global-published"]) {
+    for (const template of ["org-template", "global-published"]) {
       expect(
-        (await owner("PUT", `/api/projects/${id}/forms/${form}`)).status,
+        (await owner("PUT", `/api/projects/${id}/templates/${template}`))
+          .status,
       ).toBe(200);
     }
     const project = (await owner<Detail>("GET", `/api/projects/${id}`)).body
       .project;
     expect(project.members.map((person) => person.id)).toEqual(["member-user"]);
     // By name, each at its current version.
-    expect(project.forms.map((form) => [form.name, form.version])).toEqual([
+    expect(
+      project.templates.map((template) => [template.name, template.version]),
+    ).toEqual([
       ["NFPA 70E", 1],
       ["Site walk v2", 2],
     ]);
-    // Whole forms, so the project lists them as the Audits page does.
-    expect(project.forms[1]).toMatchObject({
-      definition: JSON.parse(formDefinition),
+    // Whole templates, so the project lists them as the Forms page does.
+    expect(project.templates[1]).toMatchObject({
+      definition: JSON.parse(templateDefinition),
       scope: "organization",
       status: "published",
     });
     expect(
-      detail.body.availableForms.find((form) => form.id === "org-form"),
-    ).toMatchObject({ definition: JSON.parse(formDefinition) });
+      detail.body.availableTemplates.find(
+        (template) => template.id === "org-template",
+      ),
+    ).toMatchObject({ definition: JSON.parse(templateDefinition) });
 
     const listing = await as("member-user", "member")<{
       canManage: boolean;
@@ -117,7 +124,7 @@ describe("projects", () => {
     expect(listing.body.canManage).toBe(false);
     expect(listing.body.projects).toEqual([
       expect.objectContaining({
-        formCount: 2,
+        templateCount: 2,
         id,
         isMember: true,
         memberCount: 1,
@@ -145,18 +152,18 @@ describe("projects", () => {
         subject: "user",
       },
       {
-        action: "project.form_enabled",
+        action: "project.template_enabled",
         actor: "owner-user",
-        details: { templateId: "org-form", title: "Site walk v2" },
+        details: { templateId: "org-template", title: "Site walk v2" },
         label: "Hospital renovation",
-        subject: "audit_template",
+        subject: "form_template",
       },
       {
-        action: "project.form_enabled",
+        action: "project.template_enabled",
         actor: "owner-user",
         details: { templateId: "global-published", title: "NFPA 70E" },
         label: "Hospital renovation",
-        subject: "audit_template",
+        subject: "form_template",
       },
     ]);
     const history = await owner<{ events: Array<{ action: string }> }>(
@@ -164,8 +171,8 @@ describe("projects", () => {
       `/api/projects/${id}/activity`,
     );
     expect(history.body.events.map((event) => event.action)).toEqual([
-      "project.form_enabled",
-      "project.form_enabled",
+      "project.template_enabled",
+      "project.template_enabled",
       "project.member_added",
       "project.created",
     ]);
@@ -176,7 +183,7 @@ describe("projects", () => {
     const owner = as("owner-user", "owner");
     const id = await createProject(owner);
     await owner("PUT", `/api/projects/${id}/members/member-user`);
-    await owner("PUT", `/api/projects/${id}/forms/org-form`);
+    await owner("PUT", `/api/projects/${id}/templates/org-template`);
 
     const renamed = await owner<{ project: Project }>(
       "PATCH",
@@ -197,11 +204,11 @@ describe("projects", () => {
     expect(same.body.project.revision).toBe(1);
     for (let attempt = 0; attempt < 2; attempt++) {
       await owner("DELETE", `/api/projects/${id}/members/member-user`);
-      await owner("DELETE", `/api/projects/${id}/forms/org-form`);
+      await owner("DELETE", `/api/projects/${id}/templates/org-template`);
     }
     expect(
       (await owner<Detail>("GET", `/api/projects/${id}`)).body.project,
-    ).toMatchObject({ forms: [], members: [] });
+    ).toMatchObject({ templates: [], members: [] });
     expect((await owner("DELETE", `/api/projects/${id}`)).status).toBe(204);
     expect((await owner("GET", `/api/projects/${id}`)).status).toBe(404);
     expect(run("SELECT COUNT(*) AS count FROM project_members").get()).toEqual({
@@ -230,8 +237,8 @@ describe("projects", () => {
         label: "Clinic renovation",
       }),
       expect.objectContaining({
-        action: "project.form_disabled",
-        details: { templateId: "org-form", title: "Site walk v2" },
+        action: "project.template_disabled",
+        details: { templateId: "org-template", title: "Site walk v2" },
       }),
       {
         action: "project.deleted",
@@ -307,18 +314,18 @@ describe("projects", () => {
     });
   });
 
-  it("hides a deleted project with its audits, members, and forms until it is restored", async () => {
+  it("hides a deleted project with its forms, members, and templates until it is restored", async () => {
     const { as, events, run } = fixture();
     const owner = as("owner-user", "owner");
     const member = as("member-user", "member");
     const id = await createProject(owner);
     await owner("PUT", `/api/projects/${id}/members/member-user`);
-    await owner("PUT", `/api/projects/${id}/forms/org-form`);
+    await owner("PUT", `/api/projects/${id}/templates/org-template`);
     run(
-      `INSERT INTO audits
+      `INSERT INTO forms
        (id, organization_id, project_id, template_name, definition, responses,
         status, started_by, created_at, updated_at)
-       VALUES ('audit', 'org-1', ?, 'Site walk', '{}', '{}', 'completed',
+       VALUES ('form', 'org-1', ?, 'Site walk', '{}', '{}', 'completed',
                'owner-user', ?, ?)`,
     ).run(id, timestamp, timestamp);
 
@@ -334,11 +341,11 @@ describe("projects", () => {
     for (const [method, path, body] of [
       ["PATCH", `/api/projects/${id}`, { expectedRevision: 0, name: "New" }],
       ["PUT", `/api/projects/${id}/members/owner-user`, undefined],
-      ["DELETE", `/api/projects/${id}/forms/org-form`, undefined],
+      ["DELETE", `/api/projects/${id}/templates/org-template`, undefined],
     ] as const)
       expect((await owner(method, path, body)).status).toBe(404);
-    expect(run("SELECT id, project_id FROM audits").all()).toEqual([
-      { id: "audit", project_id: id },
+    expect(run("SELECT id, project_id FROM forms").all()).toEqual([
+      { id: "form", project_id: id },
     ]);
 
     const deleted = await member<{
@@ -378,7 +385,7 @@ describe("projects", () => {
     );
     expect(restored.status).toBe(200);
     expect(restored.body.project).toMatchObject({
-      forms: [expect.objectContaining({ id: "org-form" })],
+      templates: [expect.objectContaining({ id: "org-template" })],
       members: [expect.objectContaining({ id: "member-user" })],
     });
     expect((await owner("POST", `/api/projects/${id}/restore`)).status).toBe(
@@ -391,19 +398,19 @@ describe("projects", () => {
     expect(events().map((event) => event.action)).toEqual([
       "project.created",
       "project.member_added",
-      "project.form_enabled",
+      "project.template_enabled",
       "project.deleted",
       "project.restored",
     ]);
   });
 
-  it("keeps members and forms of a project deleted after a removal's read", async () => {
+  it("keeps members and templates of a project deleted after a removal's read", async () => {
     const { as, events, hooks, run } = fixture();
     const owner = as("owner-user", "owner");
     const id = await createProject(owner);
     await owner("PUT", `/api/projects/${id}/members/member-user`);
-    await owner("PUT", `/api/projects/${id}/forms/org-form`);
-    for (const path of ["members/member-user", "forms/org-form"]) {
+    await owner("PUT", `/api/projects/${id}/templates/org-template`);
+    for (const path of ["members/member-user", "templates/org-template"]) {
       // Another manager deletes the project once this request has read it.
       hooks.after("FROM projects AS project", () => {
         run("UPDATE projects SET deleted_at = ? WHERE id = ?").run(
@@ -419,17 +426,17 @@ describe("projects", () => {
     expect(
       run(
         `SELECT (SELECT COUNT(*) FROM project_members) AS members,
-                (SELECT COUNT(*) FROM project_audit_forms) AS forms`,
+                (SELECT COUNT(*) FROM project_form_templates) AS templates`,
       ).get(),
-    ).toEqual({ forms: 1, members: 1 });
+    ).toEqual({ templates: 1, members: 1 });
     expect(events().map((event) => event.action)).toEqual([
       "project.created",
       "project.member_added",
-      "project.form_enabled",
+      "project.template_enabled",
     ]);
   });
 
-  it("lists every live project with whether a form is turned on for it", async () => {
+  it("lists every live project with whether a template is turned on for it", async () => {
     const { as } = fixture();
     const owner = as("owner-user", "owner");
     const clinic = await createProject(owner);
@@ -443,16 +450,16 @@ describe("projects", () => {
         name: "Gone",
       })
     ).body.project.id;
-    await owner("PUT", `/api/projects/${clinic}/forms/org-form`);
+    await owner("PUT", `/api/projects/${clinic}/templates/org-template`);
     await owner("DELETE", `/api/projects/${gone}`);
-    type FormProjects = {
+    type TemplateProjects = {
       available: boolean;
       canManage: boolean;
       projects: Array<{ enabled: boolean; id: string; name: string }>;
     };
-    const listed = await as("member-user", "member")<FormProjects>(
+    const listed = await as("member-user", "member")<TemplateProjects>(
       "GET",
-      "/api/projects/forms/org-form",
+      "/api/projects/templates/org-template",
     );
     expect(listed.body).toEqual({
       available: true,
@@ -462,12 +469,16 @@ describe("projects", () => {
         { enabled: true, id: clinic, name: "Hospital renovation" },
       ],
     });
-    // Drafts, unpublished forms, and other organizations' forms cannot be
+    // Drafts, unpublished templates, and other organizations' templates cannot be
     // turned on, and list as off everywhere.
-    for (const form of ["org-draft", "org-unpublished", "other-org-form"]) {
-      const response = await owner<FormProjects>(
+    for (const template of [
+      "org-draft",
+      "org-unpublished",
+      "other-org-template",
+    ]) {
+      const response = await owner<TemplateProjects>(
         "GET",
-        `/api/projects/forms/${form}`,
+        `/api/projects/templates/${template}`,
       );
       expect(response.body.available).toBe(false);
       expect(response.body.canManage).toBe(true);
@@ -482,7 +493,7 @@ describe("projects", () => {
           "other-user",
           "owner",
           "org-2",
-        )<FormProjects>("GET", "/api/projects/forms/global-published")
+        )<TemplateProjects>("GET", "/api/projects/templates/global-published")
       ).body,
     ).toEqual({ available: true, canManage: true, projects: [] });
   });
@@ -501,8 +512,8 @@ describe("projects", () => {
       ["PATCH", `/api/projects/${id}`, { expectedRevision: 0, name: "Mine" }],
       ["PUT", `/api/projects/${id}/members/member-user`, undefined],
       ["DELETE", `/api/projects/${id}/members/member-user`, undefined],
-      ["PUT", `/api/projects/${id}/forms/org-form`, undefined],
-      ["DELETE", `/api/projects/${id}/forms/org-form`, undefined],
+      ["PUT", `/api/projects/${id}/templates/org-template`, undefined],
+      ["DELETE", `/api/projects/${id}/templates/org-template`, undefined],
       ["DELETE", `/api/projects/${id}`, undefined],
     ] as const)
       expect((await member(method, path, body)).status).toBe(403);
@@ -518,22 +529,23 @@ describe("projects", () => {
     expect(events().map((event) => event.action)).toEqual(["project.created"]);
   });
 
-  it("refuses people outside the organization and forms it cannot use", async () => {
+  it("refuses people outside the organization and templates it cannot use", async () => {
     const { as, events } = fixture();
     const owner = as("owner-user", "owner");
     const id = await createProject(owner);
     expect(
       (await owner("PUT", `/api/projects/${id}/members/other-user`)).status,
     ).toBe(400);
-    for (const form of [
-      "other-org-form",
+    for (const template of [
+      "other-org-template",
       "global-draft",
       "org-draft",
       "org-unpublished",
       "missing",
     ])
       expect(
-        (await owner("PUT", `/api/projects/${id}/forms/${form}`)).status,
+        (await owner("PUT", `/api/projects/${id}/templates/${template}`))
+          .status,
       ).toBe(404);
     expect((await owner("POST", "/api/projects", { name: "  " })).status).toBe(
       400,
@@ -541,35 +553,35 @@ describe("projects", () => {
     expect(events().map((event) => event.action)).toEqual(["project.created"]);
   });
 
-  it("stops listing and counting a turned-on form once it is unpublished", async () => {
+  it("stops listing and counting a turned-on template once it is unpublished", async () => {
     const { as, events, run } = fixture();
     const owner = as("owner-user", "owner");
     const id = await createProject(owner);
-    for (const form of ["org-form", "global-published"])
-      await owner("PUT", `/api/projects/${id}/forms/${form}`);
-    for (const form of ["org-form", "global-published"])
+    for (const template of ["org-template", "global-published"])
+      await owner("PUT", `/api/projects/${id}/templates/${template}`);
+    for (const template of ["org-template", "global-published"])
       run(
-        `UPDATE audit_template_versions SET status = 'unpublished'
-         WHERE template_id = '${form}'`,
+        `UPDATE form_template_versions SET status = 'unpublished'
+         WHERE template_id = '${template}'`,
       ).run();
     const detail = (await owner<Detail>("GET", `/api/projects/${id}`)).body;
-    expect(detail.project).toMatchObject({ formCount: 0, forms: [] });
+    expect(detail.project).toMatchObject({ templateCount: 0, templates: [] });
     const listing = await owner<{ projects: ProjectSummary[] }>(
       "GET",
       "/api/projects",
     );
-    expect(listing.body.projects[0]?.formCount).toBe(0);
+    expect(listing.body.projects[0]?.templateCount).toBe(0);
     // Still turned on, without history for a change nobody made here.
     expect(
-      run("SELECT template_id FROM project_audit_forms ORDER BY 1").all(),
+      run("SELECT template_id FROM project_form_templates ORDER BY 1").all(),
     ).toEqual([
       { template_id: "global-published" },
-      { template_id: "org-form" },
+      { template_id: "org-template" },
     ]);
     expect(events().map((event) => event.action)).toEqual([
       "project.created",
-      "project.form_enabled",
-      "project.form_enabled",
+      "project.template_enabled",
+      "project.template_enabled",
     ]);
   });
 
@@ -591,25 +603,25 @@ describe("projects", () => {
     ]);
   });
 
-  it("names a turned-off global form as the organization last saw it", async () => {
+  it("names a turned-off global template as the organization last saw it", async () => {
     const { as, events, run } = fixture();
     const owner = as("owner-user", "owner");
     const id = await createProject(owner);
-    await owner("PUT", `/api/projects/${id}/forms/global-published`);
-    // A root admin saves an unpublished draft as the form's next version.
+    await owner("PUT", `/api/projects/${id}/templates/global-published`);
+    // A root admin saves an unpublished draft as the template's next version.
     run(
-      `INSERT INTO audit_template_versions
+      `INSERT INTO form_template_versions
          (id, template_id, version, name, description, definition, status,
           created_by, created_at)
        VALUES ('draft-2', 'global-published', 2, 'Secret draft name', '',
                '{"version":1,"sections":[]}', 'draft', 'owner-user', '2026-10-02')`,
     ).run();
     run(
-      "UPDATE audit_template_families SET current_version = 2 WHERE id = 'global-published'",
+      "UPDATE form_template_families SET current_version = 2 WHERE id = 'global-published'",
     ).run();
-    await owner("DELETE", `/api/projects/${id}/forms/global-published`);
+    await owner("DELETE", `/api/projects/${id}/templates/global-published`);
     expect(events().at(-1)).toMatchObject({
-      action: "project.form_disabled",
+      action: "project.template_disabled",
       details: { templateId: "global-published", title: "NFPA 70E" },
     });
   });
@@ -704,19 +716,26 @@ function seed(database: Database) {
       role,
       userId,
     });
-  const forms: Array<
+  const templates: Array<
     [string, "global" | "organization", string | null, string, string, number]
   > = [
-    ["org-form", "organization", "org-1", "Site walk v2", "published", 2],
+    ["org-template", "organization", "org-1", "Site walk v2", "published", 2],
     ["org-draft", "organization", "org-1", "Work in progress", "draft", 1],
     ["org-unpublished", "organization", "org-1", "Retired", "unpublished", 2],
-    ["other-org-form", "organization", "org-2", "Their form", "draft", 1],
+    [
+      "other-org-template",
+      "organization",
+      "org-2",
+      "Their template",
+      "draft",
+      1,
+    ],
     ["global-published", "global", null, "NFPA 70E", "published", 1],
     ["global-draft", "global", null, "Unreleased", "draft", 1],
   ];
-  for (const [id, scope, organizationId, name, status, version] of forms) {
+  for (const [id, scope, organizationId, name, status, version] of templates) {
     run(
-      `INSERT INTO audit_template_families
+      `INSERT INTO form_template_families
          (id, scope, organization_id, current_version, created_by, created_at,
           updated_at)
        VALUES (?, ?, ?, ?, 'owner-user', ?, ?)`,
@@ -728,7 +747,7 @@ function seed(database: Database) {
       timestamp,
     );
     run(
-      `INSERT INTO audit_template_versions
+      `INSERT INTO form_template_versions
          (id, template_id, version, name, description, definition, status,
           created_by, created_at)
        VALUES (?, ?, ?, ?, '', ?, ?, 'owner-user', ?)`,
@@ -736,7 +755,7 @@ function seed(database: Database) {
       id,
       version,
       name,
-      formDefinition,
+      templateDefinition,
       status,
       timestamp,
     );

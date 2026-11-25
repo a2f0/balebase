@@ -1,7 +1,7 @@
 # Balebase
 
 Balebase is small business management software for expenses, contracts,
-employee forms, documents, equipment, and audits. This repo is available on
+employee paperwork, documents, equipment, and forms. This repo is available on
 the web at <https://balebase.com>. The browser app at
 <https://app.balebase.com> and the iOS and Android apps all use the API at
 <https://api.balebase.com>. Balebase runs on Cloudflare Workers, D1, and R2.
@@ -76,7 +76,7 @@ describes.
 ## Reference
 
 - [Product behavior and integrations](docs/product.md): authentication,
-  organizations, library, inbox, equipment, contracts, audits, finance,
+  organizations, library, inbox, equipment, contracts, forms, finance,
   employee forms, and billing.
 - [Deployment and maintenance](docs/operations.md): local secrets, Cloudflare
   provisioning, production and staging deploys, and data retention commands.
@@ -87,5 +87,5 @@ describes.
 - [Infrastructure](terraform/README.md): Terraform state and domains.
 - [Dependency upgrades](docs/dependency-upgrades.md): compatibility constraints
   and the upgrade workflow.
-- [Residential audit library](docs/residential-audit-library.md): sources and
-  upkeep of the bundled checklist.
+- [Residential template library](docs/residential-template-library.md):
+  sources and upkeep of the bundled template.

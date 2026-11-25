@@ -4,16 +4,16 @@ import type {
   ProjectSummary,
 } from "@balebase/validators/projects";
 import {
-  projectFormFilter,
+  projectTemplateFilter,
   type TemplateRow,
   templateSelect,
   toTemplate,
-} from "../audits/auditTemplates";
+} from "../forms/formTemplates";
 
 interface ProjectRow {
   created_at: string;
   description: string;
-  form_count: number;
+  template_count: number;
   id: string;
   is_member: number;
   member_count: number;
@@ -23,7 +23,7 @@ interface ProjectRow {
 }
 
 // People count only while they belong to the organization, as `current`
-// requires. Forms count only while published: a form that is unpublished, or
+// requires. Templates count only while published: a template that is unpublished, or
 // an organization draft, stays turned on but is not listed or downloaded.
 /** Whether the `person` project membership's user is in its organization. */
 const currentMember = `EXISTS (
@@ -37,14 +37,14 @@ const projectSelect = `
          (SELECT COUNT(*) FROM project_members AS person
           WHERE person.project_id = project.id AND ${currentMember}
          ) AS member_count,
-         (SELECT COUNT(*) FROM project_audit_forms AS enabled
-          JOIN audit_template_families AS family ON family.id = enabled.template_id
-          JOIN audit_template_versions AS version
+         (SELECT COUNT(*) FROM project_form_templates AS enabled
+          JOIN form_template_families AS family ON family.id = enabled.template_id
+          JOIN form_template_versions AS version
             ON version.template_id = family.id
            AND version.version = family.current_version
           WHERE enabled.project_id = project.id
-            AND ${projectFormFilter("project.organization_id")}
-         ) AS form_count,
+            AND ${projectTemplateFilter("project.organization_id")}
+         ) AS template_count,
          EXISTS (SELECT 1 FROM project_members AS person
                  WHERE person.project_id = project.id AND person.user_id = ?
                    AND ${currentMember}) AS is_member
@@ -83,7 +83,7 @@ export function findProjectRow(
     .first<ProjectRow>();
 }
 
-/** A project with its members and the forms turned on for it. */
+/** A project with its members and the templates turned on for it. */
 export async function findProject(
   database: D1Database,
   organizationId: string,
@@ -92,7 +92,7 @@ export async function findProject(
 ): Promise<Project | null> {
   const row = await findProjectRow(database, organizationId, id, userId);
   if (!row) return null;
-  const [members, forms] = await Promise.all([
+  const [members, templates] = await Promise.all([
     database
       .prepare(
         `SELECT user.id, user.name, user.email
@@ -106,8 +106,8 @@ export async function findProject(
     database
       .prepare(
         `${templateSelect}
-         JOIN project_audit_forms AS enabled ON enabled.template_id = family.id
-         WHERE enabled.project_id = ? AND ${projectFormFilter()}
+         JOIN project_form_templates AS enabled ON enabled.template_id = family.id
+         WHERE enabled.project_id = ? AND ${projectTemplateFilter()}
          ORDER BY version.name COLLATE NOCASE, family.id`,
       )
       .bind(id, organizationId)
@@ -115,13 +115,13 @@ export async function findProject(
   ]);
   return {
     ...toSummary(row),
-    forms: forms.results.map(toTemplate),
+    templates: templates.results.map(toTemplate),
     members: members.results,
   };
 }
 
-/** The organization's live projects, by name, marking where the form is on. */
-export async function listFormProjects(
+/** The organization's live projects, by name, marking where the template is on. */
+export async function listTemplateProjects(
   database: D1Database,
   organizationId: string,
   templateId: string,
@@ -129,7 +129,7 @@ export async function listFormProjects(
   const { results } = await database
     .prepare(
       `SELECT project.id, project.name,
-              EXISTS (SELECT 1 FROM project_audit_forms AS enabled
+              EXISTS (SELECT 1 FROM project_form_templates AS enabled
                       WHERE enabled.project_id = project.id
                         AND enabled.template_id = ?) AS enabled
        FROM projects AS project
@@ -186,15 +186,15 @@ export async function listDeletedProjects(
   }));
 }
 
-/** Every published audit form the organization can turn on for a project. */
-export async function listAvailableForms(
+/** Every published form template the organization can turn on for a project. */
+export async function listAvailableTemplates(
   database: D1Database,
   organizationId: string,
 ) {
   const { results } = await database
     .prepare(
       `${templateSelect}
-       WHERE ${projectFormFilter()}
+       WHERE ${projectTemplateFilter()}
        ORDER BY version.name COLLATE NOCASE, family.id`,
     )
     .bind(organizationId)
@@ -202,14 +202,16 @@ export async function listAvailableForms(
   return results.map(toTemplate);
 }
 
-/** One published form the organization can turn on for a project, or null. */
-export async function findAvailableForm(
+/** One published template the organization can turn on for a project, or null. */
+export async function findAvailableTemplate(
   database: D1Database,
   organizationId: string,
   templateId: string,
 ) {
   const row = await database
-    .prepare(`${templateSelect} WHERE family.id = ? AND ${projectFormFilter()}`)
+    .prepare(
+      `${templateSelect} WHERE family.id = ? AND ${projectTemplateFilter()}`,
+    )
     .bind(templateId, organizationId)
     .first<TemplateRow>();
   return row ? toTemplate(row) : null;
@@ -219,7 +221,7 @@ function toSummary(row: ProjectRow): ProjectSummary {
   return {
     createdAt: row.created_at,
     description: row.description,
-    formCount: row.form_count,
+    templateCount: row.template_count,
     id: row.id,
     isMember: Boolean(row.is_member),
     memberCount: row.member_count,

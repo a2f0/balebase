@@ -1,11 +1,11 @@
 import type { JobOutput } from "@balebase/validators/adminJobs";
-import { purgePendingAuditIssueImages } from "../audits/auditIssueImageCleanup";
-import { purgeDiscardedAuditForms } from "../audits/discardedTemplatePurge";
-import { purgeExpiredFreeAuditRuns } from "../billing/billingRetention";
+import { purgeExpiredFreeFormRuns } from "../billing/billingRetention";
 import { reconcileSubscriptionSeats } from "../billing/billingSeats";
 import { purgeStripeWebhookReceipts } from "../billing/billingWebhook";
 import { maintainContracts } from "../contracts/contractReminders";
 import { refreshActiveCheckrScreenings } from "../employeeForms/checkrSync";
+import { purgeDiscardedFormTemplates } from "../forms/discardedTemplatePurge";
+import { purgePendingFormIssueImages } from "../forms/formIssueImageCleanup";
 import { purgeTrashedEmails } from "../inbox/trashedEmailPurge";
 import { purgeDeletedObjects } from "../library/deletedObjectCleanup";
 import { purgeDeletedOrganizations } from "../organizations/organizationPurge";
@@ -26,19 +26,19 @@ export const maintenanceJobs = [
     id: "purgeRequestedUsers",
     name: "Purge requested user accounts",
     description:
-      "Permanently deletes accounts requested for deletion at least 30 days ago. Skips admins, active organization members, and accounts required by retained audit, financial, or contract records.",
+      "Permanently deletes accounts requested for deletion at least 30 days ago. Skips admins, active organization members, and accounts required by retained form, financial, or contract records.",
   },
   {
-    id: "purgeExpiredFreeAuditRuns",
-    name: "Purge expired Free audit history",
+    id: "purgeExpiredFreeFormRuns",
+    name: "Purge expired Free form history",
     description:
-      "Permanently deletes audit runs that meet the existing Free-plan retention policy. Organizations whose paid plan ended keep their history for a 30-day grace period first.",
+      "Permanently deletes forms that meet the existing Free-plan retention policy. Organizations whose paid plan ended keep their history for a 30-day grace period first.",
   },
   {
-    id: "purgeDiscardedAuditForms",
-    name: "Purge discarded global forms",
+    id: "purgeDiscardedFormTemplates",
+    name: "Purge discarded global templates",
     description:
-      "Permanently deletes up to 100 global audit forms discarded at least 30 days ago, with their versions and history. Audits started from them keep their own copies. Restoration is no longer possible after the purge.",
+      "Permanently deletes up to 100 global form templates discarded at least 30 days ago, with their versions and history. Forms started from them keep their own copies. Restoration is no longer possible after the purge.",
   },
   {
     id: "purgeTrashedEmails",
@@ -54,9 +54,9 @@ export const maintenanceJobs = [
       "Deletes a batch of queued files from storage after their upload grace period.",
   },
   {
-    id: "purgePendingAuditIssueImages",
-    name: "Purge abandoned audit images",
-    description: "Removes expired, unfinished audit image uploads.",
+    id: "purgePendingFormIssueImages",
+    name: "Purge abandoned form images",
+    description: "Removes expired, unfinished form image uploads.",
   },
   {
     id: "purgeStripeWebhookReceipts",
@@ -101,17 +101,17 @@ export function maintenanceTasks(environment: Bindings): MaintenanceTasks {
     purgeDeletedObjects: async () => ({
       purged: await purgeDeletedObjects(environment),
     }),
-    purgeExpiredFreeAuditRuns: async (runId) => ({
-      purged: await purgeExpiredFreeAuditRuns(environment, runId),
+    purgeExpiredFreeFormRuns: async (runId) => ({
+      purged: await purgeExpiredFreeFormRuns(environment, runId),
     }),
-    purgeDiscardedAuditForms: async (runId) => ({
-      purged: await purgeDiscardedAuditForms(environment, runId),
+    purgeDiscardedFormTemplates: async (runId) => ({
+      purged: await purgeDiscardedFormTemplates(environment, runId),
     }),
     purgeTrashedEmails: async (runId) => ({
       purged: await purgeTrashedEmails(environment, runId),
     }),
-    purgePendingAuditIssueImages: async () => ({
-      purged: await purgePendingAuditIssueImages(environment),
+    purgePendingFormIssueImages: async () => ({
+      purged: await purgePendingFormIssueImages(environment),
     }),
     purgeStripeWebhookReceipts: async () => ({
       purged: await purgeStripeWebhookReceipts(environment),
@@ -309,7 +309,7 @@ export async function runScheduledMaintenance(
 ) {
   const retention = await enqueueMaintenance(
     env,
-    "purgeExpiredFreeAuditRuns",
+    "purgeExpiredFreeFormRuns",
     source,
   );
   // Newly scheduled cleanup waits for retention. An existing active manual run
@@ -317,7 +317,7 @@ export async function runScheduledMaintenance(
   for (const job of maintenanceJobs) {
     const { id } = job;
     // Trashed email is purged only on request, as the operator script did.
-    if (id !== "purgeExpiredFreeAuditRuns" && isScheduled(job))
+    if (id !== "purgeExpiredFreeFormRuns" && isScheduled(job))
       await enqueueMaintenance(
         env,
         id,

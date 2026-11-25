@@ -166,10 +166,10 @@ describe("organization middleware", () => {
       organizationRole: "owner",
     });
 
-    const auditsResponse = await request("/audits");
-    expect(auditsResponse.status).toBe(403);
-    const auditsBody: unknown = await auditsResponse.json();
-    expect(auditsBody).toEqual({
+    const formsResponse = await request("/forms");
+    expect(formsResponse.status).toBe(403);
+    const formsBody: unknown = await formsResponse.json();
+    expect(formsBody).toEqual({
       code: "UPGRADE_REQUIRED",
       error:
         "This organization's Free plan includes one user. Upgrade to Pro on the Billing page to restore your access.",
@@ -230,7 +230,7 @@ function seatTestApp(role: string, twoFactorState: TwoFactorState = {}) {
     },
   );
   app.use("/billing", requireBillingOrganization);
-  app.use("/audits", requireOrganization);
+  app.use("/forms", requireOrganization);
   app.get("*", (context) =>
     context.json({
       organizationId: context.get("organizationId"),

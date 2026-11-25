@@ -50,9 +50,9 @@ function upload(name: string): RequestInit {
 
 function failInserts(fixture: Fixture, action: string) {
   fixture.database.exec(
-    `CREATE TRIGGER fail_audit BEFORE INSERT ON activity_events
+    `CREATE TRIGGER fail_form BEFORE INSERT ON activity_events
      WHEN NEW.action = '${action}'
-     BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END`,
+     BEGIN SELECT RAISE(ABORT, 'form unavailable'); END`,
   );
 }
 
@@ -178,7 +178,7 @@ describe("employee requirement activity", () => {
         .query("SELECT COUNT(*) AS count FROM employee_requirements")
         .get(),
     ).toEqual({ count: 0 });
-    fixture.database.exec("DROP TRIGGER fail_audit");
+    fixture.database.exec("DROP TRIGGER fail_form");
 
     const id = await createRequirement(fixture, "credit_check", "Credit");
     for (const [action, init] of [
@@ -196,7 +196,7 @@ describe("employee requirement activity", () => {
         due_date: "2026-10-01",
         status: "pending",
       });
-      fixture.database.exec("DROP TRIGGER fail_audit");
+      fixture.database.exec("DROP TRIGGER fail_form");
     }
 
     const formId = await createRequirement(fixture, "form", "W-4");

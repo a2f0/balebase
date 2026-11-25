@@ -1,10 +1,10 @@
 import type { OfflineSync } from "@balebase/validators/offline";
 import {
-  projectFormFilter,
+  projectTemplateFilter,
   type TemplateRow,
   templateSelect,
   toTemplate,
-} from "../audits/auditTemplates";
+} from "../forms/formTemplates";
 
 // A project membership counts only while the person is in the organization.
 const currentMember = `EXISTS (
@@ -25,55 +25,57 @@ export async function readOfflineSync(
   userId: string,
   after: string | undefined,
 ): Promise<OfflineSync> {
-  const [revisions, projects, forms, members] = await database.batch([
-    database
-      .prepare(
-        `SELECT
+  const [revisions, projects, enabledTemplates, members] = await database.batch(
+    [
+      database
+        .prepare(
+          `SELECT
            (SELECT revision FROM offline_sync_revisions WHERE scope = ?)
              AS organization,
            (SELECT revision FROM offline_sync_revisions WHERE scope = 'global')
              AS global`,
-      )
-      .bind(organizationId),
-    database
-      .prepare(
-        `SELECT project.id, project.name, project.description
+        )
+        .bind(organizationId),
+      database
+        .prepare(
+          `SELECT project.id, project.name, project.description
          FROM projects AS project
          JOIN project_members AS person ON person.project_id = project.id
          WHERE project.organization_id = ? AND person.user_id = ?
            AND project.deleted_at IS NULL AND ${currentMember}
          ORDER BY project.name COLLATE NOCASE, project.id`,
-      )
-      .bind(organizationId, userId),
-    database
-      .prepare(
-        `${templateSelect.replace("SELECT", "SELECT enabled.project_id,")}
-         JOIN project_audit_forms AS enabled ON enabled.template_id = family.id
+        )
+        .bind(organizationId, userId),
+      database
+        .prepare(
+          `${templateSelect.replace("SELECT", "SELECT enabled.project_id,")}
+         JOIN project_form_templates AS enabled ON enabled.template_id = family.id
          JOIN project_members AS person
            ON person.project_id = enabled.project_id
          JOIN projects AS project ON project.id = enabled.project_id
          WHERE enabled.organization_id = ? AND person.user_id = ?
            AND project.deleted_at IS NULL
            AND ${currentMember}
-           AND ${projectFormFilter("enabled.organization_id")}
+           AND ${projectTemplateFilter("enabled.organization_id")}
          ORDER BY version.name COLLATE NOCASE, family.id`,
-      )
-      .bind(organizationId, userId),
-    database
-      .prepare(
-        `SELECT user.id, user.name, user.email
+        )
+        .bind(organizationId, userId),
+      database
+        .prepare(
+          `SELECT user.id, user.name, user.email
          FROM member JOIN user ON user.id = member.userId
          WHERE member.organizationId = ?
          ORDER BY user.name COLLATE NOCASE, user.id`,
-      )
-      .bind(organizationId),
-  ]);
+        )
+        .bind(organizationId),
+    ],
+  );
   const counters = revisions?.results[0] as
     | { global: number | null; organization: number | null }
     | undefined;
   const cursor = `${counters?.organization ?? 0}.${counters?.global ?? 0}`;
   if (cursor === after) return { changed: false, cursor };
-  const bindings = (forms?.results ?? []) as (TemplateRow & {
+  const bindings = (enabledTemplates?.results ?? []) as (TemplateRow & {
     project_id: string;
   })[];
   const templates = new Map<string, TemplateRow>();
@@ -81,7 +83,7 @@ export async function readOfflineSync(
   return {
     changed: true,
     cursor,
-    forms: [...templates.values()].map(toTemplate),
+    templates: [...templates.values()].map(toTemplate),
     members: (members?.results ?? []) as {
       email: string;
       id: string;
@@ -95,7 +97,7 @@ export async function readOfflineSync(
       }[]
     ).map((project) => ({
       ...project,
-      formIds: bindings
+      templateIds: bindings
         .filter((row) => row.project_id === project.id)
         .map((row) => row.id),
     })),

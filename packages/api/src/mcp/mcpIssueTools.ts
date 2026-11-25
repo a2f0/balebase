@@ -18,7 +18,7 @@ export const issueTools: McpTool[] = [
     title: "List issues",
     route: issuesRoutes.list,
     description:
-      "Lists workspace, audit, and transaction issues, newest first, 50 per page. Defaults to open. Finance issues require Finance access.",
+      "Lists workspace, form, and transaction issues, newest first, 50 per page. Defaults to open. Finance issues require Finance access.",
     descriptions: {
       cursor: "The nextCursor from the previous page.",
       q: "Search title.",
@@ -48,20 +48,20 @@ export const issueTools: McpTool[] = [
     route: issuesRoutes.activity,
     descriptions: { ...issueId, ...activityCursor },
     description:
-      "Lists the issue's history, including legacy audit issue events.",
+      "Lists the issue's history, including legacy form issue events.",
   },
   {
     name: "create_issue",
     title: "Raise issue",
     route: issuesRoutes.create,
     description:
-      "Raises an issue for a transaction or audit item. Omit target for a workspace issue. Finance sources require Finance access.",
+      "Raises an issue for a transaction or form question. Omit target for a workspace issue. Finance sources require Finance access.",
     descriptions: {
       ...fields,
       target: "Source record; omit for workspace.",
       "target.id": "Source record id.",
       "target.itemId":
-        "Required only for audit_run: item id from the audit definition.",
+        "Required only for form_run: item id from the form definition.",
       "target.type": "Source type.",
     },
     // New issues are always open.

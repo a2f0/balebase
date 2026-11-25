@@ -60,9 +60,9 @@ function state(fixture: Fixture, id: string) {
 
 function failInserts(fixture: Fixture, action: string) {
   fixture.database.exec(
-    `CREATE TRIGGER fail_audit BEFORE INSERT ON activity_events
+    `CREATE TRIGGER fail_form BEFORE INSERT ON activity_events
      WHEN NEW.action = '${action}'
-     BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END`,
+     BEGIN SELECT RAISE(ABORT, 'form unavailable'); END`,
   );
 }
 
@@ -176,7 +176,7 @@ describe("screening activity", () => {
       expect((await refresh(fixture, id)).status).toBe(500);
       expect(state(fixture, id)).toEqual(before);
       expect(screeningEvents(fixture)).toEqual([]);
-      fixture.database.exec("DROP TRIGGER fail_audit");
+      fixture.database.exec("DROP TRIGGER fail_form");
 
       expect((await refresh(fixture, id)).status).toBe(200);
       expect(state(fixture, id)).toEqual({

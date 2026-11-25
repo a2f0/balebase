@@ -1,7 +1,7 @@
 import type { Issue, IssueTargetType } from "@balebase/validators/issues";
 import type { Context } from "hono";
-import { storedDefinition } from "../audits/auditTemplates";
 import type { ApiEnv } from "../auth/apiEnv";
+import { storedDefinition } from "../forms/formTemplates";
 import { userHasCapability } from "../organizations/organizationGroups";
 
 export type IssueContext = Context<ApiEnv>;
@@ -35,14 +35,14 @@ export interface IssueRow {
 
 export const issueSelect = `SELECT issue.*, creator.name AS creator_name, creator.email AS creator_email,
   assignee.name AS assignee_name, assignee.email AS assignee_email,
-  COALESCE(audit.template_name, txn.merchant_name, txn.name, 'Workspace') AS target_label,
+  COALESCE(form.template_name, txn.merchant_name, txn.name, 'Workspace') AS target_label,
   CASE WHEN issue.target_type = 'workspace' THEN 1
-       WHEN issue.target_type = 'audit_run' THEN audit.id IS NOT NULL AND audit.deleted_at IS NULL
+       WHEN issue.target_type = 'form_run' THEN form.id IS NOT NULL AND form.deleted_at IS NULL
        ELSE txn.id IS NOT NULL AND txn.source_status = 'active' END AS target_available
   FROM issues AS issue
   JOIN user AS creator ON creator.id = issue.created_by
   LEFT JOIN user AS assignee ON assignee.id = issue.assigned_to
-  LEFT JOIN audits AS audit ON issue.target_type = 'audit_run' AND audit.id = issue.target_id
+  LEFT JOIN forms AS form ON issue.target_type = 'form_run' AND form.id = issue.target_id
   LEFT JOIN plaid_transactions AS txn ON issue.target_type = 'finance_transaction' AND txn.id = issue.target_id`;
 
 export function canSeeFinanceIssues(context: IssueContext) {
@@ -112,13 +112,13 @@ export async function issueTargetAvailable(
         .first(),
     );
   }
-  const audit = await context.env.DB.prepare(`SELECT definition FROM audits
+  const form = await context.env.DB.prepare(`SELECT definition FROM forms
     WHERE id = ? AND organization_id = ? AND deleted_at IS NULL`)
     .bind(target.id, context.get("organizationId"))
     .first<{ definition: string }>();
   return Boolean(
-    audit &&
-      storedDefinition(audit.definition).sections.some((section) =>
+    form &&
+      storedDefinition(form.definition).sections.some((section) =>
         section.items.some((item) => item.id === target.itemId),
       ),
   );
@@ -126,8 +126,8 @@ export async function issueTargetAvailable(
 
 /** Recheck the target within the mutation's transaction, after its initial read. */
 export const issueTargetWritable = `(target_type = 'workspace'
-  OR (target_type = 'audit_run' AND EXISTS (SELECT 1 FROM audits
-    WHERE audits.id = issues.target_id AND audits.organization_id = issues.organization_id AND deleted_at IS NULL))
+  OR (target_type = 'form_run' AND EXISTS (SELECT 1 FROM forms
+    WHERE forms.id = issues.target_id AND forms.organization_id = issues.organization_id AND deleted_at IS NULL))
   OR (target_type = 'finance_transaction' AND EXISTS (SELECT 1 FROM plaid_transactions
     WHERE plaid_transactions.id = issues.target_id AND plaid_transactions.organization_id = issues.organization_id AND source_status = 'active')))`;
 

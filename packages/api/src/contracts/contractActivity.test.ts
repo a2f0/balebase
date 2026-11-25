@@ -82,8 +82,8 @@ function tokenFrom(email: SentEmail | undefined) {
 
 function failInserts(fixture: Fixture, table: string, when: string) {
   fixture.database.exec(
-    `CREATE TRIGGER fail_audit BEFORE INSERT ON ${table}
-     WHEN ${when} BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END`,
+    `CREATE TRIGGER fail_form BEFORE INSERT ON ${table}
+     WHEN ${when} BEGIN SELECT RAISE(ABORT, 'form unavailable'); END`,
   );
 }
 
@@ -221,14 +221,14 @@ describe("contract activity", () => {
       ).status;
     expect(status()).toBe("draft");
     expect(fixture.emails).toEqual([]);
-    fixture.database.exec("DROP TRIGGER fail_audit");
+    fixture.database.exec("DROP TRIGGER fail_form");
 
     failInserts(fixture, "activity_events", "NEW.action = 'contract.sent'");
     expect(
       (await fixture.json("POST", `/api/contracts/${id}/send`)).status,
     ).toBe(500);
     expect(status()).toBe("draft");
-    fixture.database.exec("DROP TRIGGER fail_audit");
+    fixture.database.exec("DROP TRIGGER fail_form");
 
     const sent = await fixture.json<{ contract: Contract }>(
       "POST",
@@ -255,7 +255,7 @@ describe("contract activity", () => {
         .status,
     ).toBe(500);
     expect(status()).toBe("sent");
-    fixture.database.exec("DROP TRIGGER fail_audit");
+    fixture.database.exec("DROP TRIGGER fail_form");
     expect(
       (
         await fixture.json("POST", `/api/contracts/${id}/void`, {
@@ -294,7 +294,7 @@ describe("contract activity", () => {
         .query("SELECT status, final_object_key FROM contracts WHERE id = ?")
         .get(id);
     expect(row()).toEqual({ final_object_key: null, status: "sent" });
-    fixture.database.exec("DROP TRIGGER fail_audit");
+    fixture.database.exec("DROP TRIGGER fail_form");
 
     // The shared event failing holds the completion back too.
     failInserts(
@@ -311,7 +311,7 @@ describe("contract activity", () => {
       "contract.created",
       "contract.sent",
     ]);
-    fixture.database.exec("DROP TRIGGER fail_audit");
+    fixture.database.exec("DROP TRIGGER fail_form");
 
     await resumeStalledContracts(
       fixture.bindings,
@@ -521,7 +521,7 @@ describe("contract activity", () => {
       (await agent.json("DELETE", `/api/contracts/templates/${template.id}`))
         .status,
     ).toBe(500);
-    fixture.database.exec("DROP TRIGGER fail_audit");
+    fixture.database.exec("DROP TRIGGER fail_form");
     expect(
       (await agent.json("DELETE", `/api/contracts/templates/${template.id}`))
         .status,
@@ -568,7 +568,7 @@ describe("contract activity", () => {
       "NEW.action = 'contract_template.created'",
     );
     expect((await uploadAs(agent)).status).toBe(500);
-    fixture.database.exec("DROP TRIGGER fail_audit");
+    fixture.database.exec("DROP TRIGGER fail_form");
     expect(
       fixture.database
         .query("SELECT COUNT(*) AS count FROM contract_templates")
@@ -612,7 +612,7 @@ describe("contract activity", () => {
       "NEW.action = 'contract_template.version_saved'",
     );
     expect((await save(agent, version2)).status).toBe(500);
-    fixture.database.exec("DROP TRIGGER fail_audit");
+    fixture.database.exec("DROP TRIGGER fail_form");
     const versions = () =>
       fixture.database
         .query(
@@ -771,7 +771,7 @@ describe("contract activity", () => {
         )
         .get(id),
     ).toEqual({ declines: 0, status: "sent" });
-    fixture.database.exec("DROP TRIGGER fail_audit");
+    fixture.database.exec("DROP TRIGGER fail_form");
     expect((await decline()).status).toBe(200);
     // A second decline is refused and records nothing.
     expect((await decline()).status).not.toBe(200);
@@ -850,7 +850,7 @@ describe("contract activity", () => {
     failInserts(fixture, "contract_events", "NEW.type = 'viewed'");
     expect((await open()).status).toBe(500);
     expect(recipient()).toEqual({ status: "sent", viewed_at: null });
-    fixture.database.exec("DROP TRIGGER fail_audit");
+    fixture.database.exec("DROP TRIGGER fail_form");
 
     expect((await open()).status).toBe(200);
     expect((await open()).status).toBe(200);
@@ -902,7 +902,7 @@ describe("contract activity", () => {
     email.send = send;
     backdate();
     fixture.hooks.before("INSERT INTO contract_events", () => {
-      throw new Error("audit unavailable");
+      throw new Error("form unavailable");
     });
     expect((await remind()).body.reminded).toBe(1);
     const types = (await events()).map(({ type }) => type);

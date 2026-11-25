@@ -53,19 +53,16 @@ describe("organization uploads", () => {
       ],
     });
 
-    const hiddenAuditImage = await fixture.first("GET", "/audit-image-object");
-    expect(hiddenAuditImage.status).toBe(404);
-    const auditImageDelete = await fixture.first(
-      "DELETE",
-      "/audit-image-object",
-    );
-    expect(auditImageDelete.status).toBe(404);
+    const hiddenFormImage = await fixture.first("GET", "/form-image-object");
+    expect(hiddenFormImage.status).toBe(404);
+    const formImageDelete = await fixture.first("DELETE", "/form-image-object");
+    expect(formImageDelete.status).toBe(404);
     expect(
       fixture.database
         .query("SELECT kind FROM objects WHERE id = ?")
-        .get("audit-image-object"),
-    ).toEqual({ kind: "audit_issue_image" });
-    expect(fixture.stored.has("audit-images/evidence.png")).toBe(true);
+        .get("form-image-object"),
+    ).toEqual({ kind: "form_issue_image" });
+    expect(fixture.stored.has("form-images/evidence.png")).toBe(true);
 
     const otherObject = await fixture.first("GET", "/other-object");
     expect(otherObject.status).toBe(404);
@@ -252,12 +249,12 @@ function createFixture(storageHooks?: Parameters<typeof memoryStorage>[1]) {
       `INSERT INTO objects
        (id, organization_id, object_key, filename, content_type, size,
         created_at, kind)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'audit_issue_image')`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'form_issue_image')`,
     )
     .run(
-      "audit-image-object",
+      "form-image-object",
       "org_user-1",
-      "audit-images/evidence.png",
+      "form-images/evidence.png",
       "evidence.png",
       "image/png",
       8,
@@ -267,7 +264,7 @@ function createFixture(storageHooks?: Parameters<typeof memoryStorage>[1]) {
   const { bucket, stored } = memoryStorage(
     new Map([
       ["uploads/legacy-object/legacy.txt", new TextEncoder().encode("legacy")],
-      ["audit-images/evidence.png", new Uint8Array(8)],
+      ["form-images/evidence.png", new Uint8Array(8)],
     ]),
     storageHooks,
   );

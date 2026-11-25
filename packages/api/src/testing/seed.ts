@@ -174,7 +174,7 @@ export function seedAccount(
 
 /**
  * The organization's test project, `project_<organizationId>`, created the
- * first time it is asked for; audits must belong to a project.
+ * first time it is asked for; forms must belong to a project.
  */
 export function seedProject(database: Database, organizationId: string) {
   const id = `project_${organizationId}`;

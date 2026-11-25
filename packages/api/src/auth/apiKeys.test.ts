@@ -6,10 +6,10 @@ import { app } from "../app";
 import { mcpTools } from "../mcp/mcp";
 import { type McpTool, toolAccess } from "../mcp/mcpToolSchema";
 import { activityBatch } from "../shared/activity";
-import { enableForProject } from "../testing/auditFixture";
 import { testBindings } from "../testing/bindings";
 import { toD1 } from "../testing/d1";
 import { createTestDatabase } from "../testing/database";
+import { enableForProject } from "../testing/formFixture";
 import { apiKeyRouteDenial } from "./apiKeys";
 import { createAuth } from "./auth";
 
@@ -232,7 +232,7 @@ describe("organization API keys", () => {
     expect(people.status).toBe(403);
     expect(people.body.error).toBe("This endpoint is read-only for API keys.");
 
-    // Keys read projects to name an audit's project, but never change them.
+    // Keys read projects to name a form's project, but never change them.
     expect(
       (await fixture.withKey(writeToken, "GET", "/api/projects")).status,
     ).toBe(200);
@@ -403,17 +403,17 @@ describe("organization API keys", () => {
     ).toEqual({ count: 0 });
   });
 
-  it("attributes trigger-recorded audit activity to the key", async () => {
+  it("attributes trigger-recorded form activity to the key", async () => {
     const fixture = await createFixture();
     const { apiKey, token } = await fixture.createKey("write");
     const templates = await fixture.withKey<{
       templates: Array<{ id: string }>;
-    }>(token, "GET", "/api/audits/templates");
+    }>(token, "GET", "/api/forms/templates");
     const templateId = templates.body.templates[0]?.id;
     const created = await fixture.withKey<{ template: { id: string } }>(
       token,
       "POST",
-      "/api/audits/templates",
+      "/api/forms/templates",
       { name: "Key form" },
     );
     expect(created.status).toBe(201);
@@ -423,17 +423,17 @@ describe("organization API keys", () => {
       templateId,
       fixture.organizationId,
     );
-    const started = await fixture.withKey<{ auditId: string }>(
+    const started = await fixture.withKey<{ formId: string }>(
       token,
       "POST",
-      `/api/audits/templates/${templateId}/runs`,
+      `/api/forms/templates/${templateId}/runs`,
       { projectId },
     );
     expect(started.status).toBe(201);
     const discarded = await fixture.callTool<{ isError?: boolean }>(
       token,
-      "discard_audit",
-      { id: started.body.auditId },
+      "discard_form",
+      { id: started.body.formId },
     );
     expect(discarded.isError).toBeUndefined();
 
@@ -447,12 +447,12 @@ describe("organization API keys", () => {
     });
     expect(
       activity.body.events
-        .filter(({ action }) => action.startsWith("audit."))
+        .filter(({ action }) => action.startsWith("form."))
         .map(({ action, actor }) => [action, actor.apiKey]),
     ).toEqual([
-      ["audit.discarded", viaKey("mcp")],
-      ["audit.started", viaKey("rest")],
-      ["audit.template_created", viaKey("rest")],
+      ["form.discarded", viaKey("mcp")],
+      ["form.started", viaKey("rest")],
+      ["form.template_created", viaKey("rest")],
     ]);
   });
 
@@ -1082,12 +1082,12 @@ describe("MCP endpoint", () => {
     expect(tooMany.content[0]?.text).toContain("status 400");
   });
 
-  it("summarizes audit forms without their full definitions", async () => {
+  it("summarizes form templates without their full definitions", async () => {
     const fixture = await createFixture();
     const { token } = await fixture.createKey("read");
     const result = await fixture.callTool<{ content: Array<{ text: string }> }>(
       token,
-      "list_audit_templates",
+      "list_form_templates",
       {},
     );
     const { templates } = JSON.parse(result.content[0]?.text ?? "") as {
@@ -1192,12 +1192,12 @@ describe("MCP tool catalog", () => {
     }
   });
 
-  it("saves an audit form only from the version a model last read", async () => {
+  it("saves a form template only from the version a model last read", async () => {
     const fixture = await createFixture();
     const { token } = await fixture.createKey("write");
     const created = await fixture.withKey<{
       template: { id: string; version: number };
-    }>(token, "POST", "/api/audits/templates", { name: "Key form" });
+    }>(token, "POST", "/api/forms/templates", { name: "Key form" });
     const { id, version } = created.body.template;
     const definition = {
       sections: [
@@ -1219,7 +1219,7 @@ describe("MCP tool catalog", () => {
     const save = (args: Record<string, unknown>) =>
       fixture.callTool<{ content: Array<{ text: string }>; isError?: boolean }>(
         token,
-        "save_audit_template",
+        "save_form_template",
         { definition, id, name: "Key form", ...args },
       );
     const unversioned = await save({});

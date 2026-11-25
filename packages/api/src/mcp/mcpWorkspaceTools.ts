@@ -50,11 +50,11 @@ export const workspaceTools: McpTool[] = [
   },
   {
     description:
-      "Lists the organization's activity feed, newest first, 50 events per page: audits, forms, issues, equipment, projects, people joining, leaving, being removed or changing role, organization renames, group changes, API keys, transactions, bank connections, expense categories, billing, library files and folders, inbox email moves and links, and businesses. Optionally filter by root resource type. Finance activity requires Finance access; group, invitation, two-factor requirement, billing, and organization deletion and restoration activity require an organization owner or admin. Pass nextCursor to page, retaining the same filter.",
+      "Lists the organization's activity feed, newest first, 50 events per page: forms, form templates, issues, equipment, projects, people joining, leaving, being removed or changing role, organization renames, group changes, API keys, transactions, bank connections, expense categories, billing, library files and folders, inbox email moves and links, and businesses. Optionally filter by root resource type. Finance activity requires Finance access; group, invitation, two-factor requirement, billing, and organization deletion and restoration activity require an organization owner or admin. Pass nextCursor to page, retaining the same filter.",
     descriptions: {
       ...activityCursor,
       resourceType:
-        "Root resource type. Audit and transaction histories include their attached issues; issue means standalone workspace issues. employee_requirement (forms and checks requested of people) needs an organization owner or admin.",
+        "Root resource type. Form and transaction histories include their attached issues; issue means standalone workspace issues. employee_requirement (forms and checks requested of people) needs an organization owner or admin.",
     },
     name: "list_activity",
     route: activityRoutes.list,

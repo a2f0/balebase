@@ -1,22 +1,22 @@
 import { z } from "zod";
 import { ActivityPageSchema, ActivityQuerySchema } from "./activity";
-import { AuditTemplateSchema } from "./audits";
 import { PersonSchema, requiredText } from "./fields";
+import { FormTemplateSchema } from "./forms";
 import { route } from "./route";
 import { projectLimits } from "./rules";
 
 /**
- * An audit form a project can turn on: a published global or organization
- * form, as its current version reads.
+ * A form template a project can turn on: a published global or organization
+ * template, as its current version reads.
  */
-const ProjectFormSchema = AuditTemplateSchema;
-export type ProjectForm = z.infer<typeof ProjectFormSchema>;
+const ProjectTemplateSchema = FormTemplateSchema;
+export type ProjectTemplate = z.infer<typeof ProjectTemplateSchema>;
 
 const ProjectSummarySchema = z.object({
   createdAt: z.string(),
   description: z.string(),
-  /** How many audit forms are turned on. */
-  formCount: z.number(),
+  /** How many form templates are turned on. */
+  templateCount: z.number(),
   id: z.string(),
   /** Whether the person asking is a member of the project. */
   isMember: z.boolean(),
@@ -29,8 +29,8 @@ const ProjectSummarySchema = z.object({
 export type ProjectSummary = z.infer<typeof ProjectSummarySchema>;
 
 const ProjectSchema = ProjectSummarySchema.extend({
-  /** The audit forms turned on, as they currently read. */
-  forms: z.array(ProjectFormSchema),
+  /** The form templates turned on, as they currently read. */
+  templates: z.array(ProjectTemplateSchema),
   members: z.array(PersonSchema),
 });
 export type Project = z.infer<typeof ProjectSchema>;
@@ -76,12 +76,12 @@ export const projectsRoutes = {
     body: ProjectFieldsSchema,
     response: ProjectResponseSchema,
   }),
-  /** A project with the people and forms that can be added to it. */
+  /** A project with the people and templates that can be added to it. */
   get: route({
     method: "GET",
     path: "/api/projects/:id",
     response: ProjectResponseSchema.extend({
-      availableForms: z.array(ProjectFormSchema),
+      availableTemplates: z.array(ProjectTemplateSchema),
       canManage: z.boolean(),
       directory: z.array(PersonSchema),
     }),
@@ -99,7 +99,7 @@ export const projectsRoutes = {
     response: ProjectResponseSchema,
   }),
   /**
-   * Hides the project; its audits, members, forms, and history stay, and
+   * Hides the project; its forms, members, templates, and history stay, and
    * restoring brings it back as it was.
    */
   delete: route({
@@ -109,12 +109,12 @@ export const projectsRoutes = {
   }),
   /**
    * The organization's projects, each marked with whether `templateId` is
-   * turned on for it. `available` says whether the form can be turned on:
-   * it must be a published form the organization can use.
+   * turned on for it. `available` says whether the template can be turned on:
+   * it must be a published template the organization can use.
    */
-  formProjects: route({
+  templateProjects: route({
     method: "GET",
-    path: "/api/projects/forms/:templateId",
+    path: "/api/projects/templates/:templateId",
     response: z.object({
       available: z.boolean(),
       canManage: z.boolean(),
@@ -147,16 +147,16 @@ export const projectsRoutes = {
     path: "/api/projects/:id/members/:userId",
     response: ProjectResponseSchema,
   }),
-  /** Turns an audit form on for the project. */
-  enableForm: route({
+  /** Turns a form template on for the project. */
+  enableTemplate: route({
     method: "PUT",
-    path: "/api/projects/:id/forms/:templateId",
+    path: "/api/projects/:id/templates/:templateId",
     response: ProjectResponseSchema,
   }),
-  /** Turns an audit form off for the project. */
-  disableForm: route({
+  /** Turns a form template off for the project. */
+  disableTemplate: route({
     method: "DELETE",
-    path: "/api/projects/:id/forms/:templateId",
+    path: "/api/projects/:id/templates/:templateId",
     response: ProjectResponseSchema,
   }),
 };

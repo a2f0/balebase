@@ -6,16 +6,16 @@ import {
   offlineRoutes,
 } from "@balebase/validators/offline";
 import { Hono } from "hono";
-import { findIssueImages } from "../audits/auditIssueImageRecords";
-import { uploadAuditIssueImage } from "../audits/auditIssueImageUploads";
 import type { ApiEnv } from "../auth/apiEnv";
+import { findIssueImages } from "../forms/formIssueImageRecords";
+import { uploadFormIssueImage } from "../forms/formIssueImageUploads";
 import type { IssueContext } from "../issues/issueRecords";
 import { activityBatch } from "../shared/activity";
 import { readBody, respond } from "../shared/respond";
 import {
   type OfflineWrites,
   offlineWrites,
-  readAuditState,
+  readFormState,
 } from "./offlineRecords";
 import { readOfflineSync } from "./offlineSync";
 
@@ -56,7 +56,7 @@ offline.get("/sync", async (context) => {
   );
 });
 
-offline.get("/audits/:auditId", async (context) => {
+offline.get("/forms/:formId", async (context) => {
   const scope = OfflineScopeSchema.safeParse(context.req.query());
   if (!scope.success || !matchesScope(context, scope.data))
     return context.json(
@@ -66,14 +66,14 @@ offline.get("/audits/:auditId", async (context) => {
       },
       403,
     );
-  const state = await readAuditState(
+  const state = await readFormState(
     context.env.DB,
     context.get("organizationId"),
-    context.req.param("auditId"),
+    context.req.param("formId"),
   );
   return state
-    ? respond(context, offlineRoutes.audit, state)
-    : context.json({ error: "Audit not found." }, 404);
+    ? respond(context, offlineRoutes.form, state)
+    : context.json({ error: "Form not found." }, 404);
 });
 
 offline.post("/operations", async (context) => {
@@ -120,7 +120,7 @@ interface OperationReplies {
 }
 
 /**
- * The answers to an operation. An audit write answers with the audit as the
+ * The answers to an operation. A form write answers with the form as the
  * server now has it, so the device takes what others changed along with the
  * result of its own. A second tab, or a retry after a lost response, may
  * commit this very operation at any point; its receipt answers before any
@@ -132,24 +132,24 @@ function operationReplies({
   operation,
   scope,
 }: OperationRequest): OperationReplies {
-  const auditId =
-    operation.type === "auditSave"
-      ? operation.auditId
-      : operation.type === "auditStart"
+  const formId =
+    operation.type === "formSave"
+      ? operation.formId
+      : operation.type === "formStart"
         ? operation.id
         : undefined;
   const applied = async (status: 200 | 201) => {
-    const audit = auditId
-      ? await readAuditState(
+    const form = formId
+      ? await readFormState(
           context.env.DB,
           context.get("organizationId"),
-          auditId,
+          formId,
         )
       : null;
     return respond(
       context,
       offlineRoutes.apply,
-      { resourceId: auditId ?? operation.id, ...(audit ? { audit } : {}) },
+      { resourceId: formId ?? operation.id, ...(form ? { form } : {}) },
       status,
     );
   };
@@ -176,7 +176,7 @@ function operationReplies({
 }
 
 /**
- * Applies the operation. A merge whose audit moved on since its read merges
+ * Applies the operation. A merge whose form moved on since its read merges
  * again over the newer copy, a few times before leaving it to the device's
  * next sync.
  */
@@ -244,7 +244,7 @@ offline.put("/issues/:issueId/images/:imageId", async (context) => {
       403,
     );
   }
-  return uploadAuditIssueImage(context, context.req.param("imageId"));
+  return uploadFormIssueImage(context, context.req.param("imageId"));
 });
 
 function matchesScope(

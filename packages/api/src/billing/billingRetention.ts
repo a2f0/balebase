@@ -14,16 +14,16 @@ const retentionBatchSize = 100;
 const retentionBatchesPerInvocation = 5;
 const dayMilliseconds = 24 * 60 * 60 * 1_000;
 
-/** Completed audits outside a free organization's window, with their organization. */
-const expiredAudits = `SELECT audit.id, audit.organization_id,
-         COALESCE(audit.completed_at, audit.updated_at) AS completed_at
-  FROM audits AS audit
+/** Completed forms outside a free organization's window, with their organization. */
+const expiredForms = `SELECT form.id, form.organization_id,
+         COALESCE(form.completed_at, form.updated_at) AS completed_at
+  FROM forms AS form
   JOIN organization AS organization
-    ON organization.id = audit.organization_id
+    ON organization.id = form.organization_id
   LEFT JOIN organization_billing AS billing
-    ON billing.organization_id = audit.organization_id
+    ON billing.organization_id = form.organization_id
   WHERE organization.deletedAt IS NULL
-    AND audit.status = 'completed'
+    AND form.status = 'completed'
     AND billing.pending_checkout_session_id IS NULL
     AND NOT (
       billing.checkout_claim_id IS NOT NULL
@@ -37,18 +37,18 @@ const expiredAudits = `SELECT audit.id, audit.organization_id,
       billing.paid_ended_at IS NOT NULL
       AND datetime(billing.paid_ended_at) >= datetime(?)
     )
-    AND datetime(COALESCE(audit.completed_at, audit.updated_at)) <
+    AND datetime(COALESCE(form.completed_at, form.updated_at)) <
         datetime(?)
     AND COALESCE(billing.stripe_status, '') NOT IN ${paidStatusList}`;
 
 /**
- * Permanently remove audit history outside a free organization's window.
+ * Permanently remove form history outside a free organization's window.
  * Organizations whose paid plan ended after `paidEndedAfter` are still in
  * their grace period and keep all history. Each batch records, per
- * organization, one `organization.audit_runs_purged` event by the job with
+ * organization, one `organization.form_runs_purged` event by the job with
  * the number of runs removed, in the transaction that removes them.
  */
-export async function purgeExpiredFreeAuditRuns(
+export async function purgeExpiredFreeFormRuns(
   environment: Pick<
     Bindings,
     "DB" | "STRIPE_PRO_PRICE_ID" | "STRIPE_SECRET_KEY"
@@ -90,8 +90,8 @@ async function purgeRetentionBatch(
 ) {
   const candidates = await database
     .prepare(
-      `${expiredAudits}
-       ORDER BY COALESCE(audit.completed_at, audit.updated_at) ASC, audit.id ASC
+      `${expiredForms}
+       ORDER BY COALESCE(form.completed_at, form.updated_at) ASC, form.id ASC
        LIMIT ?`,
     )
     .bind(paidEndedAfter, retainedAfter, retentionBatchSize)
@@ -103,7 +103,7 @@ async function purgeRetentionBatch(
     // purged once, so each batch's event stays distinct within the job run.
     systemActivityRowsStatement(
       database,
-      maintenanceActor("purgeExpiredFreeAuditRuns", runId),
+      maintenanceActor("purgeExpiredFreeFormRuns", runId),
       new Date().toISOString(),
       {
         bindings: [
@@ -116,11 +116,11 @@ async function purgeRetentionBatch(
         sql: `SELECT organization.id AS organization_id,
                      'organization' AS root_type, organization.id AS root_id,
                      organization.name AS root_label,
-                     'audit_run' AS subject_type, MIN(expired.id) AS subject_id,
-                     'organization.audit_runs_purged' AS action,
+                     'form_run' AS subject_type, MIN(expired.id) AS subject_id,
+                     'organization.form_runs_purged' AS action,
                      json_object('count', COUNT(*), 'completedBefore', ?,
                                  'retentionDays', ?) AS details
-              FROM (${expiredAudits}) AS expired
+              FROM (${expiredForms}) AS expired
               JOIN organization ON organization.id = expired.organization_id
               WHERE expired.id IN (SELECT value FROM json_each(?))
               GROUP BY organization.id`,
@@ -128,9 +128,9 @@ async function purgeRetentionBatch(
     ),
     database
       .prepare(
-        `DELETE FROM audits
+        `DELETE FROM forms
          WHERE id IN (SELECT value FROM json_each(?))
-           AND id IN (SELECT id FROM (${expiredAudits}))
+           AND id IN (SELECT id FROM (${expiredForms}))
          RETURNING id`,
       )
       .bind(ids, paidEndedAfter, retainedAfter),

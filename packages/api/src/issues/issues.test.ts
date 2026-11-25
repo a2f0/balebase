@@ -2,15 +2,12 @@ import type { Database } from "bun:sqlite";
 import { afterEach, describe, expect, it } from "bun:test";
 import type { ActivityPage } from "@balebase/validators/activity";
 import { activity } from "../activity/activity";
-import { audits } from "../audits/audits";
 import { createFinanceRouter } from "../finance/finance";
+import { forms } from "../forms/forms";
 import { requireCapability } from "../organizations/organizationGroups";
 import { testBindings } from "../testing/bindings";
 import { queryHooks, toD1 } from "../testing/d1";
-import {
-  createTestDatabase,
-  migrateAuditsIntoProjects,
-} from "../testing/database";
+import { createTestDatabase } from "../testing/database";
 import { requester } from "../testing/http";
 import { seedAccount, seedMember, seedProject } from "../testing/seed";
 import { testApp } from "../testing/session";
@@ -227,25 +224,25 @@ describe("workspace issues", () => {
       "Private",
     );
     f.organization = "org_user-1";
-    // Legacy audit routes must not bypass Finance visibility with a generic issue ID.
+    // Legacy form routes must not bypass Finance visibility with a generic issue ID.
     f.user = "user-2";
     expect(
-      (await f.request(`/audits/issues/${id}`, "PATCH", { status: "resolved" }))
+      (await f.request(`/forms/issues/${id}`, "PATCH", { status: "resolved" }))
         .status,
     ).toBe(404);
-    expect((await f.request(`/audits/issues/${id}/images`)).status).toBe(404);
+    expect((await f.request(`/forms/issues/${id}/images`)).status).toBe(404);
   });
 
-  it.each(["workspace", "finance_transaction", "audit_run"])(
+  it.each(["workspace", "finance_transaction", "form_run"])(
     "can edit %s issues after an assignee leaves, but rejects new nonmember assignments",
     async (type) => {
       const f = await fixture();
-      seedCheckAudit(f.db);
+      seedCheckForm(f.db);
       const target =
         type === "workspace"
           ? undefined
-          : type === "audit_run"
-            ? { type, id: "audit", itemId: "check" }
+          : type === "form_run"
+            ? { type, id: "form", itemId: "check" }
             : { type, id: "txn" };
       const created = await f.request<{ issueId: string }>("/issues", "POST", {
         title: "Assigned issue",
@@ -398,10 +395,10 @@ describe("workspace issues", () => {
     ).toBeNull();
   });
 
-  it("validates audit targets and records generic edits in the audit history", async () => {
+  it("validates form targets and records generic edits in the form history", async () => {
     const f = await fixture();
-    seedCheckAudit(f.db);
-    const target = { type: "audit_run", id: "audit", itemId: "check" };
+    seedCheckForm(f.db);
+    const target = { type: "form_run", id: "form", itemId: "check" };
     expect(
       (
         await f.request("/issues", "POST", {
@@ -427,7 +424,7 @@ describe("workspace issues", () => {
       ).status,
     ).toBe(200);
     const history = await f.request<{ events: Event[] }>(
-      "/audits/runs/audit/activity",
+      "/forms/runs/form/activity",
     );
     expect(history.body.events[0]).toMatchObject({
       action: "issue.updated",
@@ -446,11 +443,11 @@ describe("workspace issues", () => {
     );
     expect(ownHistory.body.events.map((event) => event.action)).toEqual([
       "issue.updated",
-      "audit.issue_created",
+      "form.issue_created",
     ]);
-    f.db.query("UPDATE audits SET deleted_at = ? WHERE id = 'audit'").run(now);
+    f.db.query("UPDATE forms SET deleted_at = ? WHERE id = 'form'").run(now);
     expect(
-      (await f.request("/issues", "POST", { title: "Discarded audit", target }))
+      (await f.request("/issues", "POST", { title: "Discarded form", target }))
         .status,
     ).toBe(404);
     expect(
@@ -482,83 +479,6 @@ describe("workspace issues", () => {
         .query("SELECT id FROM activity_events WHERE subject_type = 'issue'")
         .all(),
     ).toEqual([]);
-  });
-
-  it("preserves legacy audit IDs, attachments, history, and storage cleanup through migration", async () => {
-    const f = await fixture(true);
-    f.db
-      .query(
-        `INSERT INTO audits (id, organization_id, template_name, definition, responses, status, started_by, created_at, updated_at) VALUES ('audit', 'org_user-1', 'Inspection', '{}', '{}', 'in_progress', 'user-1', ?, ?)`,
-      )
-      .run(now, now);
-    f.db
-      .query(
-        `INSERT INTO audit_issues (id, organization_id, audit_id, item_id, title, created_by, created_at, updated_at) VALUES ('legacy', 'org_user-1', 'audit', 'item', 'Existing issue', 'user-1', ?, ?)`,
-      )
-      .run(now, now);
-    f.db
-      .query(
-        `INSERT INTO objects (id, organization_id, object_key, filename, content_type, size, created_at, kind, deletion_pending) VALUES ('image', 'org_user-1', 'audit/photo', 'photo.png', 'image/png', 3, ?, 'audit_issue_image', 0)`,
-      )
-      .run(now);
-    f.db
-      .query(
-        `INSERT INTO audit_issue_images (id, issue_id, object_id, uploaded_by, slot, created_at) VALUES ('attachment', 'legacy', 'image', 'user-1', 1, ?)`,
-      )
-      .run(now);
-    // Migration 0075 adds the starter templates and their creation events.
-    const auditHistory = () =>
-      f.db
-        .prepare<Record<string, unknown>, []>(
-          "SELECT * FROM activity_events WHERE root_type <> 'audit_template'",
-        )
-        .all();
-    const events = auditHistory();
-    migrateAuditsIntoProjects(f.db, "0062");
-    expect(f.db.query("PRAGMA foreign_key_check").all()).toEqual([]);
-    // Preserve every legacy field and verify the new actor-column defaults.
-    expect(auditHistory()).toEqual(
-      events.map((event) => ({
-        ...event,
-        actor_source: null,
-        actor_type: "user",
-        causation_id: null,
-        causation_type: null,
-      })),
-    );
-    expect(
-      f.db
-        .query("SELECT deletion_pending FROM objects WHERE id = 'image'")
-        .get(),
-    ).toEqual({ deletion_pending: 0 });
-    const issue = await f.request<{ issue: TestIssue }>("/issues/legacy");
-    expect(issue.body.issue).toMatchObject({
-      id: "legacy",
-      target: { type: "audit_run", id: "audit" },
-    });
-    expect(
-      (
-        await f.request<{ events: Event[] }>("/issues/legacy/activity")
-      ).body.events.map((event) => event.action),
-    ).toEqual(["audit.issue_created"]);
-    expect(
-      (
-        await f.request("/issues/legacy", "PATCH", {
-          expectedRevision: 0,
-          status: "resolved",
-        })
-      ).status,
-    ).toBe(200);
-    f.db.exec("DELETE FROM audits WHERE id = 'audit'");
-    expect(
-      f.db.query("SELECT id FROM issues WHERE id = 'legacy'").get(),
-    ).toBeNull();
-    expect(f.db.query("SELECT id FROM audit_issue_images").get()).toBeNull();
-    expect(
-      f.db
-        .query("SELECT deletion_pending FROM objects WHERE id = 'image'")
-        .get(),
-    ).toEqual({ deletion_pending: 1 });
   });
 });
 
@@ -774,8 +694,8 @@ describe("transaction annotation activity", () => {
   });
 });
 
-/** An in-progress audit, `audit`, with one required check item, `check`. */
-function seedCheckAudit(db: Database) {
+/** An in-progress form, `form`, with one required check item, `check`. */
+function seedCheckForm(db: Database) {
   const definition = JSON.stringify({
     version: 1,
     sections: [
@@ -794,18 +714,16 @@ function seedCheckAudit(db: Database) {
     ],
   });
   db.query(
-    `INSERT INTO audits (id, organization_id, project_id, template_name, definition, responses, status, started_by, created_at, updated_at) VALUES ('audit', 'org_user-1', 'project_org_user-1', 'Inspection', ?, '{}', 'in_progress', 'user-1', ?, ?)`,
+    `INSERT INTO forms (id, organization_id, project_id, template_name, definition, responses, status, started_by, created_at, updated_at) VALUES ('form', 'org_user-1', 'project_org_user-1', 'Inspection', ?, '{}', 'in_progress', 'user-1', ?, ?)`,
   ).run(definition, now, now);
 }
 
-function fixture(legacy = false) {
-  const db = createTestDatabase({
-    ...(legacy ? { before: "0062" } : {}),
-  });
+function fixture() {
+  const db = createTestDatabase();
   databases.push(db);
   for (const id of ["user-1", "user-2"])
     seedAccount(db, { createdAt: now, id });
-  if (!legacy) seedProject(db, "org_user-1");
+  seedProject(db, "org_user-1");
   seedMember(db, {
     createdAt: now,
     id: "second-member",
@@ -855,7 +773,7 @@ function fixture(legacy = false) {
   });
   app.route("/issues", issues);
   app.route("/activity", activity);
-  app.route("/audits", audits);
+  app.route("/forms", forms);
   app.use("/finance/*", requireCapability("finance"));
   app.route("/finance", createFinanceRouter());
   const send = requester(app, bindings);

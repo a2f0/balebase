@@ -254,7 +254,7 @@ describe("durable finance sync", () => {
     ).toMatchObject({ requested_by: "user-1" });
   });
 
-  it("audits setting changes atomically, skips no-ops, and enforces organization boundaries and valid input", async () => {
+  it("forms setting changes atomically, skips no-ops, and enforces organization boundaries and valid input", async () => {
     const fixture = await queuedFixture();
     expect(
       (await fixture.request("/sync-settings", "PATCH", { dailySync: "true" }))

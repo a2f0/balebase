@@ -86,7 +86,7 @@ const apiKeyRoutes: Array<{ prefix: string; writable: boolean }> = [
   { prefix: "/api/me", writable: false },
   { prefix: "/api/activity", writable: false },
   { prefix: "/api/issues", writable: true },
-  { prefix: "/api/audits", writable: true },
+  { prefix: "/api/forms", writable: true },
   { prefix: "/api/businesses", writable: true },
   { prefix: "/api/contracts", writable: true },
   { prefix: "/api/employee-forms", writable: true },
@@ -97,7 +97,7 @@ const apiKeyRoutes: Array<{ prefix: string; writable: boolean }> = [
   { prefix: "/api/objects", writable: true },
   { prefix: "/api/organization-groups", writable: true },
   { prefix: "/api/organization-settings/people", writable: false },
-  // Read-only, so a key can name the project an audit is started for.
+  // Read-only, so a key can name the project a form is started for.
   { prefix: "/api/projects", writable: false },
 ];
 

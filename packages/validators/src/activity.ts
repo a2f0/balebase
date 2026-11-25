@@ -202,8 +202,8 @@ export type ActivityPage = z.infer<typeof ActivityPageSchema>;
 export const ActivityQuerySchema = z.object({ cursor: z.string().optional() });
 
 const ActivityResourceTypeSchema = z.enum([
-  "audit_run",
-  "audit_template",
+  "form_run",
+  "form_template",
   "equipment",
   "organization",
   "organization_member",

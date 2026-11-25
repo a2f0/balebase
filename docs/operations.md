@@ -229,7 +229,7 @@ a new run. Finance pages retain their existing retry and checkpoint behavior.
 
 Production's hourly trigger enqueues one run of each maintenance job. Scheduled
 IDs deduplicate repeated cron events, and active jobs are shared with manual
-requests. Newly scheduled deleted-file cleanup waits for audit-retention work to
+requests. Newly scheduled deleted-file cleanup waits for form-retention work to
 finish, including failure, even when queue messages arrive out of order. An
 already-active manual cleanup is reused and can overlap that retention run;
 existing per-object claims and grace periods still apply. Every five minutes, both
@@ -805,15 +805,15 @@ manual cleanup runs can drain eligible files sooner. If the tier accepts
 direct SMTP, follow the [receiver purge procedure](../smtp/README.md#operations)
 for each ID in **Purge history** to remove its queued and held spool copies.
 
-Root admins can restore discarded global audit forms from **Global Audits →
-Discarded forms**. The **Purge discarded global forms** job
-(`purgeDiscardedAuditForms`) permanently deletes up to 100 per run once their
+Root admins can restore discarded global templates from **Global templates →
+Discarded templates**. The **Purge discarded global templates** job
+(`purgeDiscardedFormTemplates`) permanently deletes up to 100 per run once their
 discard is at least 30 days old, with their versions and activity; its saved
 output reports `purged`. It runs with hourly maintenance in production and from
 **Root Admin → Jobs → Run now** in either tier. Each run is one D1 batch
-that rechecks eligibility, so a restore committed first keeps the form. Audits
-started from a purged form keep their snapshot, and each project that had the
-form turned on records its removal by the job.
+that rechecks eligibility, so a restore committed first keeps the template.
+Forms started from a purged template keep their snapshot, and each project that
+had the template turned on records its removal by the job.
 
 Inbox messages can be moved to Trash and restored by organization members.
 Deleted messages retain their deletion time and initiating user in D1, while

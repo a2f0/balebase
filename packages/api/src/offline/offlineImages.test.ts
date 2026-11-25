@@ -1,13 +1,13 @@
 import { expect, it } from "bun:test";
 import {
-  createActivityAudit,
+  createActivityForm,
   createFixture,
   type IssueResponse,
   imageActivation,
   imageUpload,
   jsonRequest,
   pngBytes,
-} from "../testing/auditFixture";
+} from "../testing/formFixture";
 
 it("replays offline image uploads after lost responses and removal without duplicate storage or history", async () => {
   const f = createFixture();
@@ -42,7 +42,7 @@ it("replays offline image uploads after lost responses and removal without dupli
   expect(
     f.database
       .query(
-        "SELECT action FROM activity_events WHERE action = 'audit.image_uploaded'",
+        "SELECT action FROM activity_events WHERE action = 'form.image_uploaded'",
       )
       .all(),
   ).toHaveLength(1);
@@ -58,19 +58,19 @@ it("replays offline image uploads after lost responses and removal without dupli
   });
   expect(removed.status).toBe(204);
   expect((await upload()).status).toBe(200);
-  expect(f.database.query("SELECT id FROM audit_issue_images").all()).toEqual(
+  expect(f.database.query("SELECT id FROM form_issue_images").all()).toEqual(
     [],
   );
   expect(f.stored.size).toBe(0);
   f.database.close();
 });
 
-it("acknowledges an uploaded offline image after its audit and issue are purged", async () => {
+it("acknowledges an uploaded offline image after its form and issue are purged", async () => {
   const fixture = createFixture();
-  const { auditId } = await createActivityAudit(fixture);
+  const { formId } = await createActivityForm(fixture);
   const issue = await jsonRequest<IssueResponse>(
     fixture,
-    `/runs/${auditId}/issues`,
+    `/runs/${formId}/issues`,
     "POST",
     { title: "Rail", itemId: "check" },
   );
@@ -82,7 +82,7 @@ it("acknowledges an uploaded offline image after its audit and issue are purged"
   const first = await upload();
   expect(first.status).toBe(201);
   const image = await first.json();
-  fixture.database.query("DELETE FROM audits WHERE id = ?").run(auditId);
+  fixture.database.query("DELETE FROM forms WHERE id = ?").run(formId);
   expect(
     fixture.database
       .query("SELECT id FROM issues WHERE id = ?")
@@ -92,7 +92,7 @@ it("acknowledges an uploaded offline image after its audit and issue are purged"
   expect(replay.status).toBe(200);
   expect(await replay.json()).toEqual(image);
   expect(
-    fixture.database.query("SELECT id FROM audit_issue_images").all(),
+    fixture.database.query("SELECT id FROM form_issue_images").all(),
   ).toEqual([]);
   expect(fixture.stored.size).toBe(1); // The existing tombstone cleanup owns deletion; no new upload occurred.
   fixture.database.close();

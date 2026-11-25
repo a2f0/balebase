@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import {
   createFixture,
-  insertAudit,
+  insertForm,
   insertStalePendingCheckout,
   organizationId,
   proPriceId,
@@ -10,10 +10,10 @@ import {
 } from "../testing/billingFixture";
 import { type FetchCall, withFetch } from "../testing/http";
 import { insertBilling } from "../testing/seed";
-import { purgeExpiredFreeAuditRuns } from "./billingRetention";
+import { purgeExpiredFreeFormRuns } from "./billingRetention";
 
 describe("billing retention", () => {
-  it("purges old Free audit history without touching Pro history", async () => {
+  it("purges old Free form history without touching Pro history", async () => {
     const fixture = createFixture();
     insertBilling(fixture.database, "org_user-2", {
       seat_quantity: 1,
@@ -29,21 +29,16 @@ describe("billing retention", () => {
       stripe_price_id: "price_other",
       stripe_status: "active",
     });
-    insertAudit(fixture.database, "free-old", organizationId, "2026-06-01");
-    insertAudit(fixture.database, "free-recent", organizationId, "2026-08-20");
-    insertAudit(fixture.database, "pro-old", "org_user-2", "2026-06-01");
-    insertAudit(
-      fixture.database,
-      "other-price-old",
-      "org_user-3",
-      "2026-06-01",
-    );
+    insertForm(fixture.database, "free-old", organizationId, "2026-06-01");
+    insertForm(fixture.database, "free-recent", organizationId, "2026-08-20");
+    insertForm(fixture.database, "pro-old", "org_user-2", "2026-06-01");
+    insertForm(fixture.database, "other-price-old", "org_user-3", "2026-06-01");
 
     expect(
-      await purgeExpiredFreeAuditRuns(fixture.bindings, "run-1", "2026-07-27"),
+      await purgeExpiredFreeFormRuns(fixture.bindings, "run-1", "2026-07-27"),
     ).toBe(1);
     expect(
-      fixture.database.query("SELECT id FROM audits ORDER BY id").all(),
+      fixture.database.query("SELECT id FROM forms ORDER BY id").all(),
     ).toEqual([
       { id: "free-recent" },
       { id: "other-price-old" },
@@ -59,7 +54,7 @@ describe("billing retention", () => {
       stripe_price_id: proPriceId,
       stripe_status: "active",
     });
-    insertAudit(
+    insertForm(
       fixture.database,
       "partial-pro-row-old",
       organizationId,
@@ -69,9 +64,9 @@ describe("billing retention", () => {
     const summary = await fixture.request("/", undefined);
     expect(await summary.json()).toMatchObject({ plan: "pro" });
     expect(
-      await purgeExpiredFreeAuditRuns(fixture.bindings, "run-1", "2026-07-27"),
+      await purgeExpiredFreeFormRuns(fixture.bindings, "run-1", "2026-07-27"),
     ).toBe(0);
-    expect(fixture.database.query("SELECT id FROM audits").all()).toEqual([
+    expect(fixture.database.query("SELECT id FROM forms").all()).toEqual([
       { id: "partial-pro-row-old" },
     ]);
   });
@@ -86,7 +81,7 @@ describe("billing retention", () => {
       stripe_subscription_id: "sub_unknown_price",
       stripe_subscription_item_id: "si_unknown_price",
     });
-    insertAudit(
+    insertForm(
       fixture.database,
       "unknown-price-old",
       organizationId,
@@ -96,9 +91,9 @@ describe("billing retention", () => {
     const summary = await fixture.request("/", undefined);
     expect(await summary.json()).toMatchObject({ plan: "free" });
     expect(
-      await purgeExpiredFreeAuditRuns(fixture.bindings, "run-1", "2026-07-27"),
+      await purgeExpiredFreeFormRuns(fixture.bindings, "run-1", "2026-07-27"),
     ).toBe(0);
-    expect(fixture.database.query("SELECT id FROM audits").all()).toEqual([
+    expect(fixture.database.query("SELECT id FROM forms").all()).toEqual([
       { id: "unknown-price-old" },
     ]);
   });
@@ -127,7 +122,7 @@ describe("billing retention", () => {
           1,
         );
         expect((await sendWebhook(fixture, subscription)).status).toBe(200);
-        insertAudit(
+        insertForm(
           fixture.database,
           "rotated-price-pro-old",
           organizationId,
@@ -135,7 +130,7 @@ describe("billing retention", () => {
         );
 
         expect(
-          await purgeExpiredFreeAuditRuns(
+          await purgeExpiredFreeFormRuns(
             fixture.bindings,
             "run-1",
             "2026-07-27",
@@ -159,10 +154,10 @@ describe("billing retention", () => {
     );
   });
 
-  it("caps expired Free audit cleanup per invocation", async () => {
+  it("caps expired Free form cleanup per invocation", async () => {
     const fixture = createFixture();
     for (let index = 0; index < 605; index += 1) {
-      insertAudit(
+      insertForm(
         fixture.database,
         `expired-${String(index).padStart(3, "0")}`,
         organizationId,
@@ -170,13 +165,13 @@ describe("billing retention", () => {
       );
     }
     expect(
-      await purgeExpiredFreeAuditRuns(fixture.bindings, "run-1", "2026-07-27"),
+      await purgeExpiredFreeFormRuns(fixture.bindings, "run-1", "2026-07-27"),
     ).toBe(500);
     expect(
-      fixture.database.query("SELECT COUNT(*) AS count FROM audits").get(),
+      fixture.database.query("SELECT COUNT(*) AS count FROM forms").get(),
     ).toEqual({ count: 105 });
     expect(
-      await purgeExpiredFreeAuditRuns(fixture.bindings, "run-1", "2026-07-27"),
+      await purgeExpiredFreeFormRuns(fixture.bindings, "run-1", "2026-07-27"),
     ).toBe(105);
   });
 
@@ -187,7 +182,7 @@ describe("billing retention", () => {
       pending_checkout_session_id: "cs_retention_race",
       pending_checkout_url: "https://checkout.stripe.test/retention-race",
     });
-    insertAudit(
+    insertForm(
       fixture.database,
       "pending-checkout-old",
       organizationId,
@@ -195,9 +190,9 @@ describe("billing retention", () => {
     );
 
     expect(
-      await purgeExpiredFreeAuditRuns(fixture.bindings, "run-1", "2026-07-27"),
+      await purgeExpiredFreeFormRuns(fixture.bindings, "run-1", "2026-07-27"),
     ).toBe(0);
-    expect(fixture.database.query("SELECT id FROM audits").all()).toEqual([
+    expect(fixture.database.query("SELECT id FROM forms").all()).toEqual([
       { id: "pending-checkout-old" },
     ]);
   });
@@ -209,7 +204,7 @@ describe("billing retention", () => {
       checkout_claim_id: "claim_retention_race",
       checkout_claim_quantity: 1,
     });
-    insertAudit(
+    insertForm(
       fixture.database,
       "checkout-claim-old",
       organizationId,
@@ -217,7 +212,7 @@ describe("billing retention", () => {
     );
 
     expect(
-      await purgeExpiredFreeAuditRuns(fixture.bindings, "run-1", "2026-07-27"),
+      await purgeExpiredFreeFormRuns(fixture.bindings, "run-1", "2026-07-27"),
     ).toBe(0);
     fixture.database
       .query(
@@ -226,7 +221,7 @@ describe("billing retention", () => {
       )
       .run(organizationId);
     expect(
-      await purgeExpiredFreeAuditRuns(fixture.bindings, "run-1", "2026-07-27"),
+      await purgeExpiredFreeFormRuns(fixture.bindings, "run-1", "2026-07-27"),
     ).toBe(1);
   });
 
@@ -241,30 +236,30 @@ describe("billing retention", () => {
       stripe_status: "incomplete_expired",
       stripe_subscription_id: "sub_never_paid",
     });
-    insertAudit(fixture.database, "lapsed-old", organizationId, "2026-06-01");
-    insertAudit(fixture.database, "never-paid-old", "org_user-2", "2026-06-01");
-    insertAudit(fixture.database, "no-billing-old", "org_user-3", "2026-06-01");
+    insertForm(fixture.database, "lapsed-old", organizationId, "2026-06-01");
+    insertForm(fixture.database, "never-paid-old", "org_user-2", "2026-06-01");
+    insertForm(fixture.database, "no-billing-old", "org_user-3", "2026-06-01");
 
     expect(
-      await purgeExpiredFreeAuditRuns(
+      await purgeExpiredFreeFormRuns(
         fixture.bindings,
         "run-1",
         "2026-07-27",
         "2026-08-01T00:00:00.000Z",
       ),
     ).toBe(2);
-    expect(fixture.database.query("SELECT id FROM audits").all()).toEqual([
+    expect(fixture.database.query("SELECT id FROM forms").all()).toEqual([
       { id: "lapsed-old" },
     ]);
     expect(
-      await purgeExpiredFreeAuditRuns(
+      await purgeExpiredFreeFormRuns(
         fixture.bindings,
         "run-1",
         "2026-07-27",
         "2026-08-01T00:00:01.000Z",
       ),
     ).toBe(1);
-    expect(fixture.database.query("SELECT id FROM audits").all()).toEqual([]);
+    expect(fixture.database.query("SELECT id FROM forms").all()).toEqual([]);
   });
 
   it("keeps history while organization deletion is in flight", async () => {
@@ -274,7 +269,7 @@ describe("billing retention", () => {
       checkout_disabled_expires_at: 2_000_000_000,
       stripe_status: "canceled",
     });
-    insertAudit(
+    insertForm(
       fixture.database,
       "deletion-in-flight-old",
       organizationId,
@@ -282,9 +277,9 @@ describe("billing retention", () => {
     );
 
     expect(
-      await purgeExpiredFreeAuditRuns(fixture.bindings, "run-1", "2026-07-27"),
+      await purgeExpiredFreeFormRuns(fixture.bindings, "run-1", "2026-07-27"),
     ).toBe(0);
-    expect(fixture.database.query("SELECT id FROM audits").all()).toEqual([
+    expect(fixture.database.query("SELECT id FROM forms").all()).toEqual([
       { id: "deletion-in-flight-old" },
     ]);
   });
@@ -292,7 +287,7 @@ describe("billing retention", () => {
   it("reconciles a completed stale Checkout before retention", async () => {
     const fixture = createFixture();
     insertStalePendingCheckout(fixture.database, "cs_retention_complete");
-    insertAudit(
+    insertForm(
       fixture.database,
       "completed-checkout-old",
       organizationId,
@@ -330,7 +325,7 @@ describe("billing retention", () => {
       },
       async () => {
         expect(
-          await purgeExpiredFreeAuditRuns(
+          await purgeExpiredFreeFormRuns(
             fixture.bindings,
             "run-1",
             "2026-07-27",
@@ -349,7 +344,7 @@ describe("billing retention", () => {
           stripe_price_id: proPriceId,
           stripe_status: "active",
         });
-        expect(fixture.database.query("SELECT id FROM audits").all()).toEqual([
+        expect(fixture.database.query("SELECT id FROM forms").all()).toEqual([
           { id: "completed-checkout-old" },
         ]);
       },
@@ -359,7 +354,7 @@ describe("billing retention", () => {
   it("clears an expired stale Checkout before retention", async () => {
     const fixture = createFixture();
     insertStalePendingCheckout(fixture.database, "cs_retention_expired");
-    insertAudit(
+    insertForm(
       fixture.database,
       "expired-checkout-old",
       organizationId,
@@ -378,7 +373,7 @@ describe("billing retention", () => {
       },
       async () => {
         expect(
-          await purgeExpiredFreeAuditRuns(
+          await purgeExpiredFreeFormRuns(
             fixture.bindings,
             "run-1",
             "2026-07-27",
@@ -399,7 +394,7 @@ describe("billing retention", () => {
   it("expires an abandoned stale Checkout before retention", async () => {
     const fixture = createFixture();
     insertStalePendingCheckout(fixture.database, "cs_retention_abandoned");
-    insertAudit(
+    insertForm(
       fixture.database,
       "abandoned-checkout-old",
       organizationId,
@@ -426,7 +421,7 @@ describe("billing retention", () => {
       },
       async () => {
         expect(
-          await purgeExpiredFreeAuditRuns(
+          await purgeExpiredFreeFormRuns(
             fixture.bindings,
             "run-1",
             "2026-07-27",
@@ -443,13 +438,13 @@ describe("billing retention", () => {
   it("isolates failed Checkout reconciliation during retention", async () => {
     const fixture = createFixture();
     insertStalePendingCheckout(fixture.database, "cs_retention_failed");
-    insertAudit(
+    insertForm(
       fixture.database,
       "failed-checkout-old",
       organizationId,
       "2026-06-01",
     );
-    insertAudit(fixture.database, "other-free-old", "org_user-2", "2026-06-01");
+    insertForm(fixture.database, "other-free-old", "org_user-2", "2026-06-01");
     await withFetch(
       {
         "GET https://api.stripe.com/v1/checkout/sessions/cs_retention_failed":
@@ -461,14 +456,14 @@ describe("billing retention", () => {
       },
       async () => {
         expect(
-          await purgeExpiredFreeAuditRuns(
+          await purgeExpiredFreeFormRuns(
             fixture.bindings,
             "run-1",
             "2026-07-27",
           ),
         ).toBe(1);
         expect(
-          fixture.database.query("SELECT id FROM audits ORDER BY id").all(),
+          fixture.database.query("SELECT id FROM forms ORDER BY id").all(),
         ).toEqual([{ id: "failed-checkout-old" }]);
       },
       { captureErrors: true },
@@ -477,32 +472,32 @@ describe("billing retention", () => {
 
   it("fails closed when retention billing configuration is missing", async () => {
     const fixture = createFixture();
-    insertAudit(fixture.database, "must-retain", organizationId, "2026-06-01");
+    insertForm(fixture.database, "must-retain", organizationId, "2026-06-01");
     const { STRIPE_PRO_PRICE_ID: _priceId, ...missingPriceBindings } =
       fixture.bindings;
     await expect(
-      purgeExpiredFreeAuditRuns(missingPriceBindings, "run-1", "2026-07-27"),
+      purgeExpiredFreeFormRuns(missingPriceBindings, "run-1", "2026-07-27"),
     ).rejects.toThrow(
       "Stripe Pro price configuration is required for retention cleanup.",
     );
-    expect(fixture.database.query("SELECT id FROM audits").all()).toEqual([
+    expect(fixture.database.query("SELECT id FROM forms").all()).toEqual([
       { id: "must-retain" },
     ]);
   });
 
-  it("keeps old audit runs that are still in progress", async () => {
+  it("keeps old form runs that are still in progress", async () => {
     const fixture = createFixture();
-    insertAudit(fixture.database, "active-old", organizationId, "2026-06-01");
+    insertForm(fixture.database, "active-old", organizationId, "2026-06-01");
     fixture.database
       .query(
-        `UPDATE audits SET status = 'in_progress', completed_at = NULL
+        `UPDATE forms SET status = 'in_progress', completed_at = NULL
          WHERE id = 'active-old'`,
       )
       .run();
     expect(
-      await purgeExpiredFreeAuditRuns(fixture.bindings, "run-1", "2026-07-27"),
+      await purgeExpiredFreeFormRuns(fixture.bindings, "run-1", "2026-07-27"),
     ).toBe(0);
-    expect(fixture.database.query("SELECT id FROM audits").all()).toEqual([
+    expect(fixture.database.query("SELECT id FROM forms").all()).toEqual([
       { id: "active-old" },
     ]);
   });

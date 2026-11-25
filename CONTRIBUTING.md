@@ -25,7 +25,7 @@ Every workspace lives under `packages/`, and infrastructure lives in
 | Request and response schemas for every route | `packages/validators/src` |
 | Typed client for those routes | `packages/api-client/src` |
 | Database schema | `packages/api/migrations` |
-| Built-in audit templates and their seed migrations | `packages/api/auditLibrary`, [residential audit library](docs/residential-audit-library.md) |
+| Built-in form templates and their seed migrations | `packages/api/templateLibrary`, [residential template library](docs/residential-template-library.md) |
 | Application screens, in one folder per feature, and the host interface each shell fills in | `packages/app/src` |
 | Web shell and its Worker | `packages/app-web` |
 | Native shell, mobile projects, and Fastlane lanes | [`packages/app-capacitor`](packages/app-capacitor/README.md) (store tiers in `nativeReleaseTargets.json`), `scripts/dev/run*.sh`, `scripts/release/`, `scripts/lib/nativeRelease.sh` |
@@ -63,8 +63,8 @@ it.
 - Build body and query schemas from those rules and the fields in `fields.ts`,
   such as `requiredText`, `optionalText`, `calendarDate`, and `PersonSchema`,
   each carrying the message for the rule it enforces.
-- Checklist section and item IDs are exact strings: parse them with
-  `ChecklistIdSchema`, which never trims them.
+- Template section and question IDs are exact strings: parse them with
+  `DefinitionIdSchema`, which never trims them.
 - Offline receipts hash the parsed operation, so never change how
   `OfflineOperationSchema` in `offline.ts` parses or normalizes one.
 - Each area client in `@balebase/api-client` lists its endpoints typed by the
@@ -138,12 +138,12 @@ it.
   fields it must insist on, such as `expectedCurrentVersion`.
 - The MCP catalog tests in `auth/apiKeys.test.ts` fail when a tool's route is
   not served or its arguments drift from the route's.
-- Issues are created in `issues/issues.ts` (general) and `audits/audits.ts`
-  (audit-specific) and replayed by `offline/offlineRecords.ts`; they share the
+- Issues are created in `issues/issues.ts` (general) and `forms/forms.ts`
+  (form-specific) and replayed by `offline/offlineRecords.ts`; they share the
   `issues` table and its activity triggers, so change a field in both route
   families and the offline operation schema, after reading the
   [issue](docs/product.md#issues-and-transaction-activity) and
-  [device-first audit](docs/product.md#audits-on-this-device) behavior.
+  [device-first form](docs/product.md#forms-on-this-device) behavior.
 
 ### Database (`packages/api/migrations`)
 
@@ -157,16 +157,16 @@ it.
   until production has applied it. Applied migrations never run against old
   rows again (a new database has none), so delete their backfill tests
   rather than maintain them; keep tests of the schema they leave behind.
-- Built-in audit templates are JSON in `packages/api/auditLibrary`, published
+- Built-in form templates are JSON in `packages/api/templateLibrary`, published
   by generated migrations; see
-  [validation and updates](docs/residential-audit-library.md#validation-and-updates).
+  [validation and updates](docs/residential-template-library.md#validation-and-updates).
 
 ### App (`packages/app/src`)
 
 - `packages/app` holds every screen and never imports Capacitor; a shell
   renders it with `renderApp` from `@balebase/app/client`, passing the host
   services in `host.ts`.
-- Each feature has one folder, such as `audits/`, `finance/`, or
+- Each feature has one folder, such as `forms/`, `finance/`, or
   `organizations/`, holding its screens, state, helpers, and tests.
   `workspace/` holds the shell, routes, paths, and navigation guard, and
   `shared/` the feature-neutral hooks and primitives that several features
@@ -323,7 +323,7 @@ in `packages/app-web/playwright.screenshots.config.ts` and
 
 The data comes from [a2f0/balebase-continuity](https://github.com/a2f0/balebase-continuity),
 pinned by commit as `@a2f0/balebase-continuity` in `packages/api`: Harborline
-Electric, its people, equipment, projects, audits with site photos, issues,
+Electric, its people, equipment, projects, forms with site photos, issues,
 bank feed, contracts with their PDFs, and library documents. Its
 `docs/balebase.md` is the contract. `packages/api/scripts/screenshotSeed.ts`
 replays it through the API's own routes, each record sent by the person canon
@@ -333,7 +333,7 @@ in-process stand-ins (`scripts/screenshotServices.ts`): email lands in an
 outbox the seed reads signing links from, images keep their bytes, and a fake
 Plaid answers with the canon bank feed. Bump the pin to take a canon change;
 `scripts/screenshotSeed.test.ts`, part of the API suite, replays the seed and
-checks what it built, and an audit issue new to canon needs its checklist item
+checks what it built, and a form issue new to canon needs its question
 in `scripts/screenshotRecords.ts`.
 Balebase has no profile pictures or equipment photos, so the canon's avatars
 and equipment photos are not shown.
@@ -356,7 +356,7 @@ somewhere else:
   1668×2388), and `mobile` (the iPhone 13 profile with its whole 390×844
   screen as the viewport, like an installed app, 1170×2532);
 - themes `light` and `dark`, pinned through the stored theme preference;
-- screens `projects`, `issues`, `audits`, `audit`, `equipment`, `businesses`,
+- screens `projects`, `issues`, `forms`, `form`, `equipment`, `businesses`,
   `contracts`, `contract`, `finance`, `library`, `activity`, `organization`,
   and `groups`, named in `screenshots/screens.ts`; a gallery that shows them
   keeps these names.

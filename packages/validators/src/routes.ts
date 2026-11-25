@@ -1,11 +1,10 @@
 import { accountSettingsRoutes } from "./accountSettings";
 import { activityRoutes } from "./activity";
-import { adminAuditTemplatesRoutes } from "./adminAuditTemplates";
+import { adminFormTemplatesRoutes } from "./adminFormTemplates";
 import { adminJobsRoutes } from "./adminJobs";
 import { adminOrganizationsRoutes } from "./adminOrganizations";
 import { adminUsersRoutes } from "./adminUsers";
 import { apiKeysRoutes } from "./apiKeys";
-import { auditsRoutes } from "./audits";
 import { billingRoutes } from "./billing";
 import { businessesRoutes } from "./businesses";
 import { contractsRoutes } from "./contracts";
@@ -13,6 +12,7 @@ import { contractTemplatesRoutes } from "./contractTemplates";
 import { employeeFormsRoutes } from "./employeeForms";
 import { equipmentRoutes } from "./equipment";
 import { financeRoutes } from "./finance";
+import { formsRoutes } from "./forms";
 import { inboxRoutes } from "./inbox";
 import { issuesRoutes } from "./issues";
 import { libraryFoldersRoutes } from "./libraryFolders";
@@ -29,12 +29,12 @@ import { signingRoutes } from "./signing";
 export const routes: Record<string, Record<string, Route>> = {
   accountSettings: accountSettingsRoutes,
   activity: activityRoutes,
-  adminAuditTemplates: adminAuditTemplatesRoutes,
+  adminFormTemplates: adminFormTemplatesRoutes,
   adminJobs: adminJobsRoutes,
   adminOrganizations: adminOrganizationsRoutes,
   adminUsers: adminUsersRoutes,
   apiKeys: apiKeysRoutes,
-  audits: auditsRoutes,
+  forms: formsRoutes,
   billing: billingRoutes,
   businesses: businessesRoutes,
   contracts: contractsRoutes,
