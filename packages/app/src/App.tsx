@@ -8,7 +8,6 @@ import {
   PageHeader,
 } from "@balebase/ui/react";
 import type { OrganizationCapability } from "@balebase/validators/organizationGroups";
-
 import { type ReactNode, useEffect, useState } from "react";
 import {
   accountReturnPath,

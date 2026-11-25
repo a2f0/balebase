@@ -6,6 +6,7 @@ import {
   createRequirement,
   jsonPost,
   mockCheckr,
+  orderedScreening,
   orgId,
 } from "../testing/employeeFormFixture";
 import { seedMember } from "../testing/seed";
@@ -140,6 +141,35 @@ describe("background check access", () => {
       expect(response.status).toBe(403);
       expect(await response.json()).toEqual({ error: managerRequired });
     }
+  });
+
+  it("lets an HR member who isn't a manager refresh an ordered check and read its result", async () => {
+    const fixture = await createFixture();
+    const recruiter = addRecruiter(fixture);
+    const id = await orderedScreening(fixture);
+    const checkr = mockCheckr(() =>
+      Response.json({
+        candidate_id: "candidate-1",
+        id: "report-1",
+        result: "clear",
+        status: "complete",
+      }),
+    );
+    try {
+      const refreshed = await recruiter.request(`/${id}/checkr/refresh`, {
+        method: "POST",
+      });
+      expect(refreshed.status).toBe(200);
+    } finally {
+      checkr.restore();
+    }
+    const listed = await recruiter.request("/");
+    const { requirements } = (await listed.json()) as {
+      requirements: Array<{ checkrResult: string | null; id: string }>;
+    };
+    expect(requirements).toEqual([
+      expect.objectContaining({ checkrResult: "clear", id }),
+    ]);
   });
 
   it("keeps background checks from an owner outside every group that grants them", async () => {

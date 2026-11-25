@@ -350,7 +350,18 @@ Deploy the app right after the API when migration
 `0108_hr_background_checks.sql` ships. An app built before it knows only the
 Finance capability, so saving the HR group's Access tab there removes its
 Background checks access; turn it back on from a current build if that
-happens. Native builds keep that editor until their next release.
+happens. Native builds keep that editor until their next release. An
+organization created between the migration and the new API Worker has no HR
+group; after the deploy, this should list none:
+
+```sh
+bunx wrangler d1 execute <database> --remote --command \
+  "SELECT id FROM organization WHERE id NOT IN
+   (SELECT organization_id FROM organization_builtin_group WHERE kind = 'hr')"
+```
+
+For any it lists, an owner or admin can make a group with Background checks
+access in Organization → Access.
 
 Website builds publish the shared screenshot capture
 ([screenshots](../CONTRIBUTING.md#screenshots)) and refuse one that is
