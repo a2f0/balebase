@@ -68,6 +68,40 @@ export function stillHandlesKind(
 }
 
 /**
+ * Why someone may not assign these requests, if they may not: each needs its
+ * kind's handler, and pending invitations, with the addresses they name, are
+ * for owners and admins, so only they ask an invitee for anything.
+ */
+export function assignmentRefusal(
+  access: RequirementAccess,
+  requirements: Array<{ kind: EmployeeRequirementKind }>,
+  toInvitation: boolean,
+) {
+  const refused = requirements.find(({ kind }) => !handlesKind(access, kind));
+  if (refused) return handlerRequired(refused.kind);
+  return toInvitation && !access.forms ? managerRequired : undefined;
+}
+
+/**
+ * `assignmentRefusal`'s rule, read inside the write's transaction: the actor
+ * still handles the kind, and for an invitee still manages the organization.
+ */
+export function stillAssigns(
+  organizationId: string,
+  userId: string,
+  kind: EmployeeRequirementKind,
+  toInvitation: boolean,
+) {
+  const handles = stillHandlesKind(organizationId, userId, kind);
+  if (!toInvitation || !isBackgroundCheck(kind)) return handles;
+  const manages = stillManages(organizationId, userId);
+  return {
+    bindings: [...handles.bindings, ...manages.bindings],
+    sql: `${handles.sql} AND ${manages.sql}`,
+  };
+}
+
+/**
  * `stillHandlesKind` for the `employee_requirements` row a write guards, by
  * the row's own kind.
  */

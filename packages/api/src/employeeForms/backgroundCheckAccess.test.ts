@@ -100,6 +100,13 @@ describe("background check access", () => {
     );
     expect(form.status).toBe(403);
     expect(await form.json()).toEqual({ error: managerRequired });
+    // Pending invitations are for owners and admins.
+    const invitee = await recruiter.request(
+      "/",
+      jsonPost({ invitationId: "invite", requirements: [backgroundCheck] }),
+    );
+    expect(invitee.status).toBe(403);
+    expect(await invitee.json()).toEqual({ error: managerRequired });
     expect(requirementCount(fixture)).toBe(2);
 
     expect(await listedIds(recruiter)).toEqual([checkId]);
@@ -161,6 +168,8 @@ describe("background check access", () => {
       ),
       await owner.request(`/${checkId}`, { method: "DELETE" }),
       await owner.request(`/${checkId}/activity`),
+      // Refused before the report is read, so it says nothing of the order.
+      await owner.request(`/${checkId}/checkr/refresh`, { method: "POST" }),
       await owner.request(
         `/${checkId}/checkr/request`,
         jsonPost({ state: "CA" }),
@@ -218,6 +227,23 @@ describe("background check access", () => {
         )
         .get(),
     ).toEqual({ count: 0 });
+  });
+
+  it("assigns an invitee nothing when the owner stops managing mid-request", async () => {
+    const fixture = await createFixture();
+    fixture.beforeRun("INSERT INTO employee_requirements", () => {
+      fixture.database
+        .query("UPDATE member SET role = 'member' WHERE userId = 'owner'")
+        .run();
+    });
+    const response = await fixture
+      .app("owner", "owner")
+      .request(
+        "/",
+        jsonPost({ invitationId: "invite", requirements: [backgroundCheck] }),
+      );
+    expect(response.status).toBe(409);
+    expect(requirementCount(fixture)).toBe(0);
   });
 
   it("shows background check history only to those with Background checks access", async () => {

@@ -1300,10 +1300,13 @@ hand keep their plain status.
 check page, shown in the sidebar only to members of a group with Background
 checks access. It lists every background check with the person, due date, and
 stage, and **Request a check** adds one for a member (or, for owners and
-admins, a pending invitee) with a due date, then opens it. Each check's page
-(`/background-checks/<request>`) is the request page described below, with
-the Checkr request, refresh, result, and history. Without that access the path
-explains that Background checks group membership is required.
+admins, a pending invitee) with a due date, then opens it. Only owners and
+admins see pending invitations or ask an invitee for anything, but a check
+already requested of an invitee shows their invited address to everyone with
+Background checks access. Each check's page (`/background-checks/<request>`)
+is the request page described below, with the Checkr request, refresh, result,
+and history. Without that access the path explains that Background checks
+group membership is required.
 
 Each request's title opens its own page. In
 My documents (`/me/requests/<request>`) it shows the person what was asked,

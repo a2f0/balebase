@@ -238,13 +238,14 @@ employeeFormScreening.post("/:id/checkr/refresh", async (context) => {
     return context.json({ error: handlerRequired("form") }, 403);
   }
   const row = await findRequirement(context);
+  // Refused before the report is read, so whether a check someone doesn't
+  // handle was ordered stays hidden. Credit reports ordered through Checkr's
+  // hosted invitations still refresh, for the managers who handle them.
+  if (row && !handlesKind(access, row.kind)) {
+    return context.json({ error: handlerRequired(row.kind) }, 403);
+  }
   if (!row?.checkr_report_id) {
     return context.json({ error: "Screening not submitted." }, 404);
-  }
-  // Credit reports ordered through Checkr's hosted invitations still refresh,
-  // for the managers who handle them.
-  if (!handlesKind(access, row.kind)) {
-    return context.json({ error: handlerRequired(row.kind) }, 403);
   }
   const refreshed = await refreshCheckrScreening(
     context.env,

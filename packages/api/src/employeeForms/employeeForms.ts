@@ -18,9 +18,11 @@ import {
 } from "./employeeFormRecords";
 import { employeeFormScreening } from "./employeeFormScreening";
 import {
+  assignmentRefusal,
   handlerRequired,
   handlesKind,
   requirementAccess,
+  stillAssigns,
   stillHandlesKind,
 } from "./requirementAccess";
 import {
@@ -94,26 +96,16 @@ employeeForms.post("/", async (context) => {
     "A target and requirements are required.",
   );
   if (body instanceof Response) return body;
-  const access = await requirementAccess(context);
-  const refused = body.requirements.find(
-    ({ kind }) => !handlesKind(access, kind),
-  );
-  if (refused) {
-    return context.json({ error: handlerRequired(refused.kind) }, 403);
-  }
   const memberId = body.memberId || null;
   const invitationId = body.invitationId || null;
+  const refusal = assignmentRefusal(
+    await requirementAccess(context),
+    body.requirements,
+    Boolean(invitationId),
+  );
+  if (refusal) return context.json({ error: refusal }, 403);
   const organizationId = context.get("organizationId");
-  const target = await context.env.DB.prepare(
-    memberId
-      ? `SELECT user.email, user.id AS user_id
-         FROM member JOIN user ON user.id = member.userId
-         WHERE member.id = ? AND member.organizationId = ?`
-      : `SELECT email, NULL AS user_id FROM invitation
-         WHERE id = ? AND organizationId = ? AND status = 'pending'`,
-  )
-    .bind(memberId ?? invitationId, organizationId)
-    .first<{ email: string; user_id: string | null }>();
+  const target = await findTarget(context, memberId, invitationId);
   if (!target) return context.json({ error: "Person not found." }, 404);
 
   const now = new Date().toISOString();
@@ -121,16 +113,17 @@ employeeForms.post("/", async (context) => {
   const ids = requirements.map(() => crypto.randomUUID());
   const actor = requestActor(context);
   const database = context.env.DB;
-  // Each request is recorded as it was assigned; someone who stopped handling
-  // its kind meanwhile assigns nothing.
+  // Each request is recorded as it was assigned; someone who could no longer
+  // assign it meanwhile assigns nothing.
   const inserted = await activityBatch(
     database,
     actor.apiKey,
     requirements.flatMap((requirement, index) => {
-      const manages = stillHandlesKind(
+      const manages = stillAssigns(
         organizationId,
         actor.userId,
         requirement.kind,
+        Boolean(invitationId),
       );
       return [
         database
@@ -381,6 +374,24 @@ employeeForms.onError((error, context) => {
  * Someone who handles no kind is refused before the lookup, so the answer
  * never says whether the request exists.
  */
+/** The member, or pending invitee, a request is for. */
+function findTarget(
+  context: Context<ApiEnv>,
+  memberId: string | null,
+  invitationId: string | null,
+) {
+  return context.env.DB.prepare(
+    memberId
+      ? `SELECT user.email, user.id AS user_id
+         FROM member JOIN user ON user.id = member.userId
+         WHERE member.id = ? AND member.organizationId = ?`
+      : `SELECT email, NULL AS user_id FROM invitation
+         WHERE id = ? AND organizationId = ? AND status = 'pending'`,
+  )
+    .bind(memberId ?? invitationId, context.get("organizationId"))
+    .first<{ email: string; user_id: string | null }>();
+}
+
 async function findHandledRequirement(context: Context<ApiEnv>) {
   const access = await requirementAccess(context);
   if (!access.forms && !access.backgroundChecks) {

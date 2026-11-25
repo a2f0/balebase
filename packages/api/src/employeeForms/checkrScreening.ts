@@ -28,8 +28,9 @@ export function isClosedReportStatus(status: string | null) {
 
 /**
  * Asks the person to complete a background check at a work location. The
- * request names who made it, who must still have Background checks access; a re-request after a canceled report
- * keeps the superseded report's ID in that history.
+ * request names who made it, who must still have Background checks access; a
+ * re-request after a canceled report keeps the superseded report's ID in that
+ * history.
  */
 export async function requestCheckrScreening(
   database: D1Database,
