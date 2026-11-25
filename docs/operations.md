@@ -351,7 +351,8 @@ Finance capability. Their group saves name no `managedCapabilities`, so the new
 API changes only Finance access and keeps a group's Background checks access.
 The API applies the migration just before publishing its Worker; in between, the
 previous Worker still creates organizations without an HR group and replaces
-every capability on a group save. Right after the deploy, before anyone turns
+every capability on a group save; it also lists the new built-in HR groups,
+whose kind its app doesn't know. Right after the deploy, before anyone turns
 Background checks off on purpose, this should list no organization:
 
 ```sh

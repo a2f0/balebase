@@ -302,17 +302,22 @@ don't see background checks. Group membership doesn't follow roles: someone
 demoted from owner or admin keeps the HR group, and its background checks,
 until removed from it, and a new owner or admin joins only when added.
 
-**Organization → Access** lists groups as compact rows; each opens a group
-page (`/organization/access/groups/<id>`) with **Members**, **Access** (name
-and a checkbox for each capability), and **History** tabs. Built-in groups
-cannot be deleted: the starting Finance and HR groups can be renamed and their
-members and access changed, and the **Admins** group lists every owner and
-admin, follows member roles, is read-only, and shows role changes as its
-history. Apply migration `0089_mark_built_in_groups.sql` before deploying; it
-marks each organization's starting Finance group as built in. Apply migration
-`0108_hr_background_checks.sql` before deploying the API; it gives each
-existing organization a built-in HR group of its owners and admins with
-Background checks access (named **HR (built-in)** where a group named HR
+**Organization → Access** lists groups as compact rows; each opens a group page
+(`/organization/access/groups/<id>`) with **Members**, **Access** (name and a
+checkbox for each capability), and **History** tabs. Built-in groups cannot be
+deleted: the starting Finance and HR groups can be renamed and their members and
+access changed, and the **Admins** group lists every owner and admin, follows
+member roles, is read-only, and shows role changes as its history. A save of a
+group (`PATCH /api/organization-groups/<id>`) changes only the capabilities its
+`managedCapabilities` names and keeps the group's others. Without that field, an
+API key's save, including the MCP `update_group` tool, decides every capability,
+so an integration that sends `capabilities: ["finance"]` removes Background
+checks; a signed-in app's save decides Finance alone, as apps built before
+Background checks know no other. Apply migration `0089_mark_built_in_groups.sql`
+before deploying; it marks each organization's starting Finance group as built
+in. Apply migration `0108_hr_background_checks.sql` before deploying the API; it
+gives each existing organization a built-in HR group of its owners and admins
+with Background checks access (named **HR (built-in)** where a group named HR
 exists), so no one who handled background checks loses them.
 
 **Organization → General → Paid features** has one **Enable paid features**
@@ -1289,8 +1294,9 @@ download what they sent. Organization → People is for managers: a member's own
 People page links to My documents instead of listing their requests. Members
 upload PDF, JPEG, or PNG forms (up to 10 MB) to private R2 storage; managers
 review and complete them. Only the member and organization managers can download
-a submitted form. Checkr results are visible only to those with Background
-checks access, and not in their own My documents. Deleted or replaced form files
+a submitted form. Background check results are visible only to those with
+Background checks access, and credit check results only to owners and admins;
+neither shows in the person's own My documents. Deleted or replaced form files
 are queued for R2 cleanup.
 
 A manager's list labels each Checkr background check by stage: Not requested,

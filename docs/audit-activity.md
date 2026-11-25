@@ -399,15 +399,17 @@ its current version and version count; these events outlive the template until
 the organization is purged.
 
 Requested forms and checks record assignment, due date and status changes (old
-and new values; a status set by hand is always a manager's), deletion (with the
-number of signed screening authorizations removed with it), each document upload
-(revision, and whether the person or a manager uploaded it), and
-background-check requests (work location, and the report a re-request
-supersedes). Writes re-check in the transaction that the actor still handles the
-kind: still an owner or admin for forms and credit checks, still in a group with
-Background checks access for background checks. Details never hold filenames,
-screening results, or consent contents. The person's signed authorizations keep
-their own record (`employee_screening_consents`).
+and new values; a status set by hand is always that of someone who handles the
+request: an owner or admin for a form or credit check, anyone with Background
+checks access for a background check), deletion (with the number of signed
+screening authorizations removed with it), each document upload (revision, and
+whether the person or a manager uploaded it), and background-check requests
+(work location, and the report a re-request supersedes). Writes re-check in the
+transaction that the actor still handles the kind: still an owner or admin for
+forms and credit checks, still in a group with Background checks access for
+background checks. Details never hold filenames, screening results, or consent
+contents. The person's signed authorizations keep their own record
+(`employee_screening_consents`).
 
 Background checks also record, in the same transaction as the change:
 
