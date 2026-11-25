@@ -120,9 +120,9 @@ SELECT id, organization_id, object_key, filename, content_type, size, created_at
 FROM objects;
 
 -- Nothing references either table now, so dropping them deletes no other rows:
--- form_issue_images is their only foreign-key child, and its rows are parked
--- above. A child added before this runs would lose its rows to the implicit
--- DELETE that DROP TABLE performs, so park it the same way.
+-- audit_issue_images was their only foreign-key child, and its rows wait in
+-- form_issue_images_parked. A child added before this runs would lose its rows
+-- to the implicit DELETE that DROP TABLE performs, so park it the same way.
 -- The legacy rename leaves other schema text naming `issues` and `objects`
 -- as it is, which is the name the rebuilt tables take.
 PRAGMA legacy_alter_table = ON;
