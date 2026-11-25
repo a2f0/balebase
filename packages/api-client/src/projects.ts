@@ -39,9 +39,9 @@ const endpoints = {
     path: "/api/projects/:id",
     response: "empty",
   }),
-  formProjects: endpoint<typeof projectsRoutes.formProjects>({
+  templateProjects: endpoint<typeof projectsRoutes.templateProjects>({
     method: "GET",
-    path: "/api/projects/forms/:templateId",
+    path: "/api/projects/templates/:templateId",
     response: "json",
   }),
   listDeleted: endpoint<typeof projectsRoutes.listDeleted>({
@@ -64,14 +64,14 @@ const endpoints = {
     path: "/api/projects/:id/members/:userId",
     response: "json",
   }),
-  enableForm: endpoint<typeof projectsRoutes.enableForm>({
+  enableTemplate: endpoint<typeof projectsRoutes.enableTemplate>({
     method: "PUT",
-    path: "/api/projects/:id/forms/:templateId",
+    path: "/api/projects/:id/templates/:templateId",
     response: "json",
   }),
-  disableForm: endpoint<typeof projectsRoutes.disableForm>({
+  disableTemplate: endpoint<typeof projectsRoutes.disableTemplate>({
     method: "DELETE",
-    path: "/api/projects/:id/forms/:templateId",
+    path: "/api/projects/:id/templates/:templateId",
     response: "json",
   }),
 };
@@ -81,7 +81,7 @@ export function projectsApi(transport: Transport) {
     list() {
       return transport.call(endpoints.list);
     },
-    /** A project with the people and forms that can be added to it. */
+    /** A project with the people and templates that can be added to it. */
     get(id: string) {
       return transport.call(endpoints.get, { params: { id } });
     },
@@ -107,9 +107,11 @@ export function projectsApi(transport: Transport) {
     delete(id: string) {
       return transport.call(endpoints.delete, { params: { id } });
     },
-    /** Every project, marked with whether the form is turned on for it. */
-    formProjects(templateId: string) {
-      return transport.call(endpoints.formProjects, { params: { templateId } });
+    /** Every project, marked with whether the template is turned on for it. */
+    templateProjects(templateId: string) {
+      return transport.call(endpoints.templateProjects, {
+        params: { templateId },
+      });
     },
     listDeleted() {
       return transport.call(endpoints.listDeleted);
@@ -132,12 +134,12 @@ export function projectsApi(transport: Transport) {
       });
       return project;
     },
-    /** Turns an audit form on or off for the project. */
+    /** Turns a form template on or off for the project. */
     async setForm(id: string, templateId: string, enabled: boolean) {
       const options = { params: { id, templateId } };
       const { project } = enabled
-        ? await transport.call(endpoints.enableForm, options)
-        : await transport.call(endpoints.disableForm, options);
+        ? await transport.call(endpoints.enableTemplate, options)
+        : await transport.call(endpoints.disableTemplate, options);
       return project;
     },
   };

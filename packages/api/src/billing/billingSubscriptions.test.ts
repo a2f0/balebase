@@ -1,7 +1,7 @@
 import { describe, expect, it, setSystemTime } from "bun:test";
 import {
   createFixture,
-  insertAudit,
+  insertForm,
   organizationId,
   proPriceId,
   reserveCheckout,
@@ -10,7 +10,7 @@ import {
 } from "../testing/billingFixture";
 import { withFetch } from "../testing/http";
 import { insertBilling } from "../testing/seed";
-import { purgeExpiredFreeAuditRuns } from "./billingRetention";
+import { purgeExpiredFreeFormRuns } from "./billingRetention";
 
 describe("billing subscriptions", () => {
   it("serializes concurrent same-second subscription refreshes", async () => {
@@ -141,13 +141,13 @@ describe("billing subscriptions", () => {
         const lapsedAt = paidEndedAt();
         expect(lapsedAt).not.toBeNull();
         expect(String(lapsedAt) >= beforeLapse).toBe(true);
-        insertAudit(
+        insertForm(
           fixture.database,
           "lapsed-old",
           organizationId,
           "2026-06-01",
         );
-        expect(await purgeExpiredFreeAuditRuns(fixture.bindings, "run-1")).toBe(
+        expect(await purgeExpiredFreeFormRuns(fixture.bindings, "run-1")).toBe(
           0,
         );
 

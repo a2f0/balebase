@@ -18,15 +18,15 @@ const manifest = parseScreenshotManifest({
   ],
   themes: [{ name: "light", label: "Light" }],
   screens: [
-    { name: "audit", label: "Audit", alt: "An audit in progress." },
+    { name: "form", label: "Form", alt: "A form in progress." },
     { name: "groups", label: "Groups" },
   ],
   entries: [
     {
       project: "mobile",
       theme: "light",
-      name: "audit",
-      src: "/screenshot-gallery/img/mobile/light/audit.png?v=1a2b3c4d",
+      name: "form",
+      src: "/screenshot-gallery/img/mobile/light/form.png?v=1a2b3c4d",
       width: 1170,
       height: 2532,
     },
@@ -69,10 +69,10 @@ test("each deep link has its own heading, title, and description", () => {
     heading: "Screenshots",
     title: "Screenshots — Balebase",
   });
-  expect(galleryPage(manifest, "mobile", "audit")).toEqual({
-    description: "An audit in progress. Shown in the phone layout.",
-    heading: "Audit, phone screenshot",
-    title: "Audit, phone screenshot — Balebase",
+  expect(galleryPage(manifest, "mobile", "form")).toEqual({
+    description: "A form in progress. Shown in the phone layout.",
+    heading: "Form, phone screenshot",
+    title: "Form, phone screenshot — Balebase",
   });
   // A screen without alt text is described by its label.
   expect(galleryPage(manifest, "web", "groups").description).toBe(

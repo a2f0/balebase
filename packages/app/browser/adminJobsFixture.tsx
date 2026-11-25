@@ -7,7 +7,7 @@ const jobs: JobDefinition[] = [
     id: "purgeRequestedUsers",
     name: "Purge requested user accounts",
     description:
-      "Permanently deletes accounts requested for deletion at least 30 days ago. Skips admins, active organization members, and accounts required by retained audit, financial, or contract records.",
+      "Permanently deletes accounts requested for deletion at least 30 days ago. Skips admins, active organization members, and accounts required by retained form, financial, or contract records.",
     manual: true,
     runSchedule:
       "Every hour at 17 minutes past the hour (UTC) in production. Manual only in staging.",

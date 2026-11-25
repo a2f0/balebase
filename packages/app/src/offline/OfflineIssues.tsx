@@ -13,7 +13,7 @@ export function OfflineIssueCreator({
   onSaved,
 }: {
   workspace: OfflineWorkspace;
-  target: { auditId: string; itemId: string };
+  target: { formId: string; itemId: string };
   onSaved: () => void;
 }) {
   const [files, setFiles] = useState<File[]>([]);
@@ -55,17 +55,17 @@ export function OfflineIssueCreator({
 
 export function OfflineIssueList({
   workspace,
-  auditId,
+  formId,
   onNavigate,
 }: {
   workspace: OfflineWorkspace;
-  auditId: string;
+  formId: string;
   onNavigate: (path: string) => void;
 }) {
   return (
     <div className="stack">
       {workspace.issues
-        .filter((issue) => issue.operation.auditId === auditId)
+        .filter((issue) => issue.operation.formId === formId)
         .map((issue) => (
           <Card key={issue.operation.id} title={issue.operation.title}>
             <p>{issue.operation.description}</p>

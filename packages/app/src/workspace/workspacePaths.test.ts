@@ -2,8 +2,6 @@ import { describe, expect, it } from "bun:test";
 import {
   adminOrganizationIdForPath,
   adminOrganizationPath,
-  auditRunPath,
-  auditTemplatePath,
   businessIdForPath,
   businessPath,
   contractIdForPath,
@@ -15,8 +13,10 @@ import {
   expenseCategoryFiltersFor,
   financeOverviewPath,
   financePageFor,
-  globalAuditsPath,
-  globalAuditTemplateIdForPath,
+  formRunPath,
+  formTemplatePath,
+  globalFormTemplateIdForPath,
+  globalTemplatesPath,
   inboxEmailPath,
   isRootAdminPath,
   isWithin,
@@ -71,16 +71,14 @@ describe("workspace paths", () => {
     expect(organizationSettingsPage("/organization/people/%E0%A4%A")).toBe(
       "people",
     );
-    expect(globalAuditTemplateIdForPath("/root/global-audits/%")).toBe("%");
+    expect(globalFormTemplateIdForPath("/root/global-templates/%")).toBe("%");
     expect(adminOrganizationIdForPath("/root/organizations/%")).toBe("%");
   });
 
-  it("links to audit runs and forms by encoded ID", () => {
-    expect(auditRunPath("run/1")).toBe("/audits/runs/run%2F1");
-    expect(auditTemplatePath("form 1")).toBe("/audits/templates/form%201");
-    expect(recordIdForPath(auditRunPath("run/1"), "/audits/runs")).toBe(
-      "run/1",
-    );
+  it("links to form runs and forms by encoded ID", () => {
+    expect(formRunPath("run/1")).toBe("/forms/runs/run%2F1");
+    expect(formTemplatePath("form 1")).toBe("/forms/templates/form%201");
+    expect(recordIdForPath(formRunPath("run/1"), "/forms/runs")).toBe("run/1");
   });
 
   it("round-trips My documents paths and moves older screening links", () => {
@@ -98,6 +96,36 @@ describe("workspace paths", () => {
     ).toBe("/me/screening/check%2F1");
     expect(movedWorkspacePath("/organization/people/member")).toBeUndefined();
     expect(movedWorkspacePath("/me/screening/check")).toBeUndefined();
+  });
+
+  it("moves links from before Audits became Forms", () => {
+    expect(
+      [
+        "/audits",
+        "/audits/",
+        "/audits/runs/run%2F1",
+        "/audits/templates/us_residential_core_global",
+        "/root/global-audits",
+        "/root/global-audits/nfpa%2F70e",
+        "/projects/p%2F1/audits/local-1",
+      ].map(movedWorkspacePath),
+    ).toEqual([
+      "/forms",
+      "/forms/",
+      "/forms/runs/run%2F1",
+      "/forms/templates/us_residential_core_global",
+      "/root/global-templates",
+      "/root/global-templates/nfpa%2F70e",
+      "/projects/p%2F1/forms/local-1",
+    ]);
+    for (const current of [
+      "/forms/runs/run",
+      "/auditsx",
+      "/root/global-templates/t",
+      "/projects/audits",
+      "/projects/p/audits",
+    ])
+      expect(movedWorkspacePath(current)).toBeUndefined();
   });
 
   it("round-trips business paths", () => {
@@ -206,7 +234,7 @@ describe("workspace paths", () => {
   it("waits for access on every organization-dependent route", () => {
     for (const path of [
       "/",
-      "/audits",
+      "/forms",
       "/businesses",
       "/finance",
       "/inbox",
@@ -221,8 +249,8 @@ describe("workspace paths", () => {
       "/root/users",
       "/root/organizations",
       "/root/organizations/other-organization",
-      "/root/global-audits",
-      "/root/global-audits/nfpa70e_global",
+      "/root/global-templates",
+      "/root/global-templates/nfpa70e_global",
       "/root/jobs",
       "/invite",
     ]) {
@@ -235,25 +263,29 @@ describe("workspace paths", () => {
     expect(
       isRootAdminPath("/root/organizations/other-organization"),
     ).toBeTrue();
-    expect(isRootAdminPath("/root/global-audits")).toBeTrue();
-    expect(isRootAdminPath("/root/global-audits/template")).toBeTrue();
-    expect(isRootAdminPath("/root/global-auditsx")).toBeFalse();
-    expect(isRootAdminPath("/audits/global-templates/template")).toBeFalse();
+    expect(isRootAdminPath("/root/global-templates")).toBeTrue();
+    expect(isRootAdminPath("/root/global-templates/template")).toBeTrue();
+    expect(isRootAdminPath("/root/global-formsx")).toBeFalse();
+    expect(isRootAdminPath("/forms/global-templates/template")).toBeFalse();
     expect(isRootAdminPath("/admin")).toBeFalse();
   });
 
-  it("resolves Global Audits form links", () => {
-    expect(globalAuditsPath()).toBe("/root/global-audits");
-    expect(globalAuditsPath("form/1")).toBe("/root/global-audits/form%2F1");
-    expect(globalAuditTemplateIdForPath("/root/global-audits/form%2F1")).toBe(
+  it("resolves Global templates form links", () => {
+    expect(globalTemplatesPath()).toBe("/root/global-templates");
+    expect(globalTemplatesPath("form/1")).toBe(
+      "/root/global-templates/form%2F1",
+    );
+    expect(globalFormTemplateIdForPath("/root/global-templates/form%2F1")).toBe(
       "form/1",
     );
-    expect(globalAuditTemplateIdForPath("/root/global-audits/form-1/")).toBe(
+    expect(globalFormTemplateIdForPath("/root/global-templates/form-1/")).toBe(
       "form-1",
     );
-    expect(globalAuditTemplateIdForPath("/root/global-audits")).toBeUndefined();
     expect(
-      globalAuditTemplateIdForPath("/root/global-audits/form-1/unexpected"),
+      globalFormTemplateIdForPath("/root/global-templates"),
+    ).toBeUndefined();
+    expect(
+      globalFormTemplateIdForPath("/root/global-templates/form-1/unexpected"),
     ).toBeUndefined();
   });
 

@@ -9,7 +9,7 @@ import { useLoad } from "../shared/useLoad";
 import { projectPath } from "../workspace/workspacePaths";
 
 /**
- * Deleted projects, which keep their audits, members, and forms, and which
+ * Deleted projects, which keep their forms, members, and templates, and which
  * managers can restore. Shown only while there are some.
  */
 export function DeletedProjects({
@@ -74,7 +74,7 @@ export function DeletedProjects({
           {countLabel(listing.projects.length, "project")}
         </span>
       }
-      description="Their audits stay in Audits. Restoring a project brings back its members and forms."
+      description="Their forms stay in Forms. Restoring a project brings back its members and templates."
       title="Deleted projects"
     >
       {failure}

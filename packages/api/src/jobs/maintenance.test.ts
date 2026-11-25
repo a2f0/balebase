@@ -163,7 +163,7 @@ it("keeps hourly scheduling idempotent and gates cleanup on retention even when 
     job_id: string;
   }[];
   const retention = rows.find(
-    (row) => row.job_id === "purgeExpiredFreeAuditRuns",
+    (row) => row.job_id === "purgeExpiredFreeFormRuns",
   );
   const cleanup = rows.find((row) => row.job_id === "purgeDeletedObjects");
   const organizations = rows.find(

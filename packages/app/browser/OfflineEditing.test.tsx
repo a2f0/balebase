@@ -53,8 +53,8 @@ async function openProject(page: Page) {
 it("completes the latest saved answers without overwriting another tab's edit", async () => {
   await withOfflineBrowser(async (page, browser) => {
     const id = await page.evaluate(() => window.offlineTest.seed());
-    await page.evaluate(async (auditId) => {
-      await window.offlineTest.answer(auditId, "pass");
+    await page.evaluate(async (formId) => {
+      await window.offlineTest.answer(formId, "pass");
       window.offlineTest.mount();
     }, id);
     await openDraft(page);
@@ -63,25 +63,25 @@ it("completes the latest saved answers without overwriting another tab's edit", 
     await other.goto(page.url());
     await other.waitForFunction(() => Boolean(window.offlineTest));
     await other.evaluate(
-      (auditId) => window.offlineTest.answer(auditId, "fail"),
+      (formId) => window.offlineTest.answer(formId, "fail"),
       id,
     );
     await page.bringToFront();
-    await press(page, "Complete audit");
+    await press(page, "Complete form");
     await page.waitForFunction(
       async () =>
-        (await window.offlineTest.read())?.audits[0]?.status === "completed",
+        (await window.offlineTest.read())?.forms[0]?.status === "completed",
       { polling: 100 },
     );
     const saved = await page.evaluate(() => window.offlineTest.read());
     expect(
-      await page.evaluate((auditId) => window.offlineTest.answers(auditId), id),
+      await page.evaluate((formId) => window.offlineTest.answers(formId), id),
     ).toEqual({ check: "fail" });
     // Completing a draft puts it on the server with the latest saved answer.
     const operation = saved?.jobs.find(
-      (job) => job.operation.type === "auditStart",
+      (job) => job.operation.type === "formStart",
     )?.operation;
-    expect(operation?.type === "auditStart" && operation.answers).toEqual({
+    expect(operation?.type === "formStart" && operation.answers).toEqual({
       check: { at: expect.any(String), value: "fail" },
     });
     expect(await page.$eval("select", (field) => field.value)).toBe("fail");
@@ -106,7 +106,7 @@ for (const path of ["/projects/project-1", "/"]) {
         // any other page.
         if (path === "/") await openProject(page);
         await openDraft(page);
-        const auditPath = new URL(page.url()).pathname;
+        const formPath = new URL(page.url()).pathname;
         await press(page, "Raise issue");
         const title = 'form[aria-label="Issue details"] input';
         const description = 'form[aria-label="Issue details"] textarea';
@@ -136,14 +136,14 @@ for (const path of ["/projects/project-1", "/"]) {
           ),
         ).toBe("rail.png");
         releaseAccess?.();
-        // Confirmed online, the device audit opens in the workspace shell.
+        // Confirmed online, the device form opens in the workspace shell.
         await page.waitForFunction(
           () =>
             document.querySelector('nav a[aria-current="page"]')
               ?.textContent === "Projects",
           { polling: 100 },
         );
-        expect(new URL(page.url()).pathname).toBe(auditPath);
+        expect(new URL(page.url()).pathname).toBe(formPath);
         expect(await page.$eval(title, (field) => field.value)).toBe(
           "Damaged railing",
         );
@@ -208,7 +208,7 @@ it("guards unsaved offline issue details and photos when toggling or leaving the
     expect(await page.$eval(title, (field) => field.value)).toBe(
       "Keep this issue",
     );
-    // The header's back button names the audit's project.
+    // The header's back button names the form's project.
     await press(page, "Site");
     await press(page, "Keep editing");
     expect(
@@ -218,7 +218,7 @@ it("guards unsaved offline issue details and photos when toggling or leaving the
       ),
     ).toBe("unsaved.png");
     expect(new URL(page.url()).pathname).toMatch(
-      /^\/projects\/project-1\/audits\//,
+      /^\/projects\/project-1\/forms\//,
     );
     await press(page, "Site");
     await press(page, "Discard changes");
@@ -233,7 +233,7 @@ it("guards unsaved offline issue details and photos when toggling or leaving the
     await press(page, "Site");
     await press(page, "Keep editing");
     expect(
-      (await page.evaluate(() => window.offlineTest.read()))?.audits,
+      (await page.evaluate(() => window.offlineTest.read()))?.forms,
     ).toHaveLength(1);
     expect(
       await page.$eval(
@@ -252,14 +252,14 @@ it("guards unsaved offline issue details and photos when toggling or leaving the
   });
 }, 30_000);
 
-it("lists this device's audits by sync state and opens a synced audit", async () => {
+it("lists this device's forms by sync state and opens a synced form", async () => {
   let available = false;
   await withOfflineBrowser(
     async (page) => {
       const id = await page.evaluate(async () => {
-        const auditId = await window.offlineTest.seed();
+        const formId = await window.offlineTest.seed();
         window.offlineTest.mount();
-        return auditId;
+        return formId;
       });
       const status = () =>
         page.$eval('[role="status"]', (element) => element.textContent);
@@ -274,11 +274,11 @@ it("lists this device's audits by sync state and opens a synced audit", async ()
         );
       await button("Continue");
       expect(await status()).toBe(
-        "Online · Nothing waiting to sync · 1 audit in progress on this device.",
+        "Online · Nothing waiting to sync · 1 form in progress on this device.",
       );
-      await page.evaluate(async (auditId) => {
-        await window.offlineTest.answer(auditId, "pass");
-        await window.offlineTest.progress(auditId);
+      await page.evaluate(async (formId) => {
+        await window.offlineTest.answer(formId, "pass");
+        await window.offlineTest.progress(formId);
       }, id);
       // The server is unavailable, so the saved progress waits.
       await page.waitForFunction(
@@ -286,12 +286,9 @@ it("lists this device's audits by sync state and opens a synced audit", async ()
         { polling: 100 },
       );
       expect(await status()).toBe(
-        "Online · 1 item waiting to sync · 1 audit in progress on this device.",
+        "Online · 1 item waiting to sync · 1 form in progress on this device.",
       );
-      await page.evaluate(
-        (auditId) => window.offlineTest.complete(auditId),
-        id,
-      );
+      await page.evaluate((formId) => window.offlineTest.complete(formId), id);
       await button("View");
       await page.waitForFunction(
         () => document.body.textContent?.includes("Waiting to sync"),
@@ -300,11 +297,11 @@ it("lists this device's audits by sync state and opens a synced audit", async ()
       expect(await status()).toBe("Online · 2 items waiting to sync.");
       available = true;
       await press(page, "Retry sync");
-      await press(page, "Open audit");
+      await press(page, "Open form");
       await page.waitForFunction(
-        (auditId) =>
-          location.pathname === `/audits/runs/${auditId}` &&
-          document.body.textContent === "Synced audit",
+        (formId) =>
+          location.pathname === `/forms/runs/${formId}` &&
+          document.body.textContent === "Synced form",
         { polling: 100 },
         id,
       );
@@ -403,13 +400,13 @@ for (const { path, kind } of [
   }, 30_000);
 }
 
-it("opens a device audit in the workspace shell without remounting through coverage and session loss", async () => {
+it("opens a device form in the workspace shell without remounting through coverage and session loss", async () => {
   let session = true;
   await withOfflineBrowser(
     async (page) => {
       await page.evaluate(async () => {
         const id = await window.offlineTest.seed();
-        history.replaceState(null, "", window.offlineTest.auditPath(id));
+        history.replaceState(null, "", window.offlineTest.formPath(id));
         window.offlineAppTest.mount();
       });
       const current = 'nav a[aria-current="page"]';
@@ -564,7 +561,7 @@ it("keeps unsaved issue details and photos when reconnecting with an expired ses
         { polling: 100 },
       );
       await page.select("select", "fail");
-      await press(page, "Complete audit");
+      await press(page, "Complete form");
       await page.waitForFunction(
         async () =>
           (await window.offlineTest.read())?.jobs.some(
@@ -573,16 +570,16 @@ it("keeps unsaved issue details and photos when reconnecting with an expired ses
         { polling: 100 },
       );
       const saved = await page.evaluate(() => window.offlineTest.read());
-      expect(saved?.audits[0]?.status).toBe("completed");
+      expect(saved?.forms[0]?.status).toBe("completed");
       expect(saved?.issues[0]?.operation.title).toBe("Expired session draft");
       const image = saved?.issues[0]?.images[0];
       if (!image) throw new Error("Unsaved photo was lost on expiry");
       expect(
         await page.evaluate((id) => window.offlineTest.photo(id), image.id),
       ).toEqual({ type: "image/png", bytes: [1, 2, 3, 4] });
-      // Saving the issue put the audit on the server; the expired session
+      // Saving the issue put the form on the server; the expired session
       // holds that back, and everything after it waits.
-      expect(requests).toEqual(["auditStart"]);
+      expect(requests).toEqual(["formStart"]);
     },
     async (request) => {
       const path = new URL(request.url).pathname;
@@ -610,7 +607,7 @@ it("does not unlock cached work when a device sync finishes during a pending sig
       );
       await page.evaluate(async () => {
         const id = await window.offlineTest.seed();
-        history.replaceState(null, "", window.offlineTest.auditPath(id));
+        history.replaceState(null, "", window.offlineTest.formPath(id));
         window.offlineAppTest.mount();
       });
       await page.waitForFunction(
@@ -634,9 +631,9 @@ it("does not unlock cached work when a device sync finishes during a pending sig
       ).toBeNull();
       const saved = await page.evaluate(() => window.offlineTest.read());
       // The locked device keeps its work but stores nothing from the sync.
-      expect(saved?.audits).toHaveLength(1);
+      expect(saved?.forms).toHaveLength(1);
       expect(saved?.cursor).toBeUndefined();
-      expect(saved?.forms.map((form) => form.version)).toEqual([1]);
+      expect(saved?.templates.map((template) => template.version)).toEqual([1]);
     },
     async (request) => {
       const path = new URL(request.url).pathname;
@@ -658,7 +655,7 @@ it("does not unlock cached work when a device sync finishes during a pending sig
         return Response.json({
           changed: true,
           cursor: "cursor-1",
-          forms: [],
+          templates: [],
           members: [user],
           projects: [],
         });
@@ -674,14 +671,14 @@ it("guards opening a synced issue without relying on browser beforeunload protec
       // iOS WebViews cannot rely on beforeunload. Do not let Chromium's native
       // dialog mask a missing in-app navigation guard in this regression.
       page.on("dialog", (dialog) => void dialog.accept());
-      const auditPath = await page.evaluate(async () => {
+      const formPath = await page.evaluate(async () => {
         const id = await window.offlineTest.seed();
-        // An audit's issues sync after the audit itself.
+        // A form's issues sync after the form itself.
         await window.offlineTest.answer(id, "fail");
         await window.offlineTest.complete(id);
         await window.offlineTest.issue(id);
         await window.offlineTest.sync();
-        const path = window.offlineTest.auditPath(id);
+        const path = window.offlineTest.formPath(id);
         window.offlineTest.mount(path);
         return path;
       });
@@ -699,9 +696,9 @@ it("guards opening a synced issue without relying on browser beforeunload protec
             (button) => button.textContent === "Keep editing",
           ),
         { polling: 100 },
-        auditPath,
+        formPath,
       );
-      expect(new URL(page.url()).pathname).toBe(auditPath);
+      expect(new URL(page.url()).pathname).toBe(formPath);
       await press(page, "Keep editing");
       expect(await page.$eval(title, (field) => field.value)).toBe(
         "Do not lose this issue",

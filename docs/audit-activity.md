@@ -1,7 +1,7 @@
 # Audit activity
 
 Activity is the shared history of consequential changes across Balebase. The
-checklist Audits feature is one producer alongside equipment, projects, issues,
+Forms feature is one producer alongside equipment, projects, issues,
 organization membership (roles, invitations, joining, leaving and removal),
 organization creation, renames, deletion and restoration, group access,
 members' two-factor requirements, API keys (including revocations that a
@@ -33,7 +33,7 @@ An event identifies:
 - A stable action, such as `equipment.assigned`.
 - The root resource and its label at the time of the change.
 - The subject that changed, which can differ from the root: an issue or image
-  may belong to an audit run or a transaction.
+  may belong to a form or a transaction.
 - The actor and occurrence time. A person (`actor_type = 'user'`) is kept as
   an identity snapshot; API-key requests also retain the key name and REST/MCP
   channel. Work no person did names its source instead (see below).
@@ -51,7 +51,7 @@ explicit actor type (migration `0086_record_system_activity.sql`):
 - `user`: a person; `actor_user_id` and the name and email snapshot are set.
   A CHECK constraint keeps every user event tied to a user.
 - `system`: Balebase's own maintenance. `actor_source` is the maintenance job's
-  ID (such as `purgeDiscardedAuditForms`); readers show "Balebase maintenance".
+  ID (such as `purgeDiscardedFormTemplates`); readers show "Balebase maintenance".
   The signing workflow (`contractSigning`) is the one other system source: it
   records what a signing link did, and readers show "Balebase signing".
 - `provider`: a provider's change. `actor_source` is the provider (`stripe`,
@@ -75,10 +75,10 @@ run are not taken for redeliveries.
 
 Maintenance jobs record their changes this way: the purges of accounts and
 organizations (as platform purge history, below), the Free-plan retention purge
-(`organization.audit_runs_purged` on the organization, with the number of runs
-removed), the discarded global form purge (`project.form_disabled` with
-`reason: form_purged` on each project that had the form), and the trashed email
-purge (below). Checkr's report changes are provider events (see
+(`organization.form_runs_purged` on the organization, with the number of forms
+removed), the discarded global template purge (`project.template_disabled`
+with `reason: template_purged` on each project that had the template), and the
+trashed email purge (below). Checkr's report changes are provider events (see
 [Contracts](#contracts)).
 
 Stripe and Plaid record their changes as providers, in the same batch as the
@@ -146,27 +146,27 @@ mode succeeded, since Plaid tells only the browser; it must consume a
 single-use update session the reporter opened for that connection
 (`finance_login_repair_sessions`).
 
-An audit answer's history is dated by when the answer was given, which for
-an answer given on a device is the device's UTC clock (`audits.answer_meta`,
-read by the audit update trigger). When a device's answer collides with one
+A form answer's history is dated by when the answer was given, which for
+an answer given on a device is the device's UTC clock (`forms.answer_meta`,
+read by the form update trigger). When a device's answer collides with one
 given elsewhere since it last synced, the merge keeps the later one and
-records `audit.answer_conflict_resolved` on the answer (subject
-`audit_answer`), in the same batch as the save: the prompt, the kept and
+records `form.answer_conflict_resolved` on the answer (subject
+`form_answer`), in the same batch as the save: the prompt, the kept and
 discarded answers each with its value, time, and person, and the reason
-(`later`, or `completed` when the audit was already completed). A merge
+(`later`, or `completed` when the form was already completed). A merge
 that a concurrent write leaves uncommitted records nothing, and the merge
 that follows records each collision once. See
-[Audits on this device](product.md#audits-on-this-device).
+[Forms on this device](product.md#forms-on-this-device).
 
 ## Reading and retaining history
 
 `GET /api/activity` reads the active organization's events newest first, with
 cursor pagination. Its optional `resourceType` filter selects the root type
-before pagination. The Activity page offers all resources, audits, forms,
+before pagination. The Activity page offers all resources, forms, form templates,
 workspace issues, equipment, projects, the organization, people, invitations,
 groups, API keys, transactions, bank connections, expense categories, billing,
 library files, library folders, inbox email, businesses, contracts, contract
-templates, and requested forms and checks. Audit and transaction filters
+templates, and requested forms and checks. Form and transaction filters
 include issues attached to those roots; workspace issues are standalone issues.
 Transaction, bank connection, and expense category activity requires Finance
 capability even when a caller supplies the filter directly, including emails
@@ -193,21 +193,21 @@ readable only by organization owners and admins, never by the person it was
 requested from.
 A bank connection's history (`GET /api/finance/connections/:id/activity`, MCP
 `list_finance_connection_activity`) stays readable after it is disconnected.
-Shared global form history only exposes published versions to organization
-members. Root admins read a discarded global form's history and versions
-through `/api/admin/audit-templates/:id/activity` and `/versions` until the
-purge deletes them. Form events name the version they saved: creation (with
-the global form a copy came from and the published version it started from),
+Shared global template history only exposes published versions to organization
+members. Root admins read a discarded global template's history and versions
+through `/api/admin/form-templates/:id/activity` and `/versions` until the
+purge deletes them. Template events name the version they saved: creation (with
+the global template a copy came from and the published version it started from),
 saved versions, publication, unpublication, discards, and restores.
-Organizations therefore see a global form's publications but never its
+Organizations therefore see a global template's publications but never its
 unpublications, discards, or restores.
 Adding a producer with restricted details also requires reviewing the shared
 feed's reader permissions, labels, and navigation.
 
 History follows the resource's documented retention. It is not an immutable
 compliance ledger. Purging an organization removes its activity; purging an
-audit run or form removes that root's history, though the Free-plan retention
-purge leaves its count on the organization and the form purge leaves each
+form or template removes that root's history, though the Free-plan retention
+purge leaves its count on the organization and the template purge leaves each
 affected project's removal. Deleting a disconnected bank
 connection's imported data removes that connection's and its transactions'
 history, but keeps one `finance.connection_data_deleted` event naming who
@@ -472,7 +472,7 @@ action only as a guarded, recorded `/api/admin/users` route.
 For implementation changes, test successful event creation, actor attribution,
 relevant before/after values, no-op or failure behavior, and authorized reads.
 Use rollback and retry tests when those paths affect correctness. Existing
-examples live in `packages/api/src`: `audits/auditActivity.test.ts`,
+examples live in `packages/api/src`: `forms/formActivity.test.ts`,
 `equipment/equipment.test.ts`, `projects/projects.test.ts`, `auth/apiKeys.test.ts`,
 `auth/organizationRoleActivity.test.ts`,
 `organizations/membershipActivity.test.ts`,
@@ -483,7 +483,7 @@ examples live in `packages/api/src`: `audits/auditActivity.test.ts`,
 `inbox/inboxActivity.test.ts`,
 `businesses/businessActivity.test.ts`, `jobs/maintenanceRequests.test.ts`,
 `admin/setUserRole.test.ts`, `admin/platformHistory.test.ts`,
-`admin/discardedAuditForms.test.ts`, `users/securityEvents.test.ts`,
+`admin/discardedFormTemplates.test.ts`, `users/securityEvents.test.ts`,
 `contracts/contractActivity.test.ts`,
 `employeeForms/requirementActivity.test.ts`,
 `employeeForms/screeningActivity.test.ts` (Checkr and the person),
@@ -506,7 +506,7 @@ findings are current.
 An `audit-trails` run reads this map along with the
 [README](../README.md), [CONTRIBUTING.md](../CONTRIBUTING.md),
 [product behavior](product.md), [operations](operations.md), and the rest of
-this guide. The checklist Audits feature is one source of events; audit trails
+this guide. The Forms feature is one source of events; audit trails
 span the whole application. The map is a starting point, not a coverage claim.
 
 ### Shared activity
@@ -533,8 +533,8 @@ span the whole application. The map is a starting point, not a coverage claim.
   organization activity.
 
 Events snapshot the actor and resource label. Roots and subjects differ:
-issues may belong to an audit run, a transaction, or the workspace. Verify
-both shared and record views. Global form history also has publication rules.
+issues may belong to a form, a transaction, or the workspace. Verify
+both shared and record views. Global template history also has publication rules.
 
 ### Candidate slices
 
@@ -543,7 +543,7 @@ API paths are relative to `packages/api/src`, which has a folder per feature.
 | Slice | Entry points and evidence |
 | --- | --- |
 | Access and organization lifecycle | `auth/auth.ts`, `auth/organizationActivity.ts`, `organizations/memberRemoval.ts`, `organizations/organizationMembers.ts`, `organizations/organizationGroups.ts`, `organizations/organizationSettings.ts`, `organizations/organizationDeletion.ts`, `organizations/organizationPurge.ts`, `auth/apiKeys.ts` |
-| Audits, issues, equipment | `audits/audits.ts`, `audits/auditTemplates.ts`, `audits/auditRunDiscard.ts`, `audits/auditIssueImages.ts`, `audits/auditIssueImageRemoval.ts`, `issues/issues.ts`, `equipment/equipment.ts` |
+| Forms, issues, equipment | `forms/forms.ts`, `forms/formTemplates.ts`, `forms/formRunDiscard.ts`, `forms/formIssueImages.ts`, `forms/formIssueImageRemoval.ts`, `issues/issues.ts`, `equipment/equipment.ts` |
 | Finance and billing | `finance/finance*.ts`, `finance/plaid*.ts`, `billing/billing*.ts` (checkout, subscriptions, seats, webhook, retention, deletion), scheduled jobs in `jobs/` |
 | Contracts and employee records | `contracts/contracts.ts`, `contracts/contractDraft.ts`, `contracts/contractWorkflow.ts`, `contracts/contractTemplates.ts`, `contracts/contractRecords.ts`, `employeeForms/employeeForms.ts`, `employeeForms/screening*.ts`, Checkr handlers in `employeeForms/checkr*.ts` |
 | Library, inbox, business records | file and folder routes in `library/`, `inbox/email.ts`, `businesses/businesses.ts`, attachment handlers |

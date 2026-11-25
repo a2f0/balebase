@@ -66,9 +66,9 @@ const asidePoints: ReadonlyArray<{
   title: string;
 }> = [
   {
-    description: "Run inspections from reusable templates.",
-    icon: "audits",
-    title: "Audits and checklists",
+    description: "Fill in forms from reusable templates.",
+    icon: "forms",
+    title: "Forms and templates",
   },
   {
     description: "Capture what needs fixing, right where you find it.",
@@ -96,8 +96,8 @@ function AuthAside() {
             <span className="serifAccent">Lose the noise.</span>
           </p>
           <p className="lead">
-            One quiet workspace for your audits, the issues they turn up, and
-            the business records and files behind them.
+            One quiet workspace for your forms, the issues they turn up, and the
+            business records and files behind them.
           </p>
         </div>
         <ul className="authPoints">

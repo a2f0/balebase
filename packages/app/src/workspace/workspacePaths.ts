@@ -59,14 +59,14 @@ export function projectIdForPath(pathname: string) {
   return recordIdForPath(pathname, "/projects");
 }
 
-/** An audit this device started for a project, and keeps until it syncs. */
-export function projectAuditPath(projectId: string, auditId: string) {
-  return `${projectPath(projectId)}/audits/${encodeURIComponent(auditId)}`;
+/** A form this device started for a project, and keeps until it syncs. */
+export function projectFormPath(projectId: string, formId: string) {
+  return `${projectPath(projectId)}/forms/${encodeURIComponent(formId)}`;
 }
 
-/** The project and device audit in a `projectAuditPath`, if it is one. */
-export function projectAuditForPath(pathname: string) {
-  const match = /^\/projects\/([^/]+)\/audits\/([^/]+)\/?$/.exec(pathname);
+/** The project and device form in a `projectFormPath`, if it is one. */
+export function projectFormForPath(pathname: string) {
+  const match = /^\/projects\/([^/]+)\/forms\/([^/]+)\/?$/.exec(pathname);
   if (!match?.[1] || !match[2]) return undefined;
   const decode = (segment: string) => {
     try {
@@ -75,7 +75,7 @@ export function projectAuditForPath(pathname: string) {
       return segment;
     }
   };
-  return { auditId: decode(match[2]), projectId: decode(match[1]) };
+  return { formId: decode(match[2]), projectId: decode(match[1]) };
 }
 
 /** The business list, or one business. */
@@ -131,13 +131,13 @@ export function myRequirementIdForPath(pathname: string) {
   return recordIdForPath(pathname, "/me/requests");
 }
 
-export function auditRunPath(id: string) {
-  return `/audits/runs/${encodeURIComponent(id)}`;
+export function formRunPath(id: string) {
+  return `/forms/runs/${encodeURIComponent(id)}`;
 }
 
-/** A form's page, opened on its Projects tab when `tab` says so. */
-export function auditTemplatePath(id: string, tab?: "projects") {
-  const path = `/audits/templates/${encodeURIComponent(id)}`;
+/** A template's page, opened on its Projects tab when `tab` says so. */
+export function formTemplatePath(id: string, tab?: "projects") {
+  const path = `/forms/templates/${encodeURIComponent(id)}`;
   return tab ? `${path}?tab=${tab}` : path;
 }
 
@@ -296,7 +296,7 @@ export function isRootAdminPath(pathname: string) {
     pathname === "/root/jobs" ||
     isWithin(pathname, adminUserPath()) ||
     isWithin(pathname, adminOrganizationPath()) ||
-    isWithin(pathname, globalAuditsPath())
+    isWithin(pathname, globalTemplatesPath())
   );
 }
 
@@ -327,26 +327,36 @@ export function adminOrganizationIdForPath(pathname: string) {
   return recordIdForPath(pathname, adminOrganizationPath());
 }
 
-/** Global Audits, or one global form being managed there. */
-export function globalAuditsPath(templateId?: string) {
+/** Global templates, or one global template being managed there. */
+export function globalTemplatesPath(templateId?: string) {
   return templateId
-    ? `/root/global-audits/${encodeURIComponent(templateId)}`
-    : "/root/global-audits";
+    ? `/root/global-templates/${encodeURIComponent(templateId)}`
+    : "/root/global-templates";
 }
 
-export function globalAuditTemplateIdForPath(pathname: string) {
-  return recordIdForPath(pathname, globalAuditsPath());
+export function globalFormTemplateIdForPath(pathname: string) {
+  return recordIdForPath(pathname, globalTemplatesPath());
 }
+
+/** Forms was Audits until migration 0107 renamed it, with its global templates. */
+const renamedFormPaths: [RegExp, string][] = [
+  [/^\/audits(?=\/|$)/, "/forms"],
+  [/^\/root\/global-audits(?=\/|$)/, "/root/global-templates"],
+  [/^(\/projects\/[^/]+)\/audits(?=\/)/, "$1/forms"],
+];
 
 /**
  * Where an older link now lives. Background check emails sent before My
- * documents linked to a form under the person's People page.
+ * documents linked to a form under the person's People page, and Forms links
+ * from before the rename name Audits.
  */
 export function movedWorkspacePath(pathname: string) {
   const segment = /^\/organization\/people\/[^/]+\/screening\/([^/]+)\/?$/.exec(
     pathname,
   )?.[1];
-  return segment ? `/me/screening/${segment}` : undefined;
+  if (segment) return `/me/screening/${segment}`;
+  const renamed = renamedFormPaths.find(([from]) => from.test(pathname));
+  return renamed ? pathname.replace(...renamed) : undefined;
 }
 
 /** The token in a public `/sign/<token>` signing link, if the path is one. */

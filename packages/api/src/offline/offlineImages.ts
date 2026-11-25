@@ -1,9 +1,9 @@
-import type { AuditIssueImage } from "@balebase/validators/audits";
+import type { FormIssueImage } from "@balebase/validators/forms";
 import { offlineRoutes } from "@balebase/validators/offline";
 import {
-  findAuditIssueImage,
-  toAuditIssueImage,
-} from "../audits/auditIssueImageRecords";
+  findFormIssueImage,
+  toFormIssueImage,
+} from "../forms/formIssueImageRecords";
 import type { IssueContext } from "../issues/issueRecords";
 import { respond } from "../shared/respond";
 
@@ -21,14 +21,14 @@ export async function replayOfflineImage(
   if (receipt) {
     return receipt.issue_id === issueId
       ? respond(context, offlineRoutes.uploadImage, {
-          image: JSON.parse(receipt.image) as AuditIssueImage,
+          image: JSON.parse(receipt.image) as FormIssueImage,
         })
       : context.json(
           { error: "This image ID was already used for a different issue." },
           409,
         );
   }
-  const existing = await findAuditIssueImage(
+  const existing = await findFormIssueImage(
     context.env.DB,
     organizationId,
     issueId,
@@ -53,6 +53,6 @@ export async function replayOfflineImage(
     );
   }
   return respond(context, offlineRoutes.uploadImage, {
-    image: toAuditIssueImage(existing),
+    image: toFormIssueImage(existing),
   });
 }

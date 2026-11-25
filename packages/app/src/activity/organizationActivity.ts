@@ -57,7 +57,7 @@ export function organizationActivitySummary(event: ActivityEvent) {
       return `${viaLabel(details.via)} · Pending invitations canceled: ${textValue(details.canceledInvitations) || "0"}${canceledSubscriptions(details.canceledSubscriptionIds)}`;
     case "organization.purged":
       return purgeSummary(event);
-    case "organization.audit_runs_purged":
+    case "organization.form_runs_purged":
       return retentionSummary(event);
     case "organization.restored":
       return `${viaLabel(details.via)} · Deleted by ${textValue(details.deletedByName) || textValue(details.deletedByEmail) || "someone no longer recorded"}`;

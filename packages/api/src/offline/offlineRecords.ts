@@ -1,6 +1,6 @@
 import type { Person } from "@balebase/validators/fields";
 import type {
-  OfflineAuditState,
+  OfflineFormState,
   OfflineOperation,
 } from "@balebase/validators/offline";
 import {
@@ -10,10 +10,10 @@ import {
   mergeAnswers,
   type StoredAnswer,
   storedAnswers,
-} from "../audits/auditAnswers";
-import { allRequiredAnswered, parseResponses } from "../audits/auditDefinition";
-import { type AuditRow, findAudit } from "../audits/auditRunRecords";
-import { storedDefinition } from "../audits/auditTemplates";
+} from "../forms/formAnswers";
+import { allRequiredAnswered, parseResponses } from "../forms/formDefinition";
+import { type FormRow, findForm } from "../forms/formRunRecords";
+import { storedDefinition } from "../forms/formTemplates";
 import {
   type IssueContext,
   issueInsert,
@@ -38,7 +38,7 @@ export interface OfflineWrites {
   rejected: string;
   /**
    * Whether writes that did not apply are computed again: a merge that found
-   * its audit moved on merges over the newer copy instead.
+   * its form moved on merges over the newer copy instead.
    */
   retry: boolean;
 }
@@ -48,11 +48,11 @@ const formerAssigneeError =
   "The issue assignee is no longer a member. Your local work has been kept.";
 
 const invalidAnswersError =
-  "An answer is not valid for this form. Your local work has been kept.";
+  "An answer is not valid for this template. Your local work has been kept.";
 
-/** Why a merge did not apply after every retry: the audit kept changing. */
-const auditMovedError =
-  "This audit kept changing on the server while this device synced. It will try again.";
+/** Why a merge did not apply after every retry: the form kept changing. */
+const formMovedError =
+  "This form kept changing on the server while this device synced. It will try again.";
 
 /** Each statement after a guarded write runs only if the one before it wrote. */
 const afterWrite: SqlCondition = { sql: "changes() > 0", bindings: [] };
@@ -63,9 +63,9 @@ export function offlineWrites(
   operation: OfflineOperation,
 ): Promise<OfflineWrites | string> {
   switch (operation.type) {
-    case "auditStart":
+    case "formStart":
       return startWrites(context, operation);
-    case "auditSave":
+    case "formSave":
       return saveWrites(context, operation);
     case "issue":
       return issueWrites(context, operation);
@@ -73,13 +73,13 @@ export function offlineWrites(
 }
 
 /**
- * Creates the audit in progress, then saves its answers, each with the time
- * the device gave it, in a second statement so the audit triggers record
+ * Creates the form in progress, then saves its answers, each with the time
+ * the device gave it, in a second statement so the form triggers record
  * them with the sync actor.
  */
 async function startWrites(
   context: IssueContext,
-  operation: Extract<OfflineOperation, { type: "auditStart" }>,
+  operation: Extract<OfflineOperation, { type: "formStart" }>,
 ): Promise<OfflineWrites | string> {
   const organizationId = context.get("organizationId");
   const template = await findSyncableVersion(
@@ -89,7 +89,7 @@ async function startWrites(
     operation.templateVersion,
   );
   if (!template)
-    return "The downloaded form version is no longer available. Your local work has been kept.";
+    return "The downloaded template version is no longer available. Your local work has been kept.";
   // A deleted project still takes the work done for it; only one that never
   // belonged to the organization is refused.
   const project = await context.env.DB.prepare(
@@ -98,7 +98,7 @@ async function startWrites(
     .bind(operation.projectId, organizationId)
     .first<{ id: string }>();
   if (!project)
-    return "This audit's project is not in this organization. Your local work has been kept.";
+    return "This form's project is not in this organization. Your local work has been kept.";
   const userId = context.get("authSession").user.id;
   // The start is the write that sets each answer it carries.
   const answers = Object.fromEntries(
@@ -118,7 +118,7 @@ async function startWrites(
   const now = new Date().toISOString();
   return {
     statements: [
-      context.env.DB.prepare(`INSERT INTO audits
+      context.env.DB.prepare(`INSERT INTO forms
         (id, organization_id, project_id, template_id, template_family_id,
          template_version_id, template_version, template_name, definition,
          responses, status, started_by, created_at, updated_at)
@@ -135,7 +135,7 @@ async function startWrites(
         now,
         now,
       ),
-      context.env.DB.prepare(`UPDATE audits SET responses = ?, answer_meta = ?,
+      context.env.DB.prepare(`UPDATE forms SET responses = ?, answer_meta = ?,
         updated_at = ?, activity_actor_id = ?, revision = revision + 1
         WHERE id = ? AND organization_id = ?`).bind(
         columns.responses,
@@ -147,42 +147,38 @@ async function startWrites(
       ),
     ],
     applied: {
-      sql: "EXISTS (SELECT 1 FROM audits WHERE id = ? AND organization_id = ?)",
+      sql: "EXISTS (SELECT 1 FROM forms WHERE id = ? AND organization_id = ?)",
       bindings: [operation.id, organizationId],
     },
-    rejected: "This audit was not saved. Your local work has been kept.",
+    rejected: "This form was not saved. Your local work has been kept.",
     retry: false,
   };
 }
 
 /**
- * Merges a device's answers into the audit, last writer wins by the time
+ * Merges a device's answers into the form, last writer wins by the time
  * each answer was given (`mergeAnswers`), and completes it when asked and
  * every required item is answered after the merge; otherwise the answers
- * save and the audit stays in progress, which the device takes back up.
+ * save and the form stays in progress, which the device takes back up.
  * Each conflict the merge resolved is recorded with both answers. A
- * completed audit keeps its answers, so every differing answer is recorded
- * as discarded; a discarded audit takes nothing.
+ * completed form keeps its answers, so every differing answer is recorded
+ * as discarded; a discarded form takes nothing.
  *
  * The writes hold only over the revision the merge read: a write landing in
  * between leaves them unapplied, and the merge runs again over it.
  */
 async function saveWrites(
   context: IssueContext,
-  operation: Extract<OfflineOperation, { type: "auditSave" }>,
+  operation: Extract<OfflineOperation, { type: "formSave" }>,
 ): Promise<OfflineWrites | string> {
   const organizationId = context.get("organizationId");
   const userId = context.get("authSession").user.id;
-  const audit = await findAudit(
-    context.env.DB,
-    organizationId,
-    operation.auditId,
-  );
-  if (!audit)
-    return "This audit is no longer on the server. Your local work has been kept.";
-  if (audit.deleted_at)
-    return "This audit was discarded on the server. Your local work has been kept.";
-  const definition = storedDefinition(audit.definition);
+  const form = await findForm(context.env.DB, organizationId, operation.formId);
+  if (!form)
+    return "This form is no longer on the server. Your local work has been kept.";
+  if (form.deleted_at)
+    return "This form was discarded on the server. Your local work has been kept.";
+  const definition = storedDefinition(form.definition);
   const given = Object.fromEntries(
     Object.entries(operation.answers).map(([itemId, { value }]) => [
       itemId,
@@ -190,14 +186,14 @@ async function saveWrites(
     ]),
   );
   if (!parseResponses(given, definition)) return invalidAnswersError;
-  const sealed = audit.status === "completed";
+  const sealed = form.status === "completed";
   const merged = mergeAnswers(
-    storedAnswers(audit),
+    storedAnswers(form),
     operation.answers,
     { by: userId, version: operation.id },
     sealed,
   );
-  // A required answer cleared elsewhere leaves the audit in progress.
+  // A required answer cleared elsewhere leaves the form in progress.
   const completion =
     operation.completion &&
     !sealed &&
@@ -207,17 +203,17 @@ async function saveWrites(
   const now = new Date().toISOString();
   const conflicts = await conflictEvents(
     context,
-    audit,
+    form,
     merged.conflicts,
     sealed,
     now,
   );
   const unchanged: SqlCondition = {
-    sql: `EXISTS (SELECT 1 FROM audits WHERE id = ? AND organization_id = ?
+    sql: `EXISTS (SELECT 1 FROM forms WHERE id = ? AND organization_id = ?
       AND revision = ? AND status = ? AND deleted_at IS NULL)`,
-    bindings: [audit.id, organizationId, audit.revision, audit.status],
+    bindings: [form.id, organizationId, form.revision, form.status],
   };
-  const common = { rejected: auditMovedError, retry: true };
+  const common = { rejected: formMovedError, retry: true };
   // Nothing to save: the answers it lost are its only record.
   if (!merged.changed && !completion)
     return { ...common, applied: unchanged, statements: conflicts(unchanged) };
@@ -226,7 +222,7 @@ async function saveWrites(
     ...common,
     applied: afterWrite,
     statements: [
-      context.env.DB.prepare(`UPDATE audits SET responses = ?, answer_meta = ?,
+      context.env.DB.prepare(`UPDATE forms SET responses = ?, answer_meta = ?,
         status = ?, completed_at = ?, updated_at = ?, activity_actor_id = ?,
         revision = revision + 1
         WHERE id = ? AND organization_id = ? AND revision = ?
@@ -237,12 +233,12 @@ async function saveWrites(
         completion ? now : null,
         now,
         userId,
-        audit.id,
+        form.id,
         organizationId,
-        audit.revision,
+        form.revision,
       ),
       ...conflicts(afterWrite),
-      ...(completion ? [offlineTiming(context, audit, completion, now)] : []),
+      ...(completion ? [offlineTiming(context, form, completion, now)] : []),
     ],
   };
 }
@@ -250,19 +246,19 @@ async function saveWrites(
 /** The device-reported start and completion times, after the save. */
 function offlineTiming(
   context: IssueContext,
-  audit: AuditRow,
+  form: FormRow,
   completion: { completedAt: string; startedAt: string },
   now: string,
 ) {
   return activityStatement(
     context.env.DB,
     {
-      action: "audit.offline_synced",
+      action: "form.offline_synced",
       actorId: context.get("authSession").user.id,
       organizationId: context.get("organizationId"),
       occurredAt: now,
-      root: { id: audit.id, type: "audit_run", label: audit.template_name },
-      subject: { id: audit.id, type: "audit_run" },
+      root: { id: form.id, type: "form_run", label: form.template_name },
+      subject: { id: form.id, type: "form_run" },
       details: {
         clientStartedAt: completion.startedAt,
         clientCompletedAt: completion.completedAt,
@@ -272,21 +268,21 @@ function offlineTiming(
   );
 }
 
-/** The server's copy of an audit as a device merges it, or null when gone. */
-export async function readAuditState(
+/** The server's copy of a form as a device merges it, or null when gone. */
+export async function readFormState(
   database: D1Database,
   organizationId: string,
-  auditId: string,
-): Promise<OfflineAuditState | null> {
+  formId: string,
+): Promise<OfflineFormState | null> {
   const row = await database
     .prepare(
       `SELECT id, status, deleted_at, revision, responses, answer_meta
-       FROM audits WHERE id = ? AND organization_id = ?`,
+       FROM forms WHERE id = ? AND organization_id = ?`,
     )
-    .bind(auditId, organizationId)
+    .bind(formId, organizationId)
     .first<
       Pick<
-        AuditRow,
+        FormRow,
         | "answer_meta"
         | "deleted_at"
         | "id"
@@ -310,19 +306,19 @@ export async function readAuditState(
 }
 
 /**
- * One `audit.answer_conflict_resolved` event per conflict, on `condition`:
+ * One `form.answer_conflict_resolved` event per conflict, on `condition`:
  * the item, both answers with when and by whom each was given, and why the
- * kept one stayed (`later`, or `completed` for an audit already completed).
+ * kept one stayed (`later`, or `completed` for a form already completed).
  */
 async function conflictEvents(
   context: IssueContext,
-  audit: AuditRow,
+  form: FormRow,
   conflicts: AnswerConflict[],
   sealed: boolean,
   now: string,
 ) {
   const items = new Map(
-    storedDefinition(audit.definition).sections.flatMap((section) =>
+    storedDefinition(form.definition).sections.flatMap((section) =>
       section.items.map((item) => [item.id, item] as const),
     ),
   );
@@ -341,12 +337,12 @@ async function conflictEvents(
       activityStatement(
         context.env.DB,
         {
-          action: "audit.answer_conflict_resolved",
+          action: "form.answer_conflict_resolved",
           actorId: context.get("authSession").user.id,
           organizationId: context.get("organizationId"),
           occurredAt: now,
-          root: { id: audit.id, type: "audit_run", label: audit.template_name },
-          subject: { id: itemId, type: "audit_answer" },
+          root: { id: form.id, type: "form_run", label: form.template_name },
+          subject: { id: itemId, type: "form_answer" },
           details: {
             prompt: items.get(itemId)?.prompt ?? itemId,
             responseType: items.get(itemId)?.responseType ?? "text",
@@ -381,10 +377,10 @@ async function findPeople(
 }
 
 /**
- * The form version a device downloaded, if it still exists: one published
- * when downloaded, global or the organization's own. The form may have been
+ * The template version a device downloaded, if it still exists: one published
+ * when downloaded, global or the organization's own. The template may have been
  * unpublished, edited, turned off for the project, or discarded since; work
- * done on the downloaded version still syncs until the form is purged.
+ * done on the downloaded version still syncs until the template is purged.
  */
 function findSyncableVersion(
   database: D1Database,
@@ -396,8 +392,8 @@ function findSyncableVersion(
     .prepare(
       `SELECT family.id, version.id AS version_id, version.version,
               version.name, version.definition
-       FROM audit_template_families AS family
-       JOIN audit_template_versions AS version
+       FROM form_template_families AS family
+       JOIN form_template_versions AS version
          ON version.template_id = family.id
        WHERE family.id = ? AND version.version = ?
          AND version.status = 'published'
@@ -417,15 +413,15 @@ async function issueWrites(
   context: IssueContext,
   operation: Extract<OfflineOperation, { type: "issue" }>,
 ): Promise<OfflineWrites | string> {
-  if (Boolean(operation.auditId) !== Boolean(operation.itemId))
-    return "An audit issue needs an audit and checklist item.";
+  if (Boolean(operation.formId) !== Boolean(operation.itemId))
+    return "A form issue needs a form and question.";
   const target = {
-    type: operation.auditId ? ("audit_run" as const) : ("workspace" as const),
-    id: operation.auditId ?? null,
+    type: operation.formId ? ("form_run" as const) : ("workspace" as const),
+    id: operation.formId ?? null,
     itemId: operation.itemId ?? null,
   };
   if (!(await issueTargetAvailable(context, target)))
-    return "This issue's audit is unavailable. Your local work has been kept.";
+    return "This issue's form is unavailable. Your local work has been kept.";
   const organizationId = context.get("organizationId");
   return {
     statements: [issueInsert(context, { ...operation, target })],

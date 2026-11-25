@@ -13,19 +13,19 @@ import {
 } from "@balebase/ui/react";
 import type { Person } from "@balebase/validators/fields";
 import type {
-  ProjectForm as Form,
   Project,
+  ProjectTemplate as Template,
 } from "@balebase/validators/projects";
 import { useCallback, useState } from "react";
 import { ActivityFeed } from "../activity/ActivityFeed";
 import {
-  readAuditTemplateView,
-  storeAuditTemplateView,
-} from "../audits/auditTemplateView";
+  readFormTemplateView,
+  storeFormTemplateView,
+} from "../forms/formTemplateView";
 import {
   TemplateCollections,
   TemplateViewSwitcher,
-} from "../audits/TemplateCollections";
+} from "../forms/TemplateCollections";
 import { useDevice } from "../offline/offlineContext";
 import { api } from "../shared/apiClient";
 import { ListRow } from "../shared/ListRow";
@@ -34,8 +34,8 @@ import { useAction } from "../shared/useAction";
 import { useLoad } from "../shared/useLoad";
 import { projectPath } from "../workspace/workspacePaths";
 import { DeviceProjects, unreachableNotice } from "./DeviceProjects";
-import { ProjectAuditForms } from "./ProjectAuditForms";
 import { ProjectForm } from "./ProjectForm";
+import { ProjectFormTemplates } from "./ProjectFormTemplates";
 import { confirmProjectDeletion, editedFields } from "./projectChanges";
 
 function useProjectDetail(id: string, onNavigate: (pathname: string) => void) {
@@ -197,13 +197,13 @@ export function ProjectDetailPage({
 }
 
 /**
- * A project's members, the forms to start audits from, which forms it uses,
+ * A project's members, the templates to start forms from, which templates it uses,
  * and its history, each on its own tab.
  */
 function useProjectSections() {
   return useSectionTabs([
     { id: "members", label: "Members" },
-    { id: "audits", label: "Audit forms" },
+    { id: "forms", label: "Forms" },
     { id: "setup", label: "Project setup" },
     { id: "activity", label: "Activity" },
   ] as const);
@@ -242,20 +242,20 @@ function ProjectSections({
         />,
       )}
       {panel(
-        "audits",
-        <ProjectAuditForms
-          forms={detail.project.forms}
+        "forms",
+        <ProjectFormTemplates
+          templates={detail.project.templates}
           onNavigate={onNavigate}
           projectId={id}
         />,
       )}
       {panel(
         "setup",
-        <ProjectForms
-          available={detail.availableForms}
+        <ProjectTemplates
+          available={detail.availableTemplates}
           busy={busy}
           canManage={detail.canManage}
-          enabled={detail.project.forms}
+          enabled={detail.project.templates}
           onToggle={(templateId, on) =>
             void change(() => api.projects.setForm(id, templateId, on))
           }
@@ -298,7 +298,7 @@ function ProjectMembers({
           {countLabel(members.length, "member")}
         </span>
       }
-      description="Members' devices sync the project's audit forms, so they can start audits offline."
+      description="Members' devices sync the project's form templates, so they can start forms offline."
       title="Members"
     >
       {canManage && candidates.length > 0 && (
@@ -361,88 +361,89 @@ function ProjectMembers({
   );
 }
 
-const managerFormCopy = {
+const managerTemplateCopy = {
   global: {
-    description: "Published forms available in every organization.",
-    emptyMessage: "No global forms are published yet.",
-    emptyTitle: "No global forms",
-    title: "Global forms",
+    description: "Published templates available in every organization.",
+    emptyMessage: "No global templates are published yet.",
+    emptyTitle: "No global templates",
+    title: "Global templates",
   },
   organization: {
-    description: "This organization's published forms.",
+    description: "This organization's published templates.",
     emptyMessage:
-      "Publish an organization form from Audits to turn it on here.",
-    emptyTitle: "No published organization forms",
-    title: "Organization forms",
+      "Publish an organization template from Forms to turn it on here.",
+    emptyTitle: "No published organization templates",
+    title: "Organization templates",
   },
 };
 
-const memberFormCopy = {
+const memberTemplateCopy = {
   global: {
-    ...managerFormCopy.global,
+    ...managerTemplateCopy.global,
     emptyMessage: undefined,
-    emptyTitle: "No global forms turned on",
+    emptyTitle: "No global templates turned on",
   },
   organization: {
-    ...managerFormCopy.organization,
+    ...managerTemplateCopy.organization,
     emptyMessage: undefined,
-    emptyTitle: "No organization forms turned on",
+    emptyTitle: "No organization templates turned on",
   },
 };
 
 /**
- * The audit forms the project can use, laid out like the Audits page's
- * collections. Managers see every published form and turn each on or off;
- * members see the ones turned on. Forms are edited from Audits, not here.
+ * The form templates the project can use, laid out like the Forms page's
+ * collections. Managers see every published template and turn each on or off;
+ * members see the ones turned on. Templates are edited from Forms, not here.
  */
-function ProjectForms({
+function ProjectTemplates({
   available,
   busy,
   canManage,
   enabled,
   onToggle,
 }: {
-  available: Form[];
+  available: Template[];
   busy: boolean;
   canManage: boolean;
-  enabled: Form[];
+  enabled: Template[];
   onToggle: (templateId: string, on: boolean) => void;
 }) {
-  const [view, setView] = useState(() => readAuditTemplateView());
-  const isOn = (form: Form) => enabled.some((entry) => entry.id === form.id);
+  const [view, setView] = useState(() => readFormTemplateView());
+  const isOn = (template: Template) =>
+    enabled.some((entry) => entry.id === template.id);
   return (
     <PageSection
       actions={
-        <div className="auditTemplateToolbar">
+        <div className="formTemplateToolbar">
           <span className="sectionCount">
-            {countLabel(enabled.length, "form")} on
+            {countLabel(enabled.length, "template")} on
           </span>
           <TemplateViewSwitcher
             onChange={(next) => {
               setView(next);
-              storeAuditTemplateView(next);
+              storeFormTemplateView(next);
             }}
             view={view}
           />
         </div>
       }
-      description="Turn on the audit forms this project uses. Only published forms are listed; members' devices sync the ones turned on."
+      description="Turn on the form templates this project uses. Only published templates are listed; members' devices sync the ones turned on."
       title="Project setup"
     >
       <TemplateCollections
         actions={
           canManage
-            ? (form) => (
-                <FormToggle
+            ? (template) => (
+                <TemplateToggle
                   busy={busy}
-                  name={form.name}
-                  on={isOn(form)}
-                  onChange={(on) => onToggle(form.id, on)}
+                  name={template.name}
+                  on={isOn(template)}
+                  onChange={(on) => onToggle(template.id, on)}
                 />
               )
             : undefined
         }
-        copy={canManage ? managerFormCopy : memberFormCopy}
+        copy={canManage ? managerTemplateCopy : memberTemplateCopy}
         templates={canManage ? available : enabled}
         view={view}
       />
@@ -450,7 +451,7 @@ function ProjectForms({
   );
 }
 
-function FormToggle({
+function TemplateToggle({
   busy,
   name,
   on,
@@ -462,7 +463,7 @@ function FormToggle({
   onChange: (on: boolean) => void;
 }) {
   return (
-    <label className="check auditTemplateToggle">
+    <label className="check formTemplateToggle">
       <input
         aria-checked={on}
         aria-label={`Use ${name} in this project`}

@@ -10,7 +10,7 @@ import { installDom } from "../testing/dom";
 import { ErrorToast } from "./ErrorToast";
 
 const { clickLink, render: renderInDom } = installDom({
-  url: "http://localhost:5173/audits",
+  url: "http://localhost:5173/forms",
 });
 let container: HTMLElement;
 
@@ -88,10 +88,10 @@ describe("billing links", () => {
     expect(blockingSeatRequirement("upgrade", "/organization/billing")).toBe(
       undefined,
     );
-    expect(blockingSeatRequirement("upgrade", "/audits")).toBe("upgrade");
+    expect(blockingSeatRequirement("upgrade", "/forms")).toBe("upgrade");
     expect(blockingSeatRequirement("ask-owner", "/organization/billing")).toBe(
       "ask-owner",
     );
-    expect(blockingSeatRequirement(undefined, "/audits")).toBeUndefined();
+    expect(blockingSeatRequirement(undefined, "/forms")).toBeUndefined();
   });
 });

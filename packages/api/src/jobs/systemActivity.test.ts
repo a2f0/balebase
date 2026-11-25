@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { purgeDiscardedAuditForms } from "../audits/discardedTemplatePurge";
-import { purgeExpiredFreeAuditRuns } from "../billing/billingRetention";
+import { purgeExpiredFreeFormRuns } from "../billing/billingRetention";
+import { purgeDiscardedFormTemplates } from "../forms/discardedTemplatePurge";
 import { purgeTrashedEmails } from "../inbox/trashedEmailPurge";
 import { purgeDeletedObjects } from "../library/deletedObjectCleanup";
 import { purgeDeletedOrganizations } from "../organizations/organizationPurge";
@@ -370,12 +370,12 @@ describe("Free-plan retention", () => {
     f.database.exec(`INSERT INTO organization_billing
       (organization_id, stripe_status, stripe_price_id, updated_at)
       VALUES ('paid', 'active', 'price_pro', '2026-01-01')`);
-    const insert = f.database.query(`INSERT INTO audits
+    const insert = f.database.query(`INSERT INTO forms
       (id, organization_id, project_id, template_name, definition, responses,
        status, started_by, created_at, updated_at)
-      VALUES (?, ?, ?, 'Example form', '{"version":1,"sections":[]}', '{}',
+      VALUES (?, ?, ?, 'Example template', '{"version":1,"sections":[]}', '{}',
               'completed', 'user-1', ?, ?)`);
-    const audit = (id: string, organizationId: string, at: string) =>
+    const form = (id: string, organizationId: string, at: string) =>
       insert.run(
         id,
         organizationId,
@@ -384,20 +384,20 @@ describe("Free-plan retention", () => {
         at,
       );
     const bindings = { ...f.bindings, STRIPE_PRO_PRICE_ID: "price_pro" };
-    return { audit, bindings, f };
+    return { form, bindings, f };
   }
 
   it("records one event per organization and batch with the number of runs removed", async () => {
-    const { audit, bindings, f } = retentionFixture();
+    const { form, bindings, f } = retentionFixture();
     for (let i = 0; i < 101; i++)
-      audit(`free-${String(i).padStart(3, "0")}`, "free", "2026-06-01");
-    audit("free-recent", "free", "2026-08-20");
-    audit("other-old", "other", "2026-06-02");
-    audit("paid-old", "paid", "2026-06-01");
+      form(`free-${String(i).padStart(3, "0")}`, "free", "2026-06-01");
+    form("free-recent", "free", "2026-08-20");
+    form("other-old", "other", "2026-06-02");
+    form("paid-old", "paid", "2026-06-01");
     expect(
-      await purgeExpiredFreeAuditRuns(bindings, "run-r", "2026-07-27"),
+      await purgeExpiredFreeFormRuns(bindings, "run-r", "2026-07-27"),
     ).toBe(102);
-    const purged = events(f, "organization.audit_runs_purged");
+    const purged = events(f, "organization.form_runs_purged");
     expect(
       purged.map(({ organization_id, details }) => [
         organization_id,
@@ -409,7 +409,7 @@ describe("Free-plan retention", () => {
       ["other", 1],
     ]);
     expect(purged[0]).toMatchObject({
-      ...systemActor("purgeExpiredFreeAuditRuns"),
+      ...systemActor("purgeExpiredFreeFormRuns"),
       causation_id: "run-r",
       details: { completedBefore: "2026-07-27", count: 100, retentionDays: 30 },
       root_id: "free",
@@ -420,45 +420,45 @@ describe("Free-plan retention", () => {
     const feed = await findActivity(f.bindings.DB, "other");
     expect(feed?.events.map(({ action, actor }) => [action, actor])).toEqual([
       [
-        "organization.audit_runs_purged",
+        "organization.form_runs_purged",
         {
           apiKey: null,
           email: "",
           id: null,
           name: "Balebase maintenance",
-          source: "purgeExpiredFreeAuditRuns",
+          source: "purgeExpiredFreeFormRuns",
           type: "system",
         },
       ],
     ]);
     expect(
-      await purgeExpiredFreeAuditRuns(bindings, "run-s", "2026-07-27"),
+      await purgeExpiredFreeFormRuns(bindings, "run-s", "2026-07-27"),
     ).toBe(0);
-    expect(events(f, "organization.audit_runs_purged")).toHaveLength(3);
+    expect(events(f, "organization.form_runs_purged")).toHaveLength(3);
   });
 
   it("keeps the runs when history fails", async () => {
-    const { audit, bindings, f } = retentionFixture();
-    audit("free-old", "free", "2026-06-01");
+    const { form, bindings, f } = retentionFixture();
+    form("free-old", "free", "2026-06-01");
     failHistory(f);
     await expect(
-      purgeExpiredFreeAuditRuns(bindings, "run-r", "2026-07-27"),
+      purgeExpiredFreeFormRuns(bindings, "run-r", "2026-07-27"),
     ).rejects.toThrow("history unavailable");
-    expect(f.database.query("SELECT id FROM audits").all()).toEqual([
+    expect(f.database.query("SELECT id FROM forms").all()).toEqual([
       { id: "free-old" },
     ]);
   });
 });
 
-describe("discarded global form purge", () => {
-  function formFixture() {
+describe("discarded global template purge", () => {
+  function templateFixture() {
     const f = fixture();
     seedUser(f.database, { createdAt: "2026-01-01", id: "root" });
     for (const id of ["a", "b"]) insertOrganization(f, id);
     const family = (id: string, versions: [string, string, string][]) => {
       f.database
         .query(
-          `INSERT INTO audit_template_families
+          `INSERT INTO form_template_families
            (id, scope, organization_id, current_version, created_by, created_at, updated_at)
            VALUES (?, 'global', NULL, ?, 'root', '2026-01-01', '2026-01-01')`,
         )
@@ -466,7 +466,7 @@ describe("discarded global form purge", () => {
       versions.forEach(([name, status, at], index) => {
         f.database
           .query(
-            `INSERT INTO audit_template_versions
+            `INSERT INTO form_template_versions
              (id, template_id, version, name, description, definition, status, created_by, created_at)
              VALUES (?, ?, ?, ?, '', '{"version":1,"sections":[]}', ?, 'root', ?)`,
           )
@@ -479,7 +479,7 @@ describe("discarded global form purge", () => {
       ["Safety draft", "discarded", "2026-09-01"],
     ]);
     family("kept", [["Kept", "published", "2026-01-01"]]);
-    const project = (id: string, organizationId: string, form: string) => {
+    const project = (id: string, organizationId: string, template: string) => {
       f.database
         .query(
           `INSERT INTO projects (id, organization_id, name, created_at, updated_at)
@@ -488,10 +488,10 @@ describe("discarded global form purge", () => {
         .run(id, organizationId, `${id} name`);
       f.database
         .query(
-          `INSERT INTO project_audit_forms (project_id, organization_id, template_id, added_at)
+          `INSERT INTO project_form_templates (project_id, organization_id, template_id, added_at)
            VALUES (?, ?, ?, '2026-01-01')`,
         )
-        .run(id, organizationId, form);
+        .run(id, organizationId, template);
     };
     project("p-a", "a", "purged");
     project("p-b", "b", "purged");
@@ -499,11 +499,13 @@ describe("discarded global form purge", () => {
     return f;
   }
 
-  it("records the removal on each project that had the form, by the job", async () => {
-    const f = formFixture();
+  it("records the removal on each project that had the template, by the job", async () => {
+    const f = templateFixture();
     const when = new Date("2026-10-30T12:00:00.000Z");
-    expect(await purgeDiscardedAuditForms(f.bindings, "run-f", when)).toBe(1);
-    const removed = events(f, "project.form_disabled");
+    expect(await purgeDiscardedFormTemplates(f.bindings, "run-f", when)).toBe(
+      1,
+    );
+    const removed = events(f, "project.template_disabled");
     expect(
       removed.map(({ organization_id, root_id, root_label, details }) => [
         organization_id,
@@ -516,40 +518,40 @@ describe("discarded global form purge", () => {
         organization,
         `p-${organization}`,
         `p-${organization} name`,
-        { reason: "form_purged", templateId: "purged", title: "Safety v1" },
+        { reason: "template_purged", templateId: "purged", title: "Safety v1" },
       ]),
     );
     expect(removed[0]).toMatchObject({
-      ...systemActor("purgeDiscardedAuditForms"),
+      ...systemActor("purgeDiscardedFormTemplates"),
       causation_id: "run-f",
       subject_id: "purged",
-      subject_type: "audit_template",
+      subject_type: "form_template",
     });
     expect(
-      f.database.query("SELECT project_id FROM project_audit_forms").all(),
+      f.database.query("SELECT project_id FROM project_form_templates").all(),
     ).toEqual([{ project_id: "p-kept" }]);
   });
 
   it("records nothing when a restore wins or history fails", async () => {
     const when = new Date("2026-10-30T12:00:00.000Z");
-    const restored = formFixture();
-    restored.database.exec(`INSERT INTO audit_template_versions
+    const restored = templateFixture();
+    restored.database.exec(`INSERT INTO form_template_versions
       (id, template_id, version, name, description, definition, status, created_by, created_at)
       VALUES ('purged-v4', 'purged', 4, 'Safety v1', '', '{}', 'published', 'root', '2026-10-01');
-      UPDATE audit_template_families SET current_version = 4 WHERE id = 'purged'`);
+      UPDATE form_template_families SET current_version = 4 WHERE id = 'purged'`);
     expect(
-      await purgeDiscardedAuditForms(restored.bindings, "run-f", when),
+      await purgeDiscardedFormTemplates(restored.bindings, "run-f", when),
     ).toBe(0);
-    expect(events(restored, "project.form_disabled")).toEqual([]);
+    expect(events(restored, "project.template_disabled")).toEqual([]);
 
-    const failing = formFixture();
+    const failing = templateFixture();
     failHistory(failing);
     await expect(
-      purgeDiscardedAuditForms(failing.bindings, "run-f", when),
+      purgeDiscardedFormTemplates(failing.bindings, "run-f", when),
     ).rejects.toThrow("history unavailable");
     expect(
       failing.database
-        .query("SELECT COUNT(*) AS count FROM project_audit_forms")
+        .query("SELECT COUNT(*) AS count FROM project_form_templates")
         .get(),
     ).toEqual({ count: 3 });
   });

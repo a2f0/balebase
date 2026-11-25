@@ -19,20 +19,20 @@ import { countLabel } from "../shared/labels";
 import { useAction } from "../shared/useAction";
 import { useLoad } from "../shared/useLoad";
 import {
-  projectAuditForPath,
+  projectFormForPath,
   projectIdForPath,
   projectPath,
 } from "../workspace/workspacePaths";
 import { DeletedProjects } from "./DeletedProjects";
 import {
-  DeviceAuditPage,
+  DeviceFormPage,
   DeviceProjects,
   unreachableNotice,
 } from "./DeviceProjects";
 import { DeviceSyncStatus } from "./DeviceSyncStatus";
-import { OtherDeviceAudits } from "./ProjectAuditForms";
 import { ProjectDetailPage } from "./ProjectDetail";
 import { ProjectForm } from "./ProjectForm";
+import { OtherDeviceForms } from "./ProjectFormTemplates";
 import { confirmProjectDeletion, editedFields } from "./projectChanges";
 import {
   closedProjectListForm,
@@ -47,10 +47,10 @@ export function Projects({
   onNavigate: (pathname: string) => void;
   pathname: string;
 }) {
-  // The App shows a device audit itself while this device holds it; this
+  // The App shows a device form itself while this device holds it; this
   // shows one it does not.
-  const audit = projectAuditForPath(pathname);
-  if (audit) return <DeviceAuditPage {...audit} onNavigate={onNavigate} />;
+  const form = projectFormForPath(pathname);
+  if (form) return <DeviceFormPage {...form} onNavigate={onNavigate} />;
   const projectId = projectIdForPath(pathname);
   // Keyed so each page starts from its own state and ignores the other's
   // responses after navigation.
@@ -134,7 +134,7 @@ function ProjectListPage({
     });
 
   // The API can be unreachable while the device reports a network (a
-  // captive portal, an outage): its copy still lets audits go on.
+  // captive portal, an outage): its copy still lets forms go on.
   if (!listing && loaded.error && workspace)
     return (
       <DeviceProjects
@@ -159,7 +159,7 @@ function ProjectListPage({
             </Button>
           )
         }
-        description="Group people around the audit forms they use. Your projects and their forms sync to this device, so audits can start without a connection."
+        description="Group people around the form templates they use. Your projects and their templates sync to this device, so forms can start without a connection."
         eyebrow="Workspace"
         title="Projects"
       />
@@ -213,7 +213,7 @@ function ProjectListPage({
               deletions={changes.deletions}
               onNavigate={onNavigate}
             />
-            <OtherDeviceAudits onNavigate={onNavigate} />
+            <OtherDeviceForms onNavigate={onNavigate} />
           </>
         )}
       </PageBody>
@@ -251,8 +251,8 @@ function ProjectList({
         icon="layers"
         title="No projects yet"
       >
-        Create a project, add the people working on it, and turn on the audit
-        forms they need.
+        Create a project, add the people working on it, and turn on the form
+        templates they need.
       </EmptyState>
     );
   return (
@@ -282,7 +282,7 @@ function ProjectList({
                 : []
             }
             key={project.id}
-            meta={`${countLabel(project.memberCount, "member")} · ${countLabel(project.formCount, "audit form")}${project.isMember ? " · You are a member" : ""}`}
+            meta={`${countLabel(project.memberCount, "member")} · ${countLabel(project.templateCount, "form template")}${project.isMember ? " · You are a member" : ""}`}
             open={{ href: projectPath(project.id), onNavigate }}
             title={project.name}
           />

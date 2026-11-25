@@ -12,7 +12,7 @@ function wire(value: unknown) {
 
 it("uses opaque Unicode-safe cursors", () => {
   const date = "2026-10-27T12:00:00.000Z";
-  const id = "audit:東京/é";
+  const id = "form:東京/é";
   const encoded = encodeCursor(date, id);
   expect(encoded).toMatch(/^[A-Za-z0-9_-]+$/);
   expect(decodeCursor(encoded, 2048)).toEqual([date, id]);

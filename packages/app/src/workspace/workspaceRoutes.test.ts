@@ -1,11 +1,11 @@
 import { describe, expect, it } from "bun:test";
 import { isValidElement, type ReactElement, type ReactNode } from "react";
-import { Audits } from "../audits/Audits";
 import { MyDocuments } from "../employeeForms/MyDocuments";
 import { FinanceAccountPage } from "../finance/FinanceAccountPage";
 import { FinanceConnectionPage } from "../finance/FinanceConnectionPage";
 import { FinanceSection } from "../finance/FinanceSection";
 import { FinanceTransactionPage } from "../finance/FinanceTransactionPage";
+import { Forms } from "../forms/Forms";
 import { Issues } from "../issues/Issues";
 import { workspaceRoute } from "./workspaceRoutes";
 
@@ -68,8 +68,8 @@ describe("workspace routes", () => {
       "/account": "account",
       "/account/security": "account",
       "/activity": "activity",
-      "/audits": "audits",
-      "/audits/runs/run-1": "audits",
+      "/forms": "forms",
+      "/forms/runs/run-1": "forms",
       "/businesses/business-1": "businesses",
       "/contracts/templates/template-1": "contracts",
       "/equipment": "equipment",
@@ -82,7 +82,7 @@ describe("workspace routes", () => {
       "/organization/people/member-1": "organization",
       "/projects": "projects",
       "/projects/project-1": "projects",
-      "/root/global-audits/form-1": "rootGlobalAudits",
+      "/root/global-templates/form-1": "rootGlobalTemplates",
       "/root/jobs": "rootJobs",
       "/root/organizations/org-1": "rootOrganizations",
       "/root/users": "rootUsers",
@@ -147,7 +147,7 @@ describe("workspace routes", () => {
       onNavigate: navigate,
       pathname: "/issues/issue-1",
     });
-    expect(element("/audits/runs/run-1").type).toBe(Audits);
+    expect(element("/forms/runs/run-1").type).toBe(Forms);
     expect(element("/me").props.organization).toEqual({ id: "org-2" });
     expect(element("/me").type).toBe(MyDocuments);
   });

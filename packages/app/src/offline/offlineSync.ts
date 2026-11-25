@@ -1,9 +1,9 @@
 import { ApiError } from "@balebase/api-client";
-import type { OfflineAuditState } from "@balebase/validators/offline";
+import type { OfflineFormState } from "@balebase/validators/offline";
 import { api } from "../shared/apiClient";
 import { errorMessage } from "../shared/errors";
 import { isOnline } from "../shared/network";
-import { auditWrites, pushDue } from "./offlineAuditState";
+import { formWrites, pushDue } from "./offlineFormState";
 import {
   activeOfflineKey,
   changeOfflineWorkspace,
@@ -12,7 +12,7 @@ import {
   offlineImage,
   readOfflineWorkspace,
 } from "./offlineStore";
-import { applyOfflineAuditEvent } from "./offlineWork";
+import { applyOfflineFormEvent } from "./offlineWork";
 
 function readyOfflineJob(workspace: OfflineWorkspace, now: number) {
   return workspace.jobs.find(
@@ -60,8 +60,8 @@ async function syncJob(
   job: OfflineJob,
 ) {
   try {
-    const audit = await send(workspace, job);
-    await recordResult(key, job.id, undefined, audit);
+    const form = await send(workspace, job);
+    await recordResult(key, job.id, undefined, form);
     return true;
   } catch (cause) {
     await recordResult(key, job.id, cause);
@@ -76,18 +76,18 @@ async function syncJob(
 }
 
 /**
- * Puts the answers given since a shared audit's last write into one save,
+ * Puts the answers given since a shared form's last write into one save,
  * made here so no save is in flight while it takes them. Resolves whether
- * an audit had any due.
+ * a form had any due.
  */
 async function queueDuePush(key: string, workspace: OfflineWorkspace) {
-  const due = workspace.audits.find((audit) =>
-    pushDue(audit, auditWrites(workspace.jobs, audit.id)),
+  const due = workspace.forms.find((form) =>
+    pushDue(form, formWrites(workspace.jobs, form.id)),
   );
   if (!due) return false;
   await changeOfflineWorkspace(key, (current) => {
     if (!current) throw new Error("Offline workspace is missing.");
-    return applyOfflineAuditEvent(current, due.id, {
+    return applyOfflineFormEvent(current, due.id, {
       saveId: crypto.randomUUID(),
       type: "pushed",
     });
@@ -95,14 +95,14 @@ async function queueDuePush(key: string, workspace: OfflineWorkspace) {
   return true;
 }
 
-/** Sends a job; an audit write resolves the server's copy of the audit. */
+/** Sends a job; a form write resolves the server's copy of the form. */
 async function send(
   workspace: OfflineWorkspace,
   job: OfflineJob,
-): Promise<OfflineAuditState | undefined> {
+): Promise<OfflineFormState | undefined> {
   const operation = job.operation;
   if (operation.type !== "image")
-    return (await api.offline.apply(workspace.scope, operation)).audit;
+    return (await api.offline.apply(workspace.scope, operation)).form;
   const blob = await offlineImage(workspace.key, operation.id);
   const file = new File([blob], operation.filename, { type: blob.type });
   await api.offline.uploadImage(
@@ -118,7 +118,7 @@ async function recordResult(
   key: string,
   id: string,
   cause?: unknown,
-  audit?: OfflineAuditState,
+  form?: OfflineFormState,
 ) {
   await changeOfflineWorkspace(key, (workspace) => {
     if (!workspace) throw new Error("Offline workspace is missing.");
@@ -128,22 +128,22 @@ async function recordResult(
       recordFailure(job, cause);
       return workspace;
     }
-    // A write's receipt can outlive its audit: the server then answers with
+    // A write's receipt can outlive its form: the server then answers with
     // no copy, and the write stays unsynced, keeping the answers it carries.
     const { type } = job.operation;
-    if ((type === "auditStart" || type === "auditSave") && !audit) {
+    if ((type === "formStart" || type === "formSave") && !form) {
       job.status = "blocked";
       job.error =
-        "This audit is no longer on the server. Your local work has been kept.";
+        "This form is no longer on the server. Your local work has been kept.";
       return workspace;
     }
     job.status = "synced";
     delete job.error;
     // The device takes the server's copy along with its write's outcome.
-    return audit && workspace.audits.some((entry) => entry.id === audit.id)
-      ? applyOfflineAuditEvent(workspace, audit.id, {
+    return form && workspace.forms.some((entry) => entry.id === form.id)
+      ? applyOfflineFormEvent(workspace, form.id, {
           job: job.id,
-          state: audit,
+          state: form,
           type: "confirmed",
         })
       : workspace;

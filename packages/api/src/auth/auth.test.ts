@@ -884,7 +884,7 @@ describe("password authentication", () => {
       .run("2026-10-15T08:30:00.000Z", nullableRoleEmail);
     expect(
       fixture.database
-        .query("SELECT role FROM user WHERE id = 'system:audit-library'")
+        .query("SELECT role FROM user WHERE id = 'system:template-library'")
         .get(),
     ).toEqual({ role: "system" });
     const adminSignIn = await post(fixture.auth, "/sign-in/email", {
@@ -894,12 +894,12 @@ describe("password authentication", () => {
     const adminCookie = adminSignIn.headers.get("set-cookie");
     const firstPage = await get(
       fixture.auth,
-      "/admin/list-users?filterField=id&filterOperator=ne&filterValue=system%3Aaudit-library&limit=1&offset=0&sortBy=email&sortDirection=asc",
+      "/admin/list-users?filterField=id&filterOperator=ne&filterValue=system%3Atemplate-library&limit=1&offset=0&sortBy=email&sortDirection=asc",
       adminCookie,
     );
     const secondPage = await get(
       fixture.auth,
-      "/admin/list-users?filterField=id&filterOperator=ne&filterValue=system%3Aaudit-library&limit=1&offset=1&sortBy=email&sortDirection=asc",
+      "/admin/list-users?filterField=id&filterOperator=ne&filterValue=system%3Atemplate-library&limit=1&offset=1&sortBy=email&sortDirection=asc",
       adminCookie,
     );
     expect(firstPage.status).toBe(200);

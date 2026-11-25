@@ -9,29 +9,29 @@ import {
   PageHeader,
   PageSection,
 } from "@balebase/ui/react";
-import { OfflineAuditEditor } from "../offline/OfflineAuditEditor";
+import { OfflineFormEditor } from "../offline/OfflineFormEditor";
 import { useDevice } from "../offline/offlineContext";
 import { ListRow } from "../shared/ListRow";
 import { countLabel } from "../shared/labels";
 import {
-  projectAuditForPath,
+  projectFormForPath,
   projectIdForPath,
   projectPath,
 } from "../workspace/workspacePaths";
 import { DeviceSyncStatus } from "./DeviceSyncStatus";
 import {
-  DeviceAudits,
-  OtherDeviceAudits,
-  ProjectAuditForms,
-} from "./ProjectAuditForms";
+  DeviceForms,
+  OtherDeviceForms,
+  ProjectFormTemplates,
+} from "./ProjectFormTemplates";
 
 /** Shown over the device's copy when the API cannot be reached. */
 export const unreachableNotice = `Could not reach ${productName}. Showing this device's copy; it syncs when the connection returns.`;
 
 /**
  * Projects as this device keeps them, for when it is offline or signed out:
- * the person's projects, each with its forms to start audits from and the
- * audits started here. Everything else about a project needs a connection.
+ * the person's projects, each with its templates to start forms from and the
+ * forms started here. Everything else about a project needs a connection.
  */
 export function DeviceProjects({
   notice,
@@ -43,8 +43,8 @@ export function DeviceProjects({
   onNavigate: (pathname: string) => void;
   pathname: string;
 }) {
-  const audit = projectAuditForPath(pathname);
-  if (audit) return <DeviceAuditPage {...audit} onNavigate={onNavigate} />;
+  const form = projectFormForPath(pathname);
+  if (form) return <DeviceFormPage {...form} onNavigate={onNavigate} />;
   const projectId = projectIdForPath(pathname);
   return projectId ? (
     <DeviceProjectPage id={projectId} notice={notice} onNavigate={onNavigate} />
@@ -94,7 +94,10 @@ function DeviceProjectList({
                   <ListRow
                     icon="layers"
                     key={project.id}
-                    meta={countLabel(project.formIds.length, "audit form")}
+                    meta={countLabel(
+                      project.templateIds.length,
+                      "form template",
+                    )}
                     open={{ href: projectPath(project.id), onNavigate }}
                     title={project.name}
                   />
@@ -111,7 +114,7 @@ function DeviceProjectList({
             </EmptyState>
           )}
         </PageSection>
-        <OtherDeviceAudits onNavigate={onNavigate} />
+        <OtherDeviceForms onNavigate={onNavigate} />
       </PageBody>
     </Page>
   );
@@ -128,8 +131,8 @@ function DeviceProjectPage({
 }) {
   const { workspace } = useDevice();
   const project = workspace?.projects.find((entry) => entry.id === id);
-  const forms = (workspace?.forms ?? []).filter((form) =>
-    project?.formIds.includes(form.id),
+  const templates = (workspace?.templates ?? []).filter((template) =>
+    project?.templateIds.includes(template.id),
   );
   return (
     <Page>
@@ -152,8 +155,8 @@ function DeviceProjectPage({
         {notice && <Banner tone="warning">{notice}</Banner>}
         <DeviceSyncStatus />
         {project ? (
-          <ProjectAuditForms
-            forms={forms}
+          <ProjectFormTemplates
+            templates={templates}
             onNavigate={onNavigate}
             projectId={id}
           />
@@ -162,8 +165,8 @@ function DeviceProjectPage({
             <Banner tone="neutral">
               This project is not on this device's list. Connect to open it.
             </Banner>
-            {/* Audits started for it before it left the list still finish. */}
-            <DeviceAudits
+            {/* Forms started for it before it left the list still finish. */}
+            <DeviceForms
               onNavigate={onNavigate}
               projectId={id}
               workspace={workspace}
@@ -175,18 +178,18 @@ function DeviceProjectPage({
   );
 }
 
-/** An audit this device started, open for answers until it is completed. */
-export function DeviceAuditPage({
-  auditId,
+/** A form this device started, open for answers until it is completed. */
+export function DeviceFormPage({
+  formId,
   onNavigate,
   projectId,
 }: {
-  auditId: string;
+  formId: string;
   onNavigate: (pathname: string) => void;
   projectId: string;
 }) {
   const { error, workspace } = useDevice();
-  const audit = workspace?.audits.find((entry) => entry.id === auditId);
+  const form = workspace?.forms.find((entry) => entry.id === formId);
   const project = workspace?.projects.find((entry) => entry.id === projectId);
   // Navigating asks the unsaved-changes guards itself.
   const back = () => onNavigate(projectPath(projectId));
@@ -198,23 +201,23 @@ export function DeviceAuditPage({
             {project?.name ?? "Project"}
           </Button>
         }
-        eyebrow="Audit · On this device"
-        title={audit ? audit.template.name : "Audit unavailable"}
+        eyebrow="Form · On this device"
+        title={form ? form.template.name : "Form unavailable"}
       />
       <PageBody>
         {error && <Banner tone="danger">{error}</Banner>}
         <DeviceSyncStatus />
-        {audit && workspace ? (
-          <OfflineAuditEditor
-            audit={audit}
-            key={audit.id}
+        {form && workspace ? (
+          <OfflineFormEditor
+            form={form}
+            key={form.id}
             onNavigate={onNavigate}
             workspace={workspace}
           />
         ) : (
           workspace && (
             <Banner tone="neutral">
-              This audit is not on this device. It may have been started in
+              This form is not on this device. It may have been started in
               another account or browser.
             </Banner>
           )

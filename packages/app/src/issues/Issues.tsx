@@ -19,8 +19,8 @@ import { api } from "../shared/apiClient";
 import { errorMessage } from "../shared/errors";
 import { useLoad } from "../shared/useLoad";
 import {
-  auditRunPath,
   financeTransactionPath,
+  formRunPath,
   issuePath,
   recordIdForPath,
 } from "../workspace/workspacePaths";
@@ -110,7 +110,7 @@ function IssuesIndex({
               }
             >
               <option value="all">All sources</option>
-              <option value="audit_run">Audits</option>
+              <option value="form_run">Forms</option>
               {canAccessFinance && (
                 <option value="finance_transaction">Transactions</option>
               )}
@@ -381,13 +381,13 @@ function IssueSource({
   const path =
     source.type === "finance_transaction"
       ? financeTransactionPath(source.id)
-      : auditRunPath(source.id);
+      : formRunPath(source.id);
   return (
     <Banner
-      icon={source.type === "finance_transaction" ? "finance" : "audits"}
+      icon={source.type === "finance_transaction" ? "finance" : "forms"}
       actions={
         <Button size="sm" onClick={() => onNavigate(path)}>
-          Open {source.type === "finance_transaction" ? "transaction" : "audit"}
+          Open {source.type === "finance_transaction" ? "transaction" : "form"}
         </Button>
       }
     >

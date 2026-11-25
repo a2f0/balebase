@@ -11,7 +11,7 @@ import {
 const project: ProjectSummary = {
   createdAt: "2026-10-01T00:00:00.000Z",
   description: "",
-  formCount: 0,
+  templateCount: 0,
   id: "site",
   isMember: false,
   memberCount: 0,

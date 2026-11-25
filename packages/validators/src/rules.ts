@@ -88,7 +88,7 @@ export const groupLimits = { members: 100, name: 100 } as const;
 
 export const libraryFolderNameMaxLength = 80;
 
-export const auditLimits = {
+export const formLimits = {
   answer: 2000,
   description: 2000,
   itemId: 100,

@@ -8,7 +8,7 @@ it("refuses photos the API would refuse before saving an issue on the device", a
     priority: "medium" as const,
     title: "Cracked panel cover",
   };
-  const target = { auditId: "audit", itemId: "item" };
+  const target = { formId: "form", itemId: "item" };
   const photo = (bytes: number, type: string) =>
     new File([new Uint8Array(bytes)], "photo.png", { type });
 

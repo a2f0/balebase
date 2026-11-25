@@ -27,7 +27,7 @@ async function renderFeed(sourceId: string, refreshKey = 0) {
   ({ container } = await render(
     <ActivityFeed
       refreshKey={refreshKey}
-      source={{ id: sourceId, type: "audit_run" }}
+      source={{ id: sourceId, type: "form_run" }}
     />,
   ));
   await settle();
@@ -35,7 +35,7 @@ async function renderFeed(sourceId: string, refreshKey = 0) {
 
 function event(id: number, after: string): ActivityEvent {
   return {
-    action: "audit.answer_changed",
+    action: "form.answer_changed",
     actor: {
       email: "sam@example.com",
       id: "user-1",
@@ -52,8 +52,8 @@ function event(id: number, after: string): ActivityEvent {
     historical: false,
     id,
     occurredAt: "2026-10-02T12:00:00.000Z",
-    root: { id: "audit-1", label: "Fire safety", type: "audit_run" },
-    subject: { id: "exits", type: "audit_answer" },
+    root: { id: "form-1", label: "Fire safety", type: "form_run" },
+    subject: { id: "exits", type: "form_answer" },
   };
 }
 
@@ -384,7 +384,7 @@ describe("activity feed, mounted", () => {
     const select = container.querySelector("select");
     await act(async () => {
       if (select) {
-        select.value = "audit_run";
+        select.value = "form_run";
         select.dispatchEvent(
           new dom.Event("change", { bubbles: true }) as unknown as Event,
         );
@@ -662,7 +662,7 @@ describe("activity feed, mounted", () => {
       reason: string,
     ): ActivityEvent => ({
       ...event(id, ""),
-      action: "audit.answer_conflict_resolved",
+      action: "form.answer_conflict_resolved",
       details: {
         discarded,
         kept,
@@ -707,7 +707,7 @@ describe("activity feed, mounted", () => {
     expect(later).toContain("Discarded: Pass · Sam");
     expect(later).toContain("The later answer was kept.");
     expect(completed).toContain("Kept: Unanswered");
-    expect(completed).toContain("The audit had already been completed.");
+    expect(completed).toContain("The form had already been completed.");
   });
 
   it("shows who held deleted equipment when its deletion recorded them", async () => {
@@ -792,7 +792,7 @@ describe("activity feed, mounted", () => {
     expect(disclosure?.textContent).toContain(String(change.details.before));
     expect(disclosure?.textContent).toContain("First line\nSecond line");
     await click("Fire safety");
-    expect(navigations).toEqual(["/audits/runs/audit-1"]);
+    expect(navigations).toEqual(["/forms/runs/form-1"]);
   });
 
   it("loads earlier events, refreshes manually, and reloads after a saved mutation", async () => {
@@ -806,7 +806,7 @@ describe("activity feed, mounted", () => {
           : { events: [event(51, "fail")], nextCursor: "51" },
       );
     });
-    await renderFeed("audit/id");
+    await renderFeed("form/id");
     expect(container.textContent).toContain("Sam changed an answer");
     expect(container.textContent).toContain("sam@example.com");
     expect(container.textContent).toContain("Exits clear");
@@ -815,12 +815,12 @@ describe("activity feed, mounted", () => {
     expect(container.querySelectorAll(".activityRow")).toHaveLength(2);
     expect(container.textContent).toContain("N/A");
     expect(requests[1]).toEndWith(
-      "/api/audits/runs/audit%2Fid/activity?cursor=51",
+      "/api/forms/runs/form%2Fid/activity?cursor=51",
     );
     await click("Refresh activity");
     expect(requests).toHaveLength(3);
     expect(container.querySelectorAll(".activityRow")).toHaveLength(1);
-    await renderFeed("audit/id", 1);
+    await renderFeed("form/id", 1);
     expect(requests).toHaveLength(4);
   });
 
@@ -838,13 +838,13 @@ describe("activity feed, mounted", () => {
         refreshed = resolve;
       });
     });
-    await renderFeed("audit-1");
+    await renderFeed("form-1");
     await act(async () => IntersectionObserverFixture.intersect());
     await settle();
     expect(cursors).toEqual([null, "51"]);
     expect(container.querySelectorAll(".activityRow")).toHaveLength(2);
 
-    await renderFeed("audit-1", 1);
+    await renderFeed("form-1", 1);
     expect(cursors).toEqual([null, "51", null]);
     expect(container.querySelectorAll(".activityRow")).toHaveLength(2);
     expect(container.textContent).not.toContain("Loading activity");
@@ -867,7 +867,7 @@ describe("activity feed, mounted", () => {
     expect(container.querySelectorAll(".activityRow")).toHaveLength(2);
   });
 
-  it("ignores a previous audit's response after navigating to another audit", async () => {
+  it("ignores a previous form's response after navigating to another form", async () => {
     let resolvePrevious: ((response: Response) => void) | undefined;
     respond(async (url) => {
       if (url.href.includes("/previous/")) {
@@ -900,7 +900,7 @@ describe("activity feed, mounted", () => {
         ? Response.json({ error: "Activity unavailable" }, { status: 500 })
         : Response.json({ events: [], nextCursor: null });
     });
-    await renderFeed("audit-1");
+    await renderFeed("form-1");
     expect(container.textContent).toContain("Activity unavailable");
     await click("Refresh activity");
     expect(container.textContent).toContain("No activity yet");
@@ -1203,47 +1203,47 @@ it("summarizes billing cancellations, portal sessions, and login repairs", async
   ]);
 });
 
-it("names form publication changes and a copied form's source", async () => {
-  const form = (
+it("names template publication changes and a copied template's source", async () => {
+  const template = (
     id: number,
     action: string,
     details: Record<string, unknown>,
   ): ActivityEvent => ({
     ...event(id, ""),
     action,
-    root: { type: "audit_template", id: "form-1", label: "Site walk" },
-    subject: { type: "audit_template", id: "form-1" },
+    root: { type: "form_template", id: "template-1", label: "Site walk" },
+    subject: { type: "form_template", id: "template-1" },
     details,
   });
   const changes = [
-    form(5, "audit.template_created", {
+    template(5, "form.template_created", {
       copiedFrom: { name: "Ladder check", templateId: "ladder", version: null },
       version: 1,
     }),
-    form(4, "audit.template_unpublished", { version: 4 }),
-    form(3, "audit.template_version_saved", { version: 3 }),
-    form(2, "audit.template_published", { version: 2 }),
-    form(1, "audit.template_created", {
+    template(4, "form.template_unpublished", { version: 4 }),
+    template(3, "form.template_version_saved", { version: 3 }),
+    template(2, "form.template_published", { version: 2 }),
+    template(1, "form.template_created", {
       copiedFrom: { name: "NFPA 70E", templateId: "nfpa", version: 5 },
       version: 1,
     }),
   ];
   respond(async () => Response.json({ events: changes, nextCursor: null }));
   ({ container } = await mount(
-    <ActivityFeed source={{ type: "audit_template", id: "form-1" }} />,
+    <ActivityFeed source={{ type: "form_template", id: "template-1" }} />,
   ));
   const rows = [...container.querySelectorAll(".activityRow")].map(
     (row) => row.textContent ?? "",
   );
   expect(rows).toHaveLength(5);
-  // A copy whose client named no version records only the form.
+  // A copy whose client named no version records only the template.
   expect(rows[0]).toContain("Version 1 · Copied from Ladder check");
   expect(rows[0]).not.toContain("Ladder check, version");
-  expect(rows[1]).toContain("Sam unpublished the form");
+  expect(rows[1]).toContain("Sam unpublished the form template");
   expect(rows[1]).toContain("Version 4");
-  expect(rows[2]).toContain("Sam saved a form version");
-  expect(rows[3]).toContain("Sam published the form");
-  expect(rows[4]).toContain("Sam created the form");
+  expect(rows[2]).toContain("Sam saved a form template version");
+  expect(rows[3]).toContain("Sam published the form template");
+  expect(rows[4]).toContain("Sam created the form template");
   expect(rows[4]).toContain("Version 1 · Copied from NFPA 70E, version 5");
   expect(rows[2]).not.toContain("Copied from");
 });

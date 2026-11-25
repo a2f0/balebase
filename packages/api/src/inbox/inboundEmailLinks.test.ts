@@ -167,7 +167,7 @@ describe("inbound email links", () => {
     expect(
       await financeMember.json("POST", "/api/inbox/email-1/links", {
         targetId: "folder-1",
-        targetType: "audit",
+        targetType: "form",
       }),
     ).toMatchObject({
       body: { error: "A link target type and id are required." },

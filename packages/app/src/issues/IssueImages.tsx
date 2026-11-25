@@ -31,7 +31,7 @@ export function IssueImages({ issueId }: { issueId: string }) {
           <ApiImage
             key={image.id}
             alt={image.filename}
-            src={api.audits.issueImageUrl(issueId, image.id)}
+            src={api.forms.issueImageUrl(issueId, image.id)}
             width={180}
             height={180}
             style={{ objectFit: "contain" }}

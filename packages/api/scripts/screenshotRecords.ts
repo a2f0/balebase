@@ -43,17 +43,17 @@ const officeManager =
   organization.owner;
 
 export function recordSteps(): Step[] {
-  const audits = auditSteps();
+  const forms = formSteps();
   return [
     ...groupSteps(),
     ...businessSteps(),
     ...equipmentSteps(),
     ...projectSteps(),
-    // Issues raised on an audit's first or last day come after its start and
+    // Issues raised on a form's first or last day come after its start and
     // before its completion.
-    ...audits.starts,
+    ...forms.starts,
     ...issueSteps(),
-    ...audits.completions,
+    ...forms.completions,
     ...financeSteps(),
     ...contractSteps(),
     ...librarySteps(),
@@ -147,13 +147,13 @@ function projectSteps(): Step[] {
           `/api/projects/${created.id}/members/${context.userId(member)}`,
         );
       for (const form of project.forms)
-        await send("PUT", `/api/projects/${created.id}/forms/${form}`);
+        await send("PUT", `/api/projects/${created.id}/templates/${form}`);
     },
   }));
 }
 
-interface AuditRun {
-  audit: {
+interface FormRun {
+  form: {
     definition: {
       sections: {
         items: { id: string; responseType: "check" | "text" }[];
@@ -164,8 +164,8 @@ interface AuditRun {
 }
 
 /**
- * The checklist item each audit issue is about, by canon issue ID. Canon
- * describes the finding; which question of Balebase's global forms it fails
+ * The question each form issue is about, by canon issue ID. Canon
+ * describes the finding; which question of Balebase's global templates it fails
  * is Balebase's to say.
  */
 const issueItems: Record<string, string> = {
@@ -178,30 +178,29 @@ const issueItems: Record<string, string> = {
 
 function issueItem(issue: ContinuityIssue) {
   const item = issueItems[issue.id];
-  if (!item)
-    throw new Error(`Map audit issue ${issue.id} to a checklist item.`);
+  if (!item) throw new Error(`Map form issue ${issue.id} to a question.`);
   return item;
 }
 
 /**
- * Starts each audit, answers it, and completes the finished ones. Answers
- * fail the items its issues are about and pass the rest; an audit still in
+ * Starts each form, answers it, and completes the finished ones. Answers
+ * fail the items its issues are about and pass the rest; a form still in
  * progress has only its first section answered.
  */
-function auditSteps() {
+function formSteps() {
   const starts: Step[] = [];
   const completions: Step[] = [];
-  for (const audit of continuity.audits) {
+  for (const record of continuity.audits) {
     const answer = async (context: StepContext, complete: boolean) => {
-      const send = await context.as(audit.startedBy);
-      const id = idOf(context, `audit:${audit.id}`);
-      const run = await send<AuditRun>("GET", `/api/audits/runs/${id}`);
+      const send = await context.as(record.startedBy);
+      const id = idOf(context, `form:${record.id}`);
+      const run = await send<FormRun>("GET", `/api/forms/runs/${id}`);
       const failed = new Set(
         continuity.issues
-          .filter((issue) => issue.audit === audit.id)
+          .filter((issue) => issue.audit === record.id)
           .map(issueItem),
       );
-      const sections = run.audit.definition.sections;
+      const sections = run.form.definition.sections;
       const answered = (complete ? sections : sections.slice(0, 1))
         .flatMap((section) => section.items)
         .filter((item) => complete || !failed.has(item.id));
@@ -212,29 +211,29 @@ function auditSteps() {
         ]),
         ...[...failed].map((id) => [id, "fail"]),
       ]);
-      await send("PATCH", `/api/audits/runs/${id}`, {
-        expectedRevision: run.audit.revision,
+      await send("PATCH", `/api/forms/runs/${id}`, {
+        expectedRevision: run.form.revision,
         responses,
         ...(complete ? { status: "completed" } : {}),
       });
     };
     const start: Step = {
-      day: audit.startedOn,
+      day: record.startedOn,
       run: async (context) => {
-        const send = await context.as(audit.startedBy);
-        const { auditId } = await send<{ auditId: string }>(
+        const send = await context.as(record.startedBy);
+        const { formId } = await send<{ formId: string }>(
           "POST",
-          `/api/audits/templates/${audit.form}/runs`,
-          { projectId: idOf(context, `project:${audit.project}`) },
+          `/api/forms/templates/${record.form}/runs`,
+          { projectId: idOf(context, `project:${record.project}`) },
         );
-        context.ids.set(`audit:${audit.id}`, auditId);
-        if (audit.status === "in_progress") await answer(context, false);
+        context.ids.set(`form:${record.id}`, formId);
+        if (record.status === "in_progress") await answer(context, false);
       },
     };
     starts.push(start);
-    if (audit.status === "completed")
+    if (record.status === "completed")
       completions.push({
-        day: audit.completedOn ?? asOf,
+        day: record.completedOn ?? asOf,
         run: (context) => answer(context, true),
       });
   }
@@ -242,7 +241,7 @@ function auditSteps() {
 }
 
 /**
- * Raises each issue on its day: audit issues on their checklist item with
+ * Raises each issue on its day: form issues on their question with
  * their site photo, workspace issues on the issue list. Resolved ones are
  * resolved by their assignee on the day canon gives.
  */
@@ -252,7 +251,7 @@ function issueSteps(): Step[] {
       day: issue.raisedOn,
       run: (context) =>
         issue.audit
-          ? raiseAuditIssue(context, issue)
+          ? raiseFormIssue(context, issue)
           : raiseIssue(context, issue),
     };
     if (issue.status !== "resolved") return [raise];
@@ -285,12 +284,12 @@ async function raiseIssue(context: StepContext, issue: ContinuityIssue) {
   context.ids.set(`issue:${issue.id}`, issueId);
 }
 
-async function raiseAuditIssue(context: StepContext, issue: ContinuityIssue) {
+async function raiseFormIssue(context: StepContext, issue: ContinuityIssue) {
   const send = await context.as(issue.createdBy);
-  const auditId = idOf(context, `audit:${issue.audit}`);
+  const formId = idOf(context, `form:${issue.audit}`);
   const { issueId } = await send<{ issueId: string }>(
     "POST",
-    `/api/audits/runs/${auditId}/issues`,
+    `/api/forms/runs/${formId}/issues`,
     { ...issueFields(context, issue), itemId: issueItem(issue) },
   );
   context.ids.set(`issue:${issue.id}`, issueId);
@@ -298,7 +297,7 @@ async function raiseAuditIssue(context: StepContext, issue: ContinuityIssue) {
   const filename = path.basename(issue.photo);
   await send(
     "POST",
-    `/api/audits/issues/${issueId}/images?filename=${encodeURIComponent(filename)}`,
+    `/api/forms/issues/${issueId}/images?filename=${encodeURIComponent(filename)}`,
     new Blob([genesisFile(issue.photo)], { type: "image/jpeg" }),
   );
 }
@@ -307,7 +306,7 @@ async function resolveIssue(context: StepContext, issue: ContinuityIssue) {
   const send = await context.as(issue.assignee ?? issue.createdBy);
   const id = idOf(context, `issue:${issue.id}`);
   if (issue.audit) {
-    await send("PATCH", `/api/audits/issues/${id}`, { status: "resolved" });
+    await send("PATCH", `/api/forms/issues/${id}`, { status: "resolved" });
     return;
   }
   const { issue: current } = await send<{ issue: { revision: number } }>(

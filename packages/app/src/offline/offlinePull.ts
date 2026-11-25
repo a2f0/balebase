@@ -1,7 +1,7 @@
 import { ApiError } from "@balebase/api-client";
-import type { OfflineAuditState } from "@balebase/validators/offline";
+import type { OfflineFormState } from "@balebase/validators/offline";
 import { api } from "../shared/apiClient";
-import { auditWrites } from "./offlineAuditState";
+import { formWrites } from "./offlineFormState";
 import { prepareOfflineDevice } from "./offlinePreparation";
 import {
   changeOfflineWorkspace,
@@ -10,10 +10,10 @@ import {
   offlineScopeKey,
   readOfflineWorkspace,
 } from "./offlineStore";
-import { applyOfflineAuditEvent } from "./offlineWork";
+import { applyOfflineFormEvent } from "./offlineWork";
 
 /**
- * Brings this device's copy of the person's projects, their published forms,
+ * Brings this device's copy of the person's projects, their published templates,
  * and the organization's people up to date, so they are here before the
  * device leaves coverage. Resolves whether it stored anything.
  *
@@ -21,8 +21,8 @@ import { applyOfflineAuditEvent } from "./offlineWork";
  * when nothing it keeps has changed since, or the whole set with a new
  * cursor. The set and its cursor are stored in one transaction, and only
  * over the cursor this read started from: a newer sync another tab stored
- * meanwhile wins, and this one's answer is dropped. Forms that drop out of
- * the set stay inside the audits started from them, so that work still
+ * meanwhile wins, and this one's answer is dropped. Templates that drop out of
+ * the set stay inside the forms started from them, so that work still
  * syncs.
  *
  * `epoch` is the access epoch when the identity was confirmed: signing out
@@ -46,7 +46,7 @@ export async function pullOfflineWorkspace(
         throw new Error("The active account changed. Reload before syncing.");
       if (current.cursor !== from) return current;
       current.projects = data.projects;
-      current.forms = data.forms;
+      current.templates = data.templates;
       current.members = data.members;
       current.cursor = data.cursor;
       stored = true;
@@ -57,26 +57,26 @@ export async function pullOfflineWorkspace(
 }
 
 /**
- * Brings this device's shared audits, in progress or completed, up to date
+ * Brings this device's shared forms, in progress or completed, up to date
  * with the server's copies, so answers given elsewhere, a completion made
  * elsewhere, and a reopening made online show here. Each copy is merged in
  * its own transaction and only when newer than the one held
- * (`offlineAuditState.ts`), so a write's confirmation that landed meanwhile
- * is never undone. An audit gone from the server is left as it is; its next
+ * (`offlineFormState.ts`), so a write's confirmation that landed meanwhile
+ * is never undone. A form gone from the server is left as it is; its next
  * write says why.
  */
-export async function pullOfflineAudits(
+export async function pullOfflineForms(
   identity: OfflineIdentity,
   epoch: string,
 ) {
   const key = offlineScopeKey(identity.scope);
   const workspace = await readOfflineWorkspace(key);
   if (!workspace) return;
-  for (const audit of workspace.audits) {
-    if (auditWrites(workspace.jobs, audit.id)[0]?.status !== "synced") continue;
-    let state: OfflineAuditState;
+  for (const form of workspace.forms) {
+    if (formWrites(workspace.jobs, form.id)[0]?.status !== "synced") continue;
+    let state: OfflineFormState;
     try {
-      state = await api.offline.audit(identity.scope, audit.id);
+      state = await api.offline.form(identity.scope, form.id);
     } catch (cause) {
       if (cause instanceof ApiError && cause.status === 404) continue;
       throw cause;
@@ -85,8 +85,8 @@ export async function pullOfflineAudits(
       if (!current) throw new Error("Offline storage is unavailable.");
       if (epoch !== offlineAccessEpoch())
         throw new Error("The active account changed. Reload before syncing.");
-      return current.audits.some((entry) => entry.id === audit.id)
-        ? applyOfflineAuditEvent(current, audit.id, { state, type: "pulled" })
+      return current.forms.some((entry) => entry.id === form.id)
+        ? applyOfflineFormEvent(current, form.id, { state, type: "pulled" })
         : current;
     });
   }

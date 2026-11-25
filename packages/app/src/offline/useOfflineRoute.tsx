@@ -3,12 +3,12 @@ import { DeviceProjects } from "../projects/DeviceProjects";
 import { isOnline } from "../shared/network";
 import {
   isWithin,
-  projectAuditForPath,
+  projectFormForPath,
   projectPath,
   signingTokenForPath,
 } from "../workspace/workspacePaths";
 import type { DeviceState } from "./offlineContext";
-import { pullOfflineAudits, pullOfflineWorkspace } from "./offlinePull";
+import { pullOfflineForms, pullOfflineWorkspace } from "./offlinePull";
 import {
   activeOfflineKey,
   lockOfflineWorkspace,
@@ -32,7 +32,7 @@ interface Workspace {
 /**
  * This device's workspace for the confirmed account and organization, kept
  * in sync while signed in, and the page that shows it when the path needs
- * one: an audit started on this device, or the device's projects while it is
+ * one: a form started on this device, or the device's projects while it is
  * offline or the session cannot be confirmed. The page opens in the
  * workspace shell while signed in, and stands alone otherwise.
  */
@@ -104,7 +104,7 @@ export function useOfflineRoute(
     [offline.error, offline.online, local],
   );
   const shown =
-    !excluded && local && (fallback || projectAuditForPath(pathname));
+    !excluded && local && (fallback || projectFormForPath(pathname));
   return {
     device,
     page: shown
@@ -138,7 +138,7 @@ function matchingWorkspace(
 }
 
 /**
- * Syncs the person's projects and forms, and their shared audits, to this
+ * Syncs the person's projects and templates, and their shared forms, to this
  * device once sign-in confirms their account and organization, then
  * whenever the device reconnects or the app regains focus, and every minute
  * while online. Each confirmed identity takes the access epoch once, when it
@@ -161,7 +161,7 @@ function useDeviceSync(identity: OfflineIdentity | undefined, online: boolean) {
       if (current.running || !isOnline()) return;
       current.running = true;
       pullOfflineWorkspace(identity, current.epoch)
-        .then(() => pullOfflineAudits(identity, current.epoch))
+        .then(() => pullOfflineForms(identity, current.epoch))
         .catch((cause: unknown) =>
           console.warn("Could not sync projects to this device.", cause),
         )

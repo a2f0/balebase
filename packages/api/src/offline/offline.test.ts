@@ -43,18 +43,18 @@ afterEach(() => {
 
 it("starts the exact downloaded version once, then merges and completes it, recording each answer at its own time", async () => {
   const f = fixture();
-  const start = auditStart({ check: { value: "fail", at: at(1) } });
+  const start = formStart({ check: { value: "fail", at: at(1) } });
   const results = await Promise.all([f.apply(start), f.apply(start)]);
   expect(results.map((result) => result.status).sort()).toEqual([200, 201]);
   expect(results[0]?.body).toMatchObject({
     resourceId: start.id,
-    audit: {
+    form: {
       answers: { check: { at: at(1), value: "fail", version: start.id } },
       revision: 1,
       status: "in_progress",
     },
   });
-  expect(f.audit(start.id)).toEqual({
+  expect(f.form(start.id)).toEqual({
     answer_meta: JSON.stringify({
       check: { at: at(1), by: "user-1", v: start.id },
     }),
@@ -62,7 +62,7 @@ it("starts the exact downloaded version once, then merges and completes it, reco
     revision: 1,
     status: "in_progress",
   });
-  const save = auditSave(
+  const save = formSave(
     start.id,
     { check: { value: "pass", at: at(5), base: start.id } },
     { complete: true },
@@ -71,12 +71,12 @@ it("starts the exact downloaded version once, then merges and completes it, reco
     status: 201,
     body: {
       resourceId: start.id,
-      audit: {
+      form: {
         answers: { check: { at: at(5), value: "pass", version: save.id } },
       },
     },
   });
-  expect(f.audit(start.id)).toMatchObject({ status: "completed", revision: 2 });
+  expect(f.form(start.id)).toMatchObject({ status: "completed", revision: 2 });
   const history = f.db
     .query(
       "SELECT action, occurred_at FROM activity_events WHERE root_id = ? ORDER BY id",
@@ -84,14 +84,14 @@ it("starts the exact downloaded version once, then merges and completes it, reco
     .all(start.id) as { action: string; occurred_at: string }[];
   expect(
     history.map(({ action, occurred_at }) =>
-      action === "audit.answer_changed" ? [action, occurred_at] : action,
+      action === "form.answer_changed" ? [action, occurred_at] : action,
     ),
   ).toEqual([
-    "audit.started",
-    ["audit.answer_changed", at(1)],
-    ["audit.answer_changed", at(5)],
-    "audit.completed",
-    "audit.offline_synced",
+    "form.started",
+    ["form.answer_changed", at(1)],
+    ["form.answer_changed", at(5)],
+    "form.completed",
+    "form.offline_synced",
   ]);
   expect((await f.apply(save)).status).toBe(200);
   expect(
@@ -102,14 +102,14 @@ it("starts the exact downloaded version once, then merges and completes it, reco
       })
     ).status,
   ).toBe(409);
-  f.db.query("DELETE FROM audits WHERE id = ?").run(start.id);
+  f.db.query("DELETE FROM forms WHERE id = ?").run(start.id);
   expect((await f.apply(start)).status).toBe(200);
-  expect(f.db.query("SELECT id FROM audits").all()).toEqual([]);
+  expect(f.db.query("SELECT id FROM forms").all()).toEqual([]);
 });
 
 it("merges answers last writer wins and records each collision with both answers", async () => {
   const f = fixture();
-  const start = auditStart({
+  const start = formStart({
     check: { value: "fail", at: at(1) },
     notes: { value: "Loose rail", at: at(1) },
   });
@@ -118,14 +118,14 @@ it("merges answers last writer wins and records each collision with both answers
   f.edit(start.id, "check", "na", at(3), "user-2");
   // The device's older answer to it loses; its note, which no one else
   // changed, applies without a conflict. Two tabs sending it apply it once.
-  const first = auditSave(start.id, {
+  const first = formSave(start.id, {
     check: { value: "pass", at: at(2), base: start.id },
     notes: { value: "Rail fixed", at: at(4), base: start.id },
   });
   const results = await Promise.all([f.apply(first), f.apply(first)]);
   expect(results.map((result) => result.status).sort()).toEqual([200, 201]);
   expect(results[0]?.body).toMatchObject({
-    audit: {
+    form: {
       answers: {
         check: { at: at(3), value: "na" },
         notes: { at: at(4), value: "Rail fixed" },
@@ -133,17 +133,17 @@ it("merges answers last writer wins and records each collision with both answers
     },
   });
   // A later answer the device gave without seeing the online one wins.
-  const later = auditSave(start.id, {
+  const later = formSave(start.id, {
     check: { value: "fail", at: at(6), base: start.id },
   });
   expect((await f.apply(later)).status).toBe(201);
   // One given over the answer it saw, its own last save, is an ordinary
   // change.
-  const ordinary = auditSave(start.id, {
+  const ordinary = formSave(start.id, {
     check: { value: "pass", at: at(7), base: later.id },
   });
   expect((await f.apply(ordinary)).status).toBe(201);
-  expect(f.audit(start.id)).toMatchObject({
+  expect(f.form(start.id)).toMatchObject({
     responses: '{"check":"pass","notes":"Rail fixed"}',
   });
   expect(f.conflicts(start.id)).toEqual([
@@ -172,17 +172,17 @@ it("merges answers last writer wins and records each collision with both answers
 
 it("keeps an answer cleared online over an older answer from a device", async () => {
   const f = fixture();
-  const start = auditStart({ notes: { value: "Loose rail", at: at(1) } });
+  const start = formStart({ notes: { value: "Loose rail", at: at(1) } });
   expect((await f.apply(start)).status).toBe(201);
   f.clear(start.id, "notes", at(3), "user-2");
-  const save = auditSave(start.id, {
+  const save = formSave(start.id, {
     notes: { value: "Rail fixed", at: at(2), base: start.id },
   });
   expect(await f.apply(save)).toMatchObject({
     status: 201,
-    body: { audit: { answers: { notes: { at: at(3), value: null } } } },
+    body: { form: { answers: { notes: { at: at(3), value: null } } } },
   });
-  expect(f.audit(start.id)).toMatchObject({ responses: "{}" });
+  expect(f.form(start.id)).toMatchObject({ responses: "{}" });
   expect(f.conflicts(start.id)).toEqual([
     {
       subject_id: "notes",
@@ -201,16 +201,16 @@ it("keeps an answer cleared online over an older answer from a device", async ()
   ]);
 });
 
-it("keeps a completed audit's answers and records the device's later ones as discarded", async () => {
+it("keeps a completed form's answers and records the device's later ones as discarded", async () => {
   const f = fixture();
-  const start = auditStart({ check: { value: "pass", at: at(1) } });
+  const start = formStart({ check: { value: "pass", at: at(1) } });
   expect((await f.apply(start)).status).toBe(201);
   f.db
     .query(
-      "UPDATE audits SET status = 'completed', revision = revision + 1 WHERE id = ?",
+      "UPDATE forms SET status = 'completed', revision = revision + 1 WHERE id = ?",
     )
     .run(start.id);
-  const save = auditSave(
+  const save = formSave(
     start.id,
     {
       check: { value: "fail", at: at(5), base: start.id },
@@ -220,9 +220,9 @@ it("keeps a completed audit's answers and records the device's later ones as dis
   );
   expect(await f.apply(save)).toMatchObject({
     status: 201,
-    body: { audit: { status: "completed", revision: 2 } },
+    body: { form: { status: "completed", revision: 2 } },
   });
-  expect(f.audit(start.id)).toMatchObject({
+  expect(f.form(start.id)).toMatchObject({
     responses: '{"check":"pass"}',
     revision: 2,
   });
@@ -255,7 +255,7 @@ it("records collisions with more distinct people than D1 binds parameters", asyn
     { times: Number.POSITIVE_INFINITY },
   );
   const items = Array.from({ length: 101 }, (_, index) => `item-${index}`);
-  f.addForm(
+  f.addTemplate(
     "wide",
     // A section holds at most 100 items.
     [items.slice(0, 50), items.slice(50)].map((section, index) => ({
@@ -270,7 +270,7 @@ it("records collisions with more distinct people than D1 binds parameters", asyn
     })),
   );
   const start = {
-    ...auditStart(
+    ...formStart(
       Object.fromEntries(
         items.map((id) => [id, { value: "Device", at: at(1) }]),
       ),
@@ -283,7 +283,7 @@ it("records collisions with more distinct people than D1 binds parameters", asyn
     seedAccount(f.db, { createdAt: "2026-10-01", id: `author-${index}` });
     f.edit(start.id, id, "Online", at(3), `author-${index}`);
   }
-  const save = auditSave(
+  const save = formSave(
     start.id,
     Object.fromEntries(
       items.map((id) => [id, { value: "Later", at: at(2), base: start.id }]),
@@ -294,9 +294,9 @@ it("records collisions with more distinct people than D1 binds parameters", asyn
   expect(widest).toBeLessThanOrEqual(100);
 });
 
-it("merges and completes a form whose item IDs name inherited members", async () => {
+it("merges and completes a template whose item IDs name inherited members", async () => {
   const f = fixture();
-  f.addForm("inherited", [
+  f.addTemplate("inherited", [
     {
       id: "section",
       title: "Site",
@@ -317,39 +317,39 @@ it("merges and completes a form whose item IDs name inherited members", async ()
     },
   ]);
   const start = {
-    ...auditStart({ toString: { value: "Rail", at: at(1) } }),
+    ...formStart({ toString: { value: "Rail", at: at(1) } }),
     templateId: "inherited",
   };
   expect((await f.apply(start)).status).toBe(201);
   // The required item is still unanswered, so the completion does not apply.
-  const save = auditSave(
+  const save = formSave(
     start.id,
     { toString: { value: "Rail fixed", at: at(2), base: start.id } },
     { complete: true },
   );
   expect((await f.apply(save)).status).toBe(201);
-  expect(f.audit(start.id)).toMatchObject({
+  expect(f.form(start.id)).toMatchObject({
     responses: '{"toString":"Rail fixed"}',
     status: "in_progress",
   });
-  const done = auditSave(
+  const done = formSave(
     start.id,
     { constructor: { value: "pass", at: at(3), base: null } },
     { complete: true },
   );
   expect((await f.apply(done)).status).toBe(201);
-  expect(f.audit(start.id)).toMatchObject({ status: "completed" });
+  expect(f.form(start.id)).toMatchObject({ status: "completed" });
   expect(f.conflicts(start.id)).toEqual([]);
 });
 
-it("refuses a save to a discarded audit and keeps no receipt", async () => {
+it("refuses a save to a discarded form and keeps no receipt", async () => {
   const f = fixture();
-  const start = auditStart({ check: { value: "pass", at: at(1) } });
+  const start = formStart({ check: { value: "pass", at: at(1) } });
   expect((await f.apply(start)).status).toBe(201);
   f.db
-    .query("UPDATE audits SET deleted_at = '2026-11-10' WHERE id = ?")
+    .query("UPDATE forms SET deleted_at = '2026-11-10' WHERE id = ?")
     .run(start.id);
-  const save = auditSave(start.id, {
+  const save = formSave(start.id, {
     check: { value: "fail", at: at(5), base: start.id },
   });
   expect(await f.apply(save)).toMatchObject({
@@ -363,21 +363,21 @@ it("refuses a save to a discarded audit and keeps no receipt", async () => {
 
 it("merges again over a write that lands between its read and its save", async () => {
   const f = fixture();
-  const start = auditStart({ check: { value: "fail", at: at(1) } });
+  const start = formStart({ check: { value: "fail", at: at(1) } });
   expect((await f.apply(start)).status).toBe(201);
   f.hooks.before(
     /answer_meta = \?,\s+status = \?/,
     () => f.edit(start.id, "check", "na", at(9), "user-2"),
     { method: "batch" },
   );
-  const save = auditSave(start.id, {
+  const save = formSave(start.id, {
     check: { value: "pass", at: at(5), base: start.id },
   });
   // The first merge applies nothing; the second finds the newer answer,
   // keeps it, and records the collision once.
   expect(await f.apply(save)).toMatchObject({
     status: 201,
-    body: { audit: { answers: { check: { at: at(9), value: "na" } } } },
+    body: { form: { answers: { check: { at: at(9), value: "na" } } } },
   });
   expect(
     f
@@ -386,9 +386,9 @@ it("merges again over a write that lands between its read and its save", async (
   ).toEqual([["na", "pass"]]);
 });
 
-it("leaves a merge to the device's next sync while the audit keeps changing", async () => {
+it("leaves a merge to the device's next sync while the form keeps changing", async () => {
   const f = fixture();
-  const start = auditStart({ check: { value: "fail", at: at(1) } });
+  const start = formStart({ check: { value: "fail", at: at(1) } });
   expect((await f.apply(start)).status).toBe(201);
   let minute = 10;
   f.hooks.before(
@@ -399,7 +399,7 @@ it("leaves a merge to the device's next sync while the audit keeps changing", as
     },
     { method: "batch", times: 3 },
   );
-  const save = auditSave(start.id, {
+  const save = formSave(start.id, {
     check: { value: "pass", at: at(30), base: start.id },
   });
   expect(await f.apply(save)).toMatchObject({
@@ -409,14 +409,14 @@ it("leaves a merge to the device's next sync while the audit keeps changing", as
   expect(f.conflicts(start.id)).toEqual([]);
   expect(f.db.query("SELECT id FROM offline_operations").all()).toHaveLength(1);
   expect((await f.apply(save)).status).toBe(201);
-  expect(f.audit(start.id)).toMatchObject({ responses: '{"check":"pass"}' });
+  expect(f.form(start.id)).toMatchObject({ responses: '{"check":"pass"}' });
 });
 
 it("replays a save another tab commits while this one is being checked", async () => {
   const f = fixture();
-  const start = auditStart({ check: { value: "fail", at: at(1) } });
+  const start = formStart({ check: { value: "fail", at: at(1) } });
   expect((await f.apply(start)).status).toBe(201);
-  const save = auditSave(start.id, {
+  const save = formSave(start.id, {
     check: { value: "pass", at: at(5), base: start.id },
   });
   const digest = new Bun.CryptoHasher("sha256")
@@ -441,13 +441,13 @@ it("replays a save another tab commits while this one is being checked", async (
   });
 });
 
-it("serves the device the server's copy of an audit it holds", async () => {
+it("serves the device the server's copy of a form it holds", async () => {
   const f = fixture();
-  const start = auditStart({ check: { value: "fail", at: at(1) } });
+  const start = formStart({ check: { value: "fail", at: at(1) } });
   expect((await f.apply(start)).status).toBe(201);
   f.edit(start.id, "notes", "Checked online", at(3), "user-2");
   const query = new URLSearchParams(scope);
-  expect(await f.request("GET", `/audits/${start.id}?${query}`)).toMatchObject({
+  expect(await f.request("GET", `/forms/${start.id}?${query}`)).toMatchObject({
     status: 200,
     body: {
       answers: {
@@ -461,15 +461,15 @@ it("serves the device the server's copy of an audit it holds", async () => {
     },
   });
   const other = new URLSearchParams({ ...scope, userId: "user-2" });
-  expect((await f.request("GET", `/audits/${start.id}?${other}`)).status).toBe(
+  expect((await f.request("GET", `/forms/${start.id}?${other}`)).status).toBe(
     403,
   );
-  expect((await f.request("GET", `/audits/missing?${query}`)).status).toBe(404);
+  expect((await f.request("GET", `/forms/missing?${query}`)).status).toBe(404);
 });
 
-it("requires the parent audit before its issue and does not duplicate issues on retry", async () => {
+it("requires the parent form before its issue and does not duplicate issues on retry", async () => {
   const f = fixture();
-  const parent = auditStart();
+  const parent = formStart();
   const issue: OfflineOperation = {
     id: crypto.randomUUID(),
     type: "issue",
@@ -477,7 +477,7 @@ it("requires the parent audit before its issue and does not duplicate issues on 
     description: "Staircase",
     priority: "high",
     assignedTo: null,
-    auditId: parent.id,
+    formId: parent.id,
     itemId: "check",
   };
   expect((await f.apply(issue)).status).toBe(409);
@@ -498,38 +498,38 @@ it("requires the parent audit before its issue and does not duplicate issues on 
 it("rejects wrong account and organization, invalid answers, and inaccessible templates without receipts", async () => {
   const f = fixture();
   expect(
-    (await f.apply(auditStart(), { ...scope, userId: "user-2" })).status,
+    (await f.apply(formStart(), { ...scope, userId: "user-2" })).status,
   ).toBe(403);
   expect(
-    (await f.apply(auditStart(), { ...scope, organizationId: "org_user-2" }))
+    (await f.apply(formStart(), { ...scope, organizationId: "org_user-2" }))
       .status,
   ).toBe(403);
   expect(
-    (await f.apply(auditStart({ check: { value: "invalid", at: at(1) } })))
+    (await f.apply(formStart({ check: { value: "invalid", at: at(1) } })))
       .status,
   ).toBe(409);
   expect(
-    (await f.apply({ ...auditStart(), templateId: "missing" })).status,
+    (await f.apply({ ...formStart(), templateId: "missing" })).status,
   ).toBe(409);
-  expect(
-    (await f.apply({ ...auditStart(), templateVersion: 300 })).status,
-  ).toBe(409);
+  expect((await f.apply({ ...formStart(), templateVersion: 300 })).status).toBe(
+    409,
+  );
   expect(f.db.query("SELECT id FROM offline_operations").all()).toEqual([]);
-  expect(f.db.query("SELECT id FROM audits").all()).toEqual([]);
+  expect(f.db.query("SELECT id FROM forms").all()).toEqual([]);
   // Saves need valid answers.
-  const start = auditStart();
+  const start = formStart();
   expect((await f.apply(start)).status).toBe(201);
   const invalid = { check: { value: "invalid", at: at(2), base: null } };
-  expect((await f.apply(auditSave(start.id, invalid))).status).toBe(409);
+  expect((await f.apply(formSave(start.id, invalid))).status).toBe(409);
   expect(f.db.query("SELECT id FROM offline_operations").all()).toHaveLength(1);
 });
 
-it("saves a completion's answers but leaves the audit in progress when a required answer is cleared elsewhere", async () => {
+it("saves a completion's answers but leaves the form in progress when a required answer is cleared elsewhere", async () => {
   const f = fixture();
-  const start = auditStart({ check: { value: "pass", at: at(1) } });
+  const start = formStart({ check: { value: "pass", at: at(1) } });
   expect((await f.apply(start)).status).toBe(201);
   f.clear(start.id, "check", at(3), "user-2");
-  const save = auditSave(
+  const save = formSave(
     start.id,
     {
       check: { value: "pass", at: at(2), base: start.id },
@@ -540,7 +540,7 @@ it("saves a completion's answers but leaves the audit in progress when a require
   expect(await f.apply(save)).toMatchObject({
     status: 201,
     body: {
-      audit: {
+      form: {
         answers: { check: { value: null }, notes: { value: "Done" } },
         status: "in_progress",
       },
@@ -549,7 +549,7 @@ it("saves a completion's answers but leaves the audit in progress when a require
   expect(
     f.db
       .query(
-        "SELECT action FROM activity_events WHERE root_id = ? AND action IN ('audit.completed', 'audit.offline_synced')",
+        "SELECT action FROM activity_events WHERE root_id = ? AND action IN ('form.completed', 'form.offline_synced')",
       )
       .all(start.id),
   ).toEqual([]);
@@ -558,20 +558,20 @@ it("saves a completion's answers but leaves the audit in progress when a require
 interface Synced {
   changed: boolean;
   cursor: string;
-  forms?: { id: string; version: number }[];
+  templates?: { id: string; version: number }[];
   members?: { id: string; name: string }[];
   projects?: {
     description: string;
-    formIds: string[];
+    templateIds: string[];
     id: string;
     name: string;
   }[];
 }
 
-it("syncs the person's projects and their published forms by cursor", async () => {
+it("syncs the person's projects and their published templates by cursor", async () => {
   const f = fixture();
   const first = await f.sync();
-  expect(first).toMatchObject({ changed: true, forms: [], projects: [] });
+  expect(first).toMatchObject({ changed: true, templates: [], projects: [] });
   expect(first.members?.map((person) => person.id)).toEqual(["user-1"]);
   expect(await f.sync(first.cursor)).toEqual({
     changed: false,
@@ -586,14 +586,14 @@ it("syncs the person's projects and their published forms by cursor", async () =
     VALUES ('mine', 'org_user-1', 'user-1', '2026-10-01'),
            ('theirs', 'org_user-1', 'user-2', '2026-10-01'),
            ('elsewhere', 'org_user-2', 'user-1', '2026-10-01');
-    INSERT INTO audit_template_families
+    INSERT INTO form_template_families
       (id, scope, organization_id, current_version, created_by, created_at, updated_at)
     VALUES ('hidden', 'global', NULL, 1, 'user-1', '2026-10-01', '2026-10-01');
-    INSERT INTO audit_template_versions
+    INSERT INTO form_template_versions
       (id, template_id, version, name, description, definition, status, created_by, created_at)
     VALUES ('hidden-1', 'hidden', 1, 'Draft', '', '{}', 'draft', 'user-1', '2026-10-01');
-    INSERT INTO project_audit_forms (project_id, organization_id, template_id, added_at)
-    VALUES ('mine', 'org_user-1', 'form', '2026-10-01'),
+    INSERT INTO project_form_templates (project_id, organization_id, template_id, added_at)
+    VALUES ('mine', 'org_user-1', 'template', '2026-10-01'),
            ('mine', 'org_user-1', 'hidden', '2026-10-01'),
            ('mine', 'org_user-1', 'nfpa70e_global', '2026-10-01'),
            ('theirs', 'org_user-1', 'us_residential_core_global', '2026-10-01');
@@ -601,25 +601,37 @@ it("syncs the person's projects and their published forms by cursor", async () =
   const bound = await f.sync(first.cursor);
   expect(bound.cursor).not.toBe(first.cursor);
   // Not another member's project or organization, and not a draft: the
-  // organization form's current version 2 is still a draft.
+  // organization template's current version 2 is still a draft.
   expect(bound.projects).toEqual([
-    { description: "", formIds: ["nfpa70e_global"], id: "mine", name: "Mine" },
+    {
+      description: "",
+      templateIds: ["nfpa70e_global"],
+      id: "mine",
+      name: "Mine",
+    },
   ]);
-  expect(bound.forms?.map((form) => form.id)).toEqual(["nfpa70e_global"]);
-
-  // Publishing a new version changes the cursor and serves that version.
-  f.publish("form", 3, "published");
-  const published = await f.sync(bound.cursor);
-  expect(published.projects?.[0]?.formIds.sort()).toEqual([
-    "form",
+  expect(bound.templates?.map((template) => template.id)).toEqual([
     "nfpa70e_global",
   ]);
-  expect(published.forms?.find((form) => form.id === "form")?.version).toBe(3);
+
+  // Publishing a new version changes the cursor and serves that version.
+  f.publish("template", 3, "published");
+  const published = await f.sync(bound.cursor);
+  expect(published.projects?.[0]?.templateIds.sort()).toEqual([
+    "nfpa70e_global",
+    "template",
+  ]);
+  expect(
+    published.templates?.find((template) => template.id === "template")
+      ?.version,
+  ).toBe(3);
 
   // Unpublishing removes it; the set is whole, so it is simply absent.
-  f.publish("form", 4, "unpublished");
+  f.publish("template", 4, "unpublished");
   const unpublished = await f.sync(published.cursor);
-  expect(unpublished.forms?.map((form) => form.id)).toEqual(["nfpa70e_global"]);
+  expect(unpublished.templates?.map((template) => template.id)).toEqual([
+    "nfpa70e_global",
+  ]);
 
   // Renaming the project, then removing the person, each change the set.
   f.db.exec("UPDATE projects SET name = 'Renamed' WHERE id = 'mine'");
@@ -627,7 +639,7 @@ it("syncs the person's projects and their published forms by cursor", async () =
   expect(renamed.projects?.map((project) => project.name)).toEqual(["Renamed"]);
   f.db.exec("DELETE FROM project_members WHERE user_id = 'user-1'");
   const removed = await f.sync(renamed.cursor);
-  expect(removed).toMatchObject({ changed: true, forms: [], projects: [] });
+  expect(removed).toMatchObject({ changed: true, templates: [], projects: [] });
 
   // Changes in another organization leave this cursor alone.
   f.db.exec("UPDATE projects SET name = 'Moved' WHERE id = 'elsewhere'");
@@ -638,19 +650,19 @@ it("syncs the person's projects and their published forms by cursor", async () =
   ).toBe(403);
 });
 
-it("changes the cursor when global forms, membership, or names change", async () => {
+it("changes the cursor when global templates, membership, or names change", async () => {
   const f = fixture();
   f.db.exec(`
     INSERT INTO projects (id, organization_id, name, created_at, updated_at)
     VALUES ('mine', 'org_user-1', 'Mine', '2026-10-01', '2026-10-01');
     INSERT INTO project_members (project_id, organization_id, user_id, added_at)
     VALUES ('mine', 'org_user-1', 'user-1', '2026-10-01');
-    INSERT INTO project_audit_forms (project_id, organization_id, template_id, added_at)
+    INSERT INTO project_form_templates (project_id, organization_id, template_id, added_at)
     VALUES ('mine', 'org_user-1', 'nfpa70e_global', '2026-10-01');
   `);
   let cursor = (await f.sync()).cursor;
   const changes = [
-    // A global form's new version.
+    // A global template's new version.
     () => f.publish("nfpa70e_global", 0, "published"),
     // Someone joins, and is renamed.
     () =>
@@ -680,21 +692,21 @@ it("changes the cursor when global forms, membership, or names change", async ()
   expect(left.members?.map((person) => person.name)).toEqual(["Renamed"]);
 });
 
-it("records an audit against its project, even one deleted since, and refuses any other", async () => {
+it("records a form against its project, even one deleted since, and refuses any other", async () => {
   const f = fixture();
   f.db.exec(`
     INSERT INTO projects (id, organization_id, name, created_at, updated_at, deleted_at)
     VALUES ('deleted', 'org_user-1', 'Deleted', '2026-10-01', '2026-10-01', '2026-10-02'),
            ('elsewhere', 'org_user-2', 'Elsewhere', '2026-10-01', '2026-10-01', NULL);
   `);
-  const onProject = auditStart();
-  const deleted = { ...auditStart(), projectId: "deleted" };
+  const onProject = formStart();
+  const deleted = { ...formStart(), projectId: "deleted" };
   for (const operation of [onProject, deleted])
     expect((await f.apply(operation)).status).toBe(201);
   for (const projectId of ["elsewhere", "missing"])
-    expect((await f.apply({ ...auditStart(), projectId })).status).toBe(409);
+    expect((await f.apply({ ...formStart(), projectId })).status).toBe(409);
   expect(
-    f.db.query("SELECT id, project_id FROM audits ORDER BY project_id").all(),
+    f.db.query("SELECT id, project_id FROM forms ORDER BY project_id").all(),
   ).toEqual([
     { id: onProject.id, project_id: "audited" },
     { id: deleted.id, project_id: "deleted" },
@@ -702,47 +714,47 @@ it("records an audit against its project, even one deleted since, and refuses an
   expect(f.db.query("SELECT id FROM offline_operations").all()).toHaveLength(2);
 });
 
-it("syncs work on a downloaded version after the form is unpublished or discarded", async () => {
+it("syncs work on a downloaded version after the template is unpublished or discarded", async () => {
   const f = fixture();
-  f.publish("form", 3, "unpublished");
-  expect((await f.apply(auditStart())).status).toBe(201);
-  f.publish("form", 4, "discarded");
-  expect((await f.apply(auditStart())).status).toBe(201);
-  // A global form unpublished after download.
+  f.publish("template", 3, "unpublished");
+  expect((await f.apply(formStart())).status).toBe(201);
+  f.publish("template", 4, "discarded");
+  expect((await f.apply(formStart())).status).toBe(201);
+  // A global template unpublished after download.
   f.db
     .query(
-      "INSERT INTO audit_template_families (id, scope, organization_id, current_version, created_by, created_at, updated_at) VALUES ('global-form', 'global', NULL, 1, 'user-1', '2026-10-01', '2026-10-01')",
+      "INSERT INTO form_template_families (id, scope, organization_id, current_version, created_by, created_at, updated_at) VALUES ('global-template', 'global', NULL, 1, 'user-1', '2026-10-01', '2026-10-01')",
     )
     .run();
   f.db
     .query(
-      "INSERT INTO audit_template_versions (id, template_id, version, name, description, definition, status, created_by, created_at) VALUES ('global-form-1', 'global-form', 1, 'Global', '', ?, 'published', 'user-1', '2026-10-01')",
+      "INSERT INTO form_template_versions (id, template_id, version, name, description, definition, status, created_by, created_at) VALUES ('global-template-1', 'global-template', 1, 'Global', '', ?, 'published', 'user-1', '2026-10-01')",
     )
     .run(JSON.stringify(definition));
-  f.publish("global-form", 2, "unpublished");
+  f.publish("global-template", 2, "unpublished");
   expect(
-    (await f.apply({ ...auditStart(), templateId: "global-form" })).status,
+    (await f.apply({ ...formStart(), templateId: "global-template" })).status,
   ).toBe(201);
   // A version that was never published was never downloaded.
-  expect((await f.apply({ ...auditStart(), templateVersion: 2 })).status).toBe(
+  expect((await f.apply({ ...formStart(), templateVersion: 2 })).status).toBe(
     409,
   );
 });
 
 it("rolls back receipts and domain writes if history fails, then retries successfully", async () => {
   const f = fixture();
-  const start = auditStart();
+  const start = formStart();
   expect((await f.apply(start)).status).toBe(201);
-  const save = auditSave(
+  const save = formSave(
     start.id,
     { check: { value: "pass", at: at(5), base: null } },
     { complete: true },
   );
   f.db.exec(
-    "CREATE TRIGGER fail_history BEFORE INSERT ON activity_events WHEN NEW.action = 'audit.completed' BEGIN SELECT RAISE(ABORT, 'history unavailable'); END",
+    "CREATE TRIGGER fail_history BEFORE INSERT ON activity_events WHEN NEW.action = 'form.completed' BEGIN SELECT RAISE(ABORT, 'history unavailable'); END",
   );
   expect((await f.apply(save)).status).toBe(500);
-  expect(f.audit(start.id)).toMatchObject({
+  expect(f.form(start.id)).toMatchObject({
     status: "in_progress",
     revision: 1,
   });
@@ -802,11 +814,11 @@ it("keeps no receipt when the assignee leaves before the issue is written", asyn
   expect((await f.apply({ ...issue, assignedTo: null })).status).toBe(201);
 });
 
-it("keeps device-reported audit times separate from server history time", async () => {
+it("keeps device-reported form times separate from server history time", async () => {
   const f = fixture();
-  const start = auditStart();
+  const start = formStart();
   expect((await f.apply(start)).status).toBe(201);
-  const save = auditSave(
+  const save = formSave(
     start.id,
     { check: { value: "pass", at: at(5), base: null } },
     { complete: true },
@@ -814,7 +826,7 @@ it("keeps device-reported audit times separate from server history time", async 
   expect((await f.apply(save)).status).toBe(201);
   const event = f.db
     .query(
-      "SELECT details, occurred_at FROM activity_events WHERE action = 'audit.offline_synced'",
+      "SELECT details, occurred_at FROM activity_events WHERE action = 'form.offline_synced'",
     )
     .get() as { details: string; occurred_at: string };
   expect(JSON.parse(event.details)).toEqual({
@@ -826,14 +838,14 @@ it("keeps device-reported audit times separate from server history time", async 
   expect(
     f.db
       .query(
-        "SELECT id FROM activity_events WHERE action = 'audit.offline_synced'",
+        "SELECT id FROM activity_events WHERE action = 'form.offline_synced'",
       )
       .all(),
   ).toHaveLength(1);
 });
 
-type Start = Extract<OfflineOperation, { type: "auditStart" }>;
-type Save = Extract<OfflineOperation, { type: "auditSave" }>;
+type Start = Extract<OfflineOperation, { type: "formStart" }>;
+type Save = Extract<OfflineOperation, { type: "formSave" }>;
 
 /** An answer as a conflict event records it. */
 interface RecordedAnswer {
@@ -843,7 +855,7 @@ interface RecordedAnswer {
   value: string | null;
 }
 
-/** The details of an `audit.answer_conflict_resolved` event. */
+/** The details of an `form.answer_conflict_resolved` event. */
 interface ConflictDetails {
   discarded: RecordedAnswer;
   kept: RecordedAnswer | null;
@@ -852,27 +864,27 @@ interface ConflictDetails {
   responseType: string;
 }
 
-function auditStart(answers: Start["answers"] = {}): Start {
+function formStart(answers: Start["answers"] = {}): Start {
   return {
-    type: "auditStart",
+    type: "formStart",
     id: crypto.randomUUID(),
     projectId: "audited",
-    templateId: "form",
+    templateId: "template",
     templateVersion: 1,
     answers,
   };
 }
 
-/** A save of `answers`, completing the audit when asked. */
-function auditSave(
-  auditId: string,
+/** A save of `answers`, completing the form when asked. */
+function formSave(
+  formId: string,
   answers: Save["answers"],
   { complete = false } = {},
 ): Save {
   return {
-    type: "auditSave",
+    type: "formSave",
     id: crypto.randomUUID(),
-    auditId,
+    formId,
     answers,
     ...(complete
       ? {
@@ -890,17 +902,17 @@ function fixture() {
   databases.push(db);
   for (const id of ["user-1", "user-2"])
     seedAccount(db, { createdAt: "2026-10-01", id });
-  // The project audits are made for; no one is a member, so syncs list none.
+  // The project forms are made for; no one is a member, so syncs list none.
   db.exec(
     "INSERT INTO projects (id, organization_id, name, created_at, updated_at) VALUES ('audited', 'org_user-1', 'Audited', '2026-10-01', '2026-10-01')",
   );
   db.exec(
-    "INSERT INTO audit_template_families (id, scope, organization_id, current_version, created_by, created_at, updated_at) VALUES ('form', 'organization', 'org_user-1', 2, 'user-1', '2026-10-01', '2026-10-01')",
+    "INSERT INTO form_template_families (id, scope, organization_id, current_version, created_by, created_at, updated_at) VALUES ('template', 'organization', 'org_user-1', 2, 'user-1', '2026-10-01', '2026-10-01')",
   );
   // Version 1 was published and downloaded; version 2 is a draft.
   for (const version of [1, 2])
     db.query(
-      "INSERT INTO audit_template_versions (id, template_id, version, name, description, definition, status, created_by, created_at) VALUES (?, 'form', ?, ?, '', ?, ?, 'user-1', '2026-10-01')",
+      "INSERT INTO form_template_versions (id, template_id, version, name, description, definition, status, created_by, created_at) VALUES (?, 'template', ?, ?, '', ?, ?, 'user-1', '2026-10-01')",
     ).run(
       `version-${version}`,
       version,
@@ -917,25 +929,25 @@ function fixture() {
     request,
     apply: (operation: OfflineOperation, identity = scope) =>
       request("POST", "/operations", { ...identity, operation }),
-    audit: (id: string) =>
+    form: (id: string) =>
       db
         .query(
-          "SELECT status, responses, answer_meta, revision FROM audits WHERE id = ?",
+          "SELECT status, responses, answer_meta, revision FROM forms WHERE id = ?",
         )
         .get(id),
-    /** Adds the organization's form `id`, with version 1 published. */
-    addForm(id: string, sections: unknown[]) {
+    /** Adds the organization's template `id`, with version 1 published. */
+    addTemplate(id: string, sections: unknown[]) {
       db.query(
-        "INSERT INTO audit_template_families (id, scope, organization_id, current_version, created_by, created_at, updated_at) VALUES (?, 'organization', 'org_user-1', 1, 'user-1', '2026-10-01', '2026-10-01')",
+        "INSERT INTO form_template_families (id, scope, organization_id, current_version, created_by, created_at, updated_at) VALUES (?, 'organization', 'org_user-1', 1, 'user-1', '2026-10-01', '2026-10-01')",
       ).run(id);
       db.query(
-        "INSERT INTO audit_template_versions (id, template_id, version, name, description, definition, status, created_by, created_at) VALUES (?, ?, 1, ?, '', ?, 'published', 'user-1', '2026-10-01')",
+        "INSERT INTO form_template_versions (id, template_id, version, name, description, definition, status, created_by, created_at) VALUES (?, ?, 1, ?, '', ?, 'published', 'user-1', '2026-10-01')",
       ).run(`${id}-1`, id, id, JSON.stringify({ version: 1, sections }));
     },
     /** Saves an answer as an online save by `by` at `when` would. */
     edit(id: string, itemId: string, value: string, when: string, by: string) {
       db.query(
-        `UPDATE audits SET responses = json_set(responses, ?, ?),
+        `UPDATE forms SET responses = json_set(responses, ?, ?),
            answer_meta = json_set(answer_meta, ?, json_object('at', ?, 'by', ?, 'v', ?)),
            revision = revision + 1, activity_actor_id = ?, updated_at = ?
          WHERE id = ?`,
@@ -954,7 +966,7 @@ function fixture() {
     /** Clears an answer as an online save by `by` at `when` would. */
     clear(id: string, itemId: string, when: string, by: string) {
       db.query(
-        `UPDATE audits SET responses = json_remove(responses, ?),
+        `UPDATE forms SET responses = json_remove(responses, ?),
            answer_meta = json_set(answer_meta, ?, json_object('at', ?, 'by', ?, 'v', ?)),
            revision = revision + 1, activity_actor_id = ?, updated_at = ?
          WHERE id = ?`,
@@ -969,11 +981,11 @@ function fixture() {
         id,
       );
     },
-    /** The audit's resolved answer conflicts, oldest first. */
+    /** The form's resolved answer conflicts, oldest first. */
     conflicts(id: string) {
       const rows = db
         .query(
-          "SELECT subject_id, details FROM activity_events WHERE root_id = ? AND action = 'audit.answer_conflict_resolved' ORDER BY id",
+          "SELECT subject_id, details FROM activity_events WHERE root_id = ? AND action = 'form.answer_conflict_resolved' ORDER BY id",
         )
         .all(id) as { details: string; subject_id: string }[];
       return rows.map(({ details, subject_id }) => {
@@ -981,19 +993,19 @@ function fixture() {
         return { details: recorded, subject_id };
       });
     },
-    /** Saves the form's next version (`version`, or the one after its current) with `status`. */
+    /** Saves the template's next version (`version`, or the one after its current) with `status`. */
     publish(templateId: string, version: number, status: string) {
       const next =
         version ||
         (
           db
             .query(
-              "SELECT current_version FROM audit_template_families WHERE id = ?",
+              "SELECT current_version FROM form_template_families WHERE id = ?",
             )
             .get(templateId) as { current_version: number }
         ).current_version + 1;
       db.query(
-        "INSERT INTO audit_template_versions (id, template_id, version, name, description, definition, status, created_by, created_at) VALUES (?, ?, ?, 'Form', '', ?, ?, 'user-1', '2026-10-02')",
+        "INSERT INTO form_template_versions (id, template_id, version, name, description, definition, status, created_by, created_at) VALUES (?, ?, ?, 'Template', '', ?, ?, 'user-1', '2026-10-02')",
       ).run(
         `${templateId}-${next}`,
         templateId,
@@ -1002,7 +1014,7 @@ function fixture() {
         status,
       );
       db.query(
-        "UPDATE audit_template_families SET current_version = ? WHERE id = ?",
+        "UPDATE form_template_families SET current_version = ? WHERE id = ?",
       ).run(next, templateId);
     },
     async sync(after?: string) {

@@ -62,19 +62,19 @@ test("records happen on their canon day, sent by the person canon names", () => 
   });
 });
 
-test("audits fail the items their issues name and carry the site photos", () => {
-  const audits = rows<{ status: string; template_name: string }>(
-    "SELECT template_name, status FROM audits ORDER BY created_at",
+test("forms fail the items their issues name and carry the site photos", () => {
+  const forms = rows<{ status: string; template_name: string }>(
+    "SELECT template_name, status FROM forms ORDER BY created_at",
   );
-  expect(audits.map(({ status }) => status)).toEqual([
+  expect(forms.map(({ status }) => status)).toEqual([
     "completed",
     "in_progress",
   ]);
   const findings = rows<{ item_id: string; photos: number; status: string }>(
-    `SELECT issues.item_id, issues.status, COUNT(audit_issue_images.id) AS photos
-     FROM issues LEFT JOIN audit_issue_images
-       ON audit_issue_images.issue_id = issues.id
-     WHERE issues.target_type = 'audit_run'
+    `SELECT issues.item_id, issues.status, COUNT(form_issue_images.id) AS photos
+     FROM issues LEFT JOIN form_issue_images
+       ON form_issue_images.issue_id = issues.id
+     WHERE issues.target_type = 'form_run'
      GROUP BY issues.id ORDER BY issues.item_id`,
   );
   expect(findings).toEqual([
@@ -83,16 +83,16 @@ test("audits fail the items their issues name and carry the site photos", () => 
     { item_id: "review-1", photos: 1, status: "open" },
   ]);
   for (const { responses } of rows<{ responses: string }>(
-    "SELECT responses FROM audits",
+    "SELECT responses FROM forms",
   ))
     expect(Object.values(JSON.parse(responses))).toContain("fail");
-  // An issue raised on the day its audit completes comes first.
+  // An issue raised on the day its form completes comes first.
   const [completed] = rows<{ completed_at: string; raised_at: string }>(
-    `SELECT audits.completed_at, issues.created_at AS raised_at
-     FROM audits JOIN issues ON issues.target_id = audits.id
-     WHERE audits.status = 'completed'`,
+    `SELECT forms.completed_at, issues.created_at AS raised_at
+     FROM forms JOIN issues ON issues.target_id = forms.id
+     WHERE forms.status = 'completed'`,
   );
-  if (!completed) throw new Error("The seed completed no audit.");
+  if (!completed) throw new Error("The seed completed no form.");
   expect(completed.raised_at.slice(0, 10)).toBe(
     completed.completed_at.slice(0, 10),
   );

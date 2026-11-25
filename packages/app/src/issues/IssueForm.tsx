@@ -88,7 +88,7 @@ export function IssueForm({
   );
 }
 
-/** The fields every issue form shares, including the audit run's. */
+/** The fields every issue form shares, including the form run's. */
 export function IssueFields({
   input,
   members,

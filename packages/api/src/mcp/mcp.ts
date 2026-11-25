@@ -10,9 +10,9 @@ import {
 import type { Context } from "hono";
 import { version } from "../../package.json";
 import type { ApiEnv } from "../auth/apiEnv";
-import { auditTools } from "./mcpAuditTools";
 import { contractTools } from "./mcpContractTools";
 import { financeTools } from "./mcpFinanceTools";
+import { formTools } from "./mcpFormTools";
 import { issueTools } from "./mcpIssueTools";
 import { libraryTools } from "./mcpLibraryTools";
 import {
@@ -31,7 +31,7 @@ const toolListTtlMs = 5 * 60 * 1000;
 export const mcpTools: McpTool[] = [
   ...workspaceTools,
   ...issueTools,
-  ...auditTools,
+  ...formTools,
   ...contractTools,
   ...libraryTools,
   ...financeTools,
@@ -111,12 +111,12 @@ function createServer(access: ApiKeyAccess, forward: ForwardedRequest) {
 
 function serverInstructions(access: ApiKeyAccess) {
   return [
-    `${productName} is an organization workspace: audits and checklists, equipment, contracts and e-signature, the shared inbox, the document library, finance, businesses, and employee forms.`,
+    `${productName} is an organization workspace: forms and their templates, equipment, contracts and e-signature, the shared inbox, the document library, finance, businesses, and employee forms.`,
     access === "write"
       ? "This API key can read and change data in one organization."
       : "This API key is read-only: it can read data in one organization but cannot change it.",
     "The key acts as the organization owner or admin who created it, so results follow that person's permissions; Finance tools also require membership in a group with Finance access.",
-    "Find IDs with the list tools before calling get, update, or delete tools. Saving an audit run requires the expectedRevision from its latest get_audit_run result.",
+    "Find IDs with the list tools before calling get, update, or delete tools. Saving a form requires the expectedRevision from its latest get_form result.",
   ].join(" ");
 }
 

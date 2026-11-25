@@ -1,4 +1,4 @@
-/** "1 audit", "3 audits"; pass the plural when appending "s" is wrong. */
+/** "1 form", "3 forms"; pass the plural when appending "s" is wrong. */
 export function countLabel(
   count: number,
   singular: string,

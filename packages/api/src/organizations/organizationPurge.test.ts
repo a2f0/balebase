@@ -89,7 +89,7 @@ it("queues a confirmed organization purge, cascades records, and retains every k
       VALUES ('library', 'purge', 'purge/library', 'file.pdf', 'application/pdf', 1, '2020-01-01'),
              ('keep', 'keep', 'keep/library', 'file.pdf', 'application/pdf', 1, '2020-01-01');
     INSERT INTO objects (id, organization_id, object_key, filename, content_type, size, created_at, kind)
-      VALUES ('image', 'purge', 'purge/image', 'image.png', 'image/png', 1, '2020-01-01', 'audit_issue_image');
+      VALUES ('image', 'purge', 'purge/image', 'image.png', 'image/png', 1, '2020-01-01', 'form_issue_image');
     INSERT INTO inbound_emails (id, organization_id, envelope_from, envelope_to, raw_object_key, raw_size, received_at)
       VALUES ('email', 'purge', 'from@example.com', 'to@example.com', 'purge/raw', 1, '2020-01-01'),
              ('keep-email', 'keep', 'from@example.com', 'to@example.com', 'keep/raw', 1, '2020-01-01');

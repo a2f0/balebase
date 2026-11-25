@@ -23,7 +23,7 @@ export function confirmProjectDeletion(project: ProjectSummary) {
   return confirmDialog({
     confirmLabel: "Delete project",
     message:
-      "Its audits stay in Audits, and a manager can restore it from Deleted projects. Members keep the forms already on their devices.",
+      "Its forms stay in Forms, and a manager can restore it from Deleted projects. Members keep the templates already on their devices.",
     title: `Delete ${project.name}?`,
     tone: "danger",
   });

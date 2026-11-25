@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { ActivityPageSchema, ActivityQuerySchema } from "./activity";
 import {
-  ChecklistIdSchema,
+  DefinitionIdSchema,
   type FormInput,
   optionalText,
   PersonSchema,
@@ -11,7 +11,7 @@ import { issueLimits, issuePriorities } from "./issueRules";
 import { route } from "./route";
 
 const IssueTargetTypeSchema = z.enum([
-  "audit_run",
+  "form_run",
   "finance_transaction",
   "workspace",
 ]);
@@ -93,9 +93,9 @@ const IssueCreateSchema = NewIssueSchema.extend({
       }),
       z.object({
         id: targetId,
-        /** The audit checklist item the issue is about. */
-        itemId: ChecklistIdSchema,
-        type: z.literal("audit_run"),
+        /** The form question the issue is about. */
+        itemId: DefinitionIdSchema,
+        type: z.literal("form_run"),
       }),
     ])
     .optional(),

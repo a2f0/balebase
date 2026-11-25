@@ -1,7 +1,7 @@
 import { projectsRoutes } from "@balebase/validators/projects";
 import { type Context, Hono } from "hono";
-import { projectFormFilter } from "../audits/auditTemplates";
 import type { ApiEnv } from "../auth/apiEnv";
+import { projectTemplateFilter } from "../forms/formTemplates";
 import {
   canManage,
   listMemberDirectory,
@@ -14,13 +14,13 @@ import {
 } from "../shared/activity";
 import { readBody, respond } from "../shared/respond";
 import {
-  findAvailableForm,
+  findAvailableTemplate,
   findProject,
   findProjectRow,
-  listAvailableForms,
+  listAvailableTemplates,
   listDeletedProjects,
-  listFormProjects,
   listProjects,
+  listTemplateProjects,
 } from "./projectRecords";
 
 type ProjectContext = Context<ApiEnv>;
@@ -80,21 +80,23 @@ projects.post("/", requireManager(), async (context) => {
   return projectResponse(context, projectsRoutes.create, id, 201);
 });
 
-// Answers for any form id, so it reveals nothing about forms the organization
+// Answers for any template id, so it reveals nothing about templates the organization
 // cannot use: those are simply unavailable and on for no project.
-projects.get("/forms/:templateId", async (context) => {
+projects.get("/templates/:templateId", async (context) => {
   const organizationId = context.get("organizationId");
   const templateId = context.req.param("templateId");
-  const [form, list] = await Promise.all([
-    findAvailableForm(context.env.DB, organizationId, templateId),
-    listFormProjects(context.env.DB, organizationId, templateId),
+  const [template, list] = await Promise.all([
+    findAvailableTemplate(context.env.DB, organizationId, templateId),
+    listTemplateProjects(context.env.DB, organizationId, templateId),
   ]);
-  return respond(context, projectsRoutes.formProjects, {
-    available: Boolean(form),
+  return respond(context, projectsRoutes.templateProjects, {
+    available: Boolean(template),
     canManage: canManage(context),
-    // An unavailable form lists as off everywhere: turned-on forms that were
+    // An unavailable template lists as off everywhere: turned-on templates that were
     // unpublished are not offered, as on a project's own page.
-    projects: form ? list : list.map((entry) => ({ ...entry, enabled: false })),
+    projects: template
+      ? list
+      : list.map((entry) => ({ ...entry, enabled: false })),
   });
 });
 
@@ -118,12 +120,12 @@ projects.get("/:id", async (context) => {
     userId(context),
   );
   if (!project) return projectNotFound(context);
-  const [availableForms, directory] = await Promise.all([
-    listAvailableForms(database, organizationId),
+  const [availableTemplates, directory] = await Promise.all([
+    listAvailableTemplates(database, organizationId),
     listMemberDirectory(database, organizationId),
   ]);
   return respond(context, projectsRoutes.get, {
-    availableForms,
+    availableTemplates,
     canManage: canManage(context),
     directory,
     project,
@@ -207,8 +209,8 @@ projects.patch("/:id", requireManager(), async (context) => {
   return projectResponse(context, projectsRoutes.update, existing.id);
 });
 
-// Deleting hides the project: its audits keep pointing at it, and members,
-// forms, and history stay for a restore.
+// Deleting hides the project: its forms keep pointing at it, and members,
+// templates, and history stay for a restore.
 projects.delete("/:id", requireManager(), async (context) => {
   const organizationId = context.get("organizationId");
   const database = context.env.DB;
@@ -379,127 +381,135 @@ projects.delete("/:id/members/:userId", requireManager(), async (context) => {
   return projectResponse(context, projectsRoutes.removeMember, project.id);
 });
 
-projects.put("/:id/forms/:templateId", requireManager(), async (context) => {
-  const organizationId = context.get("organizationId");
-  const database = context.env.DB;
-  const project = await findProjectRow(
-    database,
-    organizationId,
-    context.req.param("id"),
-    userId(context),
-  );
-  if (!project) return projectNotFound(context);
-  const form = await findAvailableForm(
-    database,
-    organizationId,
-    context.req.param("templateId"),
-  );
-  if (!form) return formNotFound(context);
-  // The form must still be published and usable when this commits.
-  const canEnable = {
-    bindings: [project.id, organizationId, form.id, organizationId],
-    sql: `${projectExists} AND EXISTS (
-      SELECT 1 FROM audit_template_families AS family
-      JOIN audit_template_versions AS version
+projects.put(
+  "/:id/templates/:templateId",
+  requireManager(),
+  async (context) => {
+    const organizationId = context.get("organizationId");
+    const database = context.env.DB;
+    const project = await findProjectRow(
+      database,
+      organizationId,
+      context.req.param("id"),
+      userId(context),
+    );
+    if (!project) return projectNotFound(context);
+    const template = await findAvailableTemplate(
+      database,
+      organizationId,
+      context.req.param("templateId"),
+    );
+    if (!template) return templateNotFound(context);
+    // The template must still be published and usable when this commits.
+    const canEnable = {
+      bindings: [project.id, organizationId, template.id, organizationId],
+      sql: `${projectExists} AND EXISTS (
+      SELECT 1 FROM form_template_families AS family
+      JOIN form_template_versions AS version
         ON version.template_id = family.id
        AND version.version = family.current_version
-      WHERE family.id = ? AND ${projectFormFilter()})`,
-  };
-  const [, inserted] = await activityBatch(database, context.get("apiKey"), [
-    projectEvent(
-      context,
-      project.id,
-      {
-        action: "project.form_enabled",
-        details: { templateId: form.id, title: form.name },
-        subject: { id: form.id, type: "audit_template" },
-      },
-      {
-        bindings: [...canEnable.bindings, project.id, form.id],
-        sql: `${canEnable.sql} AND NOT EXISTS (
-          SELECT 1 FROM project_audit_forms
-          WHERE project_id = ? AND template_id = ?)`,
-      },
-    ),
-    database
-      .prepare(
-        `INSERT INTO project_audit_forms
-           (project_id, organization_id, template_id, added_by, added_at)
-         SELECT ?, ?, ?, ?, ? WHERE ${canEnable.sql}
-         ON CONFLICT (project_id, template_id) DO NOTHING`,
-      )
-      .bind(
-        project.id,
-        organizationId,
-        form.id,
-        userId(context),
-        new Date().toISOString(),
-        ...canEnable.bindings,
-      ),
-  ]);
-  if (
-    inserted?.meta.changes === 0 &&
-    !(await findAvailableForm(database, organizationId, form.id))
-  )
-    return formNotFound(context);
-  return projectResponse(context, projectsRoutes.enableForm, project.id);
-});
-
-projects.delete("/:id/forms/:templateId", requireManager(), async (context) => {
-  const organizationId = context.get("organizationId");
-  const database = context.env.DB;
-  const project = await findProjectRow(
-    database,
-    organizationId,
-    context.req.param("id"),
-    userId(context),
-  );
-  if (!project) return projectNotFound(context);
-  const templateId = context.req.param("templateId");
-  // Named as the organization last saw it: an unpublished global form's
-  // later drafts stay private to root admins.
-  const form = await database
-    .prepare(
-      `SELECT family.id, (
-         SELECT version.name FROM audit_template_versions AS version
-         WHERE version.template_id = family.id
-           AND (family.organization_id = ? OR version.status = 'published')
-         ORDER BY version.version DESC LIMIT 1
-       ) AS name
-       FROM audit_template_families AS family
-       WHERE family.id = ?
-         AND (family.scope = 'global' OR family.organization_id = ?)`,
-    )
-    .bind(organizationId, templateId, organizationId)
-    .first<{ id: string; name: string | null }>();
-  if (form) {
-    // A project deleted after the read keeps its forms.
-    const enabled = {
-      bindings: [project.id, organizationId, project.id, templateId],
-      sql: `${projectExists} AND EXISTS (SELECT 1 FROM project_audit_forms
-                    WHERE project_id = ? AND template_id = ?)`,
+      WHERE family.id = ? AND ${projectTemplateFilter()})`,
     };
-    await activityBatch(database, context.get("apiKey"), [
+    const [, inserted] = await activityBatch(database, context.get("apiKey"), [
       projectEvent(
         context,
         project.id,
         {
-          action: "project.form_disabled",
-          details: { templateId, title: form.name ?? "" },
-          subject: { id: templateId, type: "audit_template" },
+          action: "project.template_enabled",
+          details: { templateId: template.id, title: template.name },
+          subject: { id: template.id, type: "form_template" },
         },
-        enabled,
+        {
+          bindings: [...canEnable.bindings, project.id, template.id],
+          sql: `${canEnable.sql} AND NOT EXISTS (
+          SELECT 1 FROM project_form_templates
+          WHERE project_id = ? AND template_id = ?)`,
+        },
       ),
       database
         .prepare(
-          `DELETE FROM project_audit_forms
-           WHERE project_id = ? AND template_id = ? AND ${projectExists}`,
+          `INSERT INTO project_form_templates
+           (project_id, organization_id, template_id, added_by, added_at)
+         SELECT ?, ?, ?, ?, ? WHERE ${canEnable.sql}
+         ON CONFLICT (project_id, template_id) DO NOTHING`,
         )
-        .bind(project.id, templateId, project.id, organizationId),
+        .bind(
+          project.id,
+          organizationId,
+          template.id,
+          userId(context),
+          new Date().toISOString(),
+          ...canEnable.bindings,
+        ),
     ]);
-  }
-  return projectResponse(context, projectsRoutes.disableForm, project.id);
-});
+    if (
+      inserted?.meta.changes === 0 &&
+      !(await findAvailableTemplate(database, organizationId, template.id))
+    )
+      return templateNotFound(context);
+    return projectResponse(context, projectsRoutes.enableTemplate, project.id);
+  },
+);
+
+projects.delete(
+  "/:id/templates/:templateId",
+  requireManager(),
+  async (context) => {
+    const organizationId = context.get("organizationId");
+    const database = context.env.DB;
+    const project = await findProjectRow(
+      database,
+      organizationId,
+      context.req.param("id"),
+      userId(context),
+    );
+    if (!project) return projectNotFound(context);
+    const templateId = context.req.param("templateId");
+    // Named as the organization last saw it: an unpublished global template's
+    // later drafts stay private to root admins.
+    const template = await database
+      .prepare(
+        `SELECT family.id, (
+         SELECT version.name FROM form_template_versions AS version
+         WHERE version.template_id = family.id
+           AND (family.organization_id = ? OR version.status = 'published')
+         ORDER BY version.version DESC LIMIT 1
+       ) AS name
+       FROM form_template_families AS family
+       WHERE family.id = ?
+         AND (family.scope = 'global' OR family.organization_id = ?)`,
+      )
+      .bind(organizationId, templateId, organizationId)
+      .first<{ id: string; name: string | null }>();
+    if (template) {
+      // A project deleted after the read keeps its templates.
+      const enabled = {
+        bindings: [project.id, organizationId, project.id, templateId],
+        sql: `${projectExists} AND EXISTS (SELECT 1 FROM project_form_templates
+                    WHERE project_id = ? AND template_id = ?)`,
+      };
+      await activityBatch(database, context.get("apiKey"), [
+        projectEvent(
+          context,
+          project.id,
+          {
+            action: "project.template_disabled",
+            details: { templateId, title: template.name ?? "" },
+            subject: { id: templateId, type: "form_template" },
+          },
+          enabled,
+        ),
+        database
+          .prepare(
+            `DELETE FROM project_form_templates
+           WHERE project_id = ? AND template_id = ? AND ${projectExists}`,
+          )
+          .bind(project.id, templateId, project.id, organizationId),
+      ]);
+    }
+    return projectResponse(context, projectsRoutes.disableTemplate, project.id);
+  },
+);
 
 async function projectResponse(
   context: ProjectContext,
@@ -508,8 +518,8 @@ async function projectResponse(
     | typeof projectsRoutes.update
     | typeof projectsRoutes.addMember
     | typeof projectsRoutes.removeMember
-    | typeof projectsRoutes.enableForm
-    | typeof projectsRoutes.disableForm
+    | typeof projectsRoutes.enableTemplate
+    | typeof projectsRoutes.disableTemplate
     | typeof projectsRoutes.restore,
   id: string,
   status?: 200 | 201,
@@ -592,8 +602,8 @@ function staleProject(context: ProjectContext) {
   );
 }
 
-function formNotFound(context: ProjectContext) {
-  return context.json({ error: "Audit form not found." }, 404);
+function templateNotFound(context: ProjectContext) {
+  return context.json({ error: "Form template not found." }, 404);
 }
 
 function notOrganizationMember(context: ProjectContext) {

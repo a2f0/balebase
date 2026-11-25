@@ -1,5 +1,5 @@
 import type { Bindings } from "../types";
-import { auditIssueImageUploadGraceMilliseconds } from "./objectLifecycle";
+import { formIssueImageUploadGraceMilliseconds } from "./objectLifecycle";
 
 const cleanupBatchSize = 25;
 const abandonedClaimMilliseconds = 5 * 60 * 1000;
@@ -23,7 +23,7 @@ function defaultCleanupCutoffs(): DeletedObjectCleanupCutoffs {
     // writing R2. Keep its durable tombstone until every upload lease that was
     // live at deletion time has expired.
     deletedBefore: new Date(
-      now - auditIssueImageUploadGraceMilliseconds,
+      now - formIssueImageUploadGraceMilliseconds,
     ).toISOString(),
   };
 }

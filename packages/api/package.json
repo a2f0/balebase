@@ -1,11 +1,11 @@
 {
   "name": "@balebase/api",
-  "version": "0.1.126",
+  "version": "0.1.127",
   "private": true,
   "license": "UNLICENSED",
   "type": "module",
   "scripts": {
-    "audit-library:migration": "bun scripts/auditLibraryMigration.ts",
+    "template-library:migration": "bun scripts/templateLibraryMigration.ts",
     "check": "bunx --bun --no-install tsc --noEmit",
     "db:migrate:local": "bunx --bun --no-install wrangler d1 migrations apply DB --local",
     "db:migrate:remote": "bunx --bun --no-install wrangler d1 migrations apply DB --remote",

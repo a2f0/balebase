@@ -40,7 +40,7 @@ export type WorkspacePage =
   | "account"
   | "activity"
   | "issues"
-  | "audits"
+  | "forms"
   | "businesses"
   | "contracts"
   | "equipment"
@@ -50,7 +50,7 @@ export type WorkspacePage =
   | "myDocuments"
   | "organization"
   | "projects"
-  | "rootGlobalAudits"
+  | "rootGlobalTemplates"
   | "rootJobs"
   | "rootOrganizations"
   | "rootUsers";
@@ -269,7 +269,7 @@ function navigationFor(financeHref: string | false, isAdmin: boolean) {
       label: "My documents",
       page: "myDocuments",
     },
-    { href: "/audits", icon: "audits", label: "Audits", page: "audits" },
+    { href: "/forms", icon: "forms", label: "Forms", page: "forms" },
     {
       href: "/projects",
       icon: "layers",
@@ -337,10 +337,10 @@ function navigationFor(financeHref: string | false, isAdmin: boolean) {
           page: "rootOrganizations",
         },
         {
-          href: "/root/global-audits",
-          icon: "audits",
-          label: "Global Audits",
-          page: "rootGlobalAudits",
+          href: "/root/global-templates",
+          icon: "forms",
+          label: "Global templates",
+          page: "rootGlobalTemplates",
         },
         {
           href: "/root/jobs",

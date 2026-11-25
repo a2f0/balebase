@@ -1,0 +1,638 @@
+/* Form home: template collections and recent runs. */
+.formCollections {
+  display: grid;
+  gap: var(--space-10);
+}
+
+.formCollection {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-4);
+}
+
+.formCollectionHeading {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-0-5);
+}
+
+.formCollectionTitle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-md);
+  font-weight: 650;
+}
+
+.formTemplateGrid {
+  --grid-min: 24rem;
+}
+
+.formTemplateCard {
+  display: flex;
+  flex-direction: column;
+}
+
+.formTemplateBody {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-5) var(--space-6) var(--space-6);
+}
+
+.formTemplateName {
+  margin-top: var(--space-1);
+  font-size: var(--text-lg);
+  font-weight: 650;
+  letter-spacing: var(--tracking-tight);
+  line-height: var(--leading-snug);
+}
+
+.formTemplateDescription {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+
+.formTemplateMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-4);
+  margin-top: auto;
+  padding-top: var(--space-2);
+  color: var(--color-text-subtle);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.formTemplateStat {
+  --cluster-gap: var(--space-1-5);
+
+  flex-wrap: nowrap;
+}
+
+.formTemplateFooter {
+  gap: var(--space-2);
+}
+
+/* A form's menu button sits at the end of its card's footer or row. */
+.formTemplateFooter > [aria-haspopup="menu"],
+.formTemplateRowActions > [aria-haspopup="menu"] {
+  flex: 0 0 auto;
+  margin-inline-start: auto;
+}
+
+/* A project's on/off switch for a form, in place of the edit buttons. */
+.formTemplateToggle {
+  align-items: center;
+  margin-left: auto;
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.formTemplateToggle input {
+  position: relative;
+  width: 2.25rem;
+  height: 1.25rem;
+  margin: 0;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-full);
+  appearance: none;
+  background: var(--color-surface-sunken);
+  transition:
+    background-color var(--duration-fast) var(--ease),
+    border-color var(--duration-fast) var(--ease);
+}
+
+.formTemplateToggle input::before {
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: calc(1.25rem - 4px);
+  height: calc(1.25rem - 4px);
+  border-radius: var(--radius-full);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-xs);
+  content: "";
+  transition: transform var(--duration-fast) var(--ease);
+}
+
+.formTemplateToggle input:checked {
+  border-color: var(--color-emphasis);
+  background: var(--color-emphasis);
+}
+
+.formTemplateToggle input:checked::before {
+  transform: translateX(1rem);
+}
+
+.formTemplateToolbar,
+.formRunToolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+}
+
+.formTemplateRow {
+  display: grid;
+  grid-template-areas: "main stats actions";
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: var(--space-3) var(--space-6);
+}
+
+.formTemplateRow > .rowMain {
+  grid-area: main;
+}
+
+/* Long descriptions stay a two-line preview so rows keep an even rhythm. */
+.formTemplateRow .rowMeta {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+.formTemplateRowStats {
+  display: grid;
+  grid-area: stats;
+  grid-template-columns: 6.5rem 5.5rem 6.5rem 2.5rem;
+  align-items: center;
+  justify-items: start;
+  gap: var(--space-4);
+  color: var(--color-text-subtle);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.formTemplateRowActions {
+  flex-wrap: nowrap;
+  grid-area: actions;
+  justify-content: flex-end;
+}
+
+.formRunRow {
+  display: grid;
+  grid-template-areas: "main stats arrow";
+  grid-template-columns: minmax(0, 1fr) auto auto;
+}
+
+.formRunRow > .rowMain {
+  grid-area: main;
+}
+
+.formRunStats {
+  display: grid;
+  grid-area: stats;
+  grid-template-columns: 7rem 7.5rem 5.5rem;
+  align-items: center;
+  justify-items: start;
+  gap: var(--space-4);
+}
+
+.formRunStat {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  color: var(--color-text-subtle);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.formRunArrow {
+  grid-area: arrow;
+  color: var(--color-text-subtle);
+  transition:
+    color var(--duration-fast) var(--ease),
+    transform var(--duration-fast) var(--ease);
+}
+
+.formRunRow:hover .formRunArrow {
+  color: var(--color-text);
+  transform: translateX(2px);
+}
+
+/* Center "Load more" instead of the footer's default end alignment. */
+.formRunCard .cardFooter > :only-child {
+  margin-inline: auto;
+}
+
+/* Stats move under the title by the list's own width, which the resizable
+ * sidebar decides, not the viewport's. */
+.formRunCard .cardFlush,
+.formTemplateList .cardFlush {
+  container-type: inline-size;
+}
+
+@container (max-width: 40rem) {
+  .formRunRow {
+    grid-template-areas:
+      "main arrow"
+      "stats stats";
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--space-2) var(--space-3);
+  }
+
+  .formRunStats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2) var(--space-4);
+  }
+}
+
+/* Template rows drop their stats under the name, then stack their actions. */
+@container (max-width: 60rem) {
+  .formTemplateRow {
+    grid-template-areas:
+      "main actions"
+      "stats stats";
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--space-2) var(--space-4);
+  }
+
+  .formTemplateRowStats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2) var(--space-4);
+  }
+}
+
+@container (max-width: 36rem) {
+  .formTemplateRow {
+    grid-template-areas:
+      "main"
+      "stats"
+      "actions";
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .formTemplateRowActions {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+
+  .formTemplateRowActions > .button:not([aria-haspopup="menu"]) {
+    flex: 1 1 auto;
+  }
+}
+
+/* Template builder. */
+.formVersionControls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+}
+
+.formVersionPicker {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.formVersionLabel {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.formVersionSelect {
+  width: 17rem;
+  max-width: 100%;
+}
+
+.formBack {
+  margin-left: calc(var(--space-2) * -1);
+  padding-inline: var(--space-2);
+}
+
+.formBuilderFields {
+  display: grid;
+  gap: var(--space-8);
+}
+
+.formSectionCard {
+  overflow: hidden;
+}
+
+/*
+ * The question list, not the card, is the query container: containment makes
+ * its element a stacking context, and a card that were one would hide the
+ * section drop line beneath a lifted card.
+ */
+.formQuestionList {
+  container-type: inline-size;
+}
+
+.formSectionHeader {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4) var(--space-3) var(--space-3);
+  border-bottom: 1px solid var(--color-border-subtle);
+  background: var(--color-surface-sunken);
+}
+
+.formSectionNumber {
+  display: inline-grid;
+  min-width: 2rem;
+  height: 1.5rem;
+  padding: 0 var(--space-1-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  place-items: center;
+  color: var(--color-text-muted);
+  background: var(--color-surface);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.formSectionNumber:hover {
+  border-color: var(--color-border-strong);
+  color: var(--color-text);
+}
+
+/* The grip moves an entry: drag it, or focus it and press the arrow keys. */
+.formDragHandle {
+  display: inline-grid;
+  width: 1.5rem;
+  min-height: var(--control-height-sm);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  place-items: center;
+  color: var(--color-text-subtle);
+  background: transparent;
+  cursor: grab;
+  touch-action: none;
+}
+
+@media (pointer: coarse) {
+  .formDragHandle {
+    width: var(--touch-target);
+  }
+
+  .formSectionNumber {
+    height: var(--touch-target);
+  }
+}
+
+.formDragHandle:hover {
+  color: var(--color-text);
+  background: var(--color-surface-hover);
+}
+
+.formDragHandle:active {
+  cursor: grabbing;
+}
+
+.formDragHandle:focus-visible,
+.formSectionNumber:focus-visible,
+.formQuestionNumber:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* While dragging, the entry lifts and follows the pointer; a line marks where it lands. */
+.formReorderEntry {
+  position: relative;
+}
+
+/* Solid, so nothing it passes over shows through; the drop line draws above it. */
+.formDragging {
+  z-index: 2;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-lg);
+}
+
+/* Drawn above the lifted entry, which often hovers right over the drop point. */
+.formDropBefore::before,
+.formDropAfter::after {
+  position: absolute;
+  z-index: 3;
+  right: var(--space-4);
+  left: var(--space-4);
+  height: 3px;
+  border-radius: var(--radius-full);
+  background: var(--color-emphasis);
+  content: "";
+  pointer-events: none;
+}
+
+.formDropBefore::before {
+  top: 0;
+}
+
+.formDropAfter::after {
+  bottom: 0;
+}
+
+.formSectionTitle {
+  margin-left: calc(var(--space-2) * -1);
+  padding-inline: var(--space-2);
+  border-color: transparent;
+  background: transparent;
+  font-size: var(--text-lg);
+  font-weight: 650;
+  letter-spacing: var(--tracking-tight);
+}
+
+.formSectionTitle:focus {
+  background: var(--color-surface);
+}
+
+.formQuestion {
+  display: grid;
+  grid-template-areas: "handle number prompt controls remove";
+  grid-template-columns: auto 1.5rem minmax(0, 1fr) auto auto;
+  align-items: start;
+  gap: var(--space-3) var(--space-4);
+  padding: var(--space-4) var(--space-4) var(--space-4) var(--space-3);
+}
+
+.formQuestion > .formDragHandle {
+  grid-area: handle;
+  min-height: var(--control-height-md);
+}
+
+.formQuestionNumber {
+  display: flex;
+  grid-area: number;
+  align-items: center;
+  justify-content: flex-end;
+  min-height: var(--control-height-md);
+  padding: 0 var(--space-1);
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-subtle);
+  background: transparent;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.formQuestionNumber:hover {
+  color: var(--color-text);
+  background: var(--color-surface-hover);
+}
+
+.formQuestionPrompt {
+  grid-area: prompt;
+  min-height: var(--control-height-md);
+  padding-block: var(--space-2);
+  field-sizing: content;
+  resize: vertical;
+}
+
+.formDescriptionInput {
+  max-height: 16rem;
+  field-sizing: content;
+}
+
+.formQuestionControls {
+  display: flex;
+  grid-area: controls;
+  align-items: center;
+  gap: var(--space-4);
+  min-height: var(--control-height-md);
+}
+
+.formQuestionRemove {
+  grid-area: remove;
+  margin-top: calc((var(--control-height-md) - var(--control-height-sm)) / 2);
+}
+
+.formResponseType {
+  width: 11rem;
+}
+
+.formRequired {
+  align-items: center;
+  white-space: nowrap;
+}
+
+.formRemoveButton {
+  --button-fg: var(--color-text-subtle);
+}
+
+.formRemoveButton:hover:not(:disabled) {
+  --button-bg-hover: var(--color-danger-bg);
+
+  color: var(--color-danger-fg);
+}
+
+.formQuestionEmpty {
+  padding-block: var(--space-6);
+}
+
+.formSectionFooter {
+  padding: var(--space-3) var(--space-4) var(--space-4) var(--space-6);
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.formAddButton {
+  --button-bg: transparent;
+  --button-fg: var(--color-text-muted);
+
+  border-style: dashed;
+}
+
+.formBuilderState {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-2);
+}
+
+@media (max-width: 720px) {
+  .formTemplateBody {
+    padding: var(--space-4) var(--space-4) var(--space-5);
+  }
+
+  .formTemplateActions {
+    flex: 1 1 100%;
+    flex-wrap: nowrap;
+  }
+
+  .formTemplateActions > .button {
+    flex: 1 1 0;
+  }
+
+  .formTemplateStart {
+    flex: 1 1 100%;
+  }
+
+  .formVersionControls,
+  .formVersionPicker {
+    width: 100%;
+  }
+
+  .formVersionSelect {
+    flex: 1 1 0;
+    width: 100%;
+  }
+
+  .formVersionControls > .button {
+    width: 100%;
+  }
+
+  .formSectionHeader {
+    padding-left: var(--space-2);
+  }
+
+  .formQuestion {
+    padding-left: var(--space-2);
+  }
+
+  /* 16px keeps iOS Safari from zooming when the title is edited. */
+  .formSectionTitle {
+    font-size: 1rem;
+  }
+
+  .formSectionFooter {
+    padding-left: var(--space-4);
+  }
+}
+
+/* Narrow section cards stack each question's controls under its prompt. */
+@container (max-width: 48rem) {
+  .formQuestion {
+    grid-template-areas:
+      "handle number prompt remove"
+      ". . controls controls";
+    grid-template-columns: auto 1.25rem minmax(0, 1fr) auto;
+    gap: var(--space-2) var(--space-3);
+  }
+
+  .formQuestionControls {
+    gap: var(--space-2) var(--space-4);
+  }
+
+  .formResponseType {
+    flex: 0 1 16rem;
+    width: auto;
+    min-width: 0;
+  }
+}
+
+/* Phone-width cards give the prompt and its controls the whole row. */
+@container (max-width: 28rem) {
+  .formQuestion {
+    grid-template-areas:
+      "handle number . remove"
+      "prompt prompt prompt prompt"
+      "controls controls controls controls";
+  }
+}
+
+/* Sibling dividers come last so the plain rules above never outrank them. */
+.formQuestion + .formQuestion {
+  border-top: 1px solid var(--color-border-subtle);
+}

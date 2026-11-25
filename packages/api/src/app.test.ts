@@ -72,16 +72,16 @@ describe("api", () => {
       ["/api/admin/users", "GET"],
       ["/api/admin/users/user-id/deletion", "POST"],
       ["/api/admin/users/user-id/deletion", "DELETE"],
-      ["/api/admin/audit-templates", "GET"],
-      ["/api/admin/audit-templates", "POST"],
-      ["/api/admin/audit-templates/template-id", "PUT"],
+      ["/api/admin/form-templates", "GET"],
+      ["/api/admin/form-templates", "POST"],
+      ["/api/admin/form-templates/template-id", "PUT"],
       ["/api/activity", "GET"],
       ["/api/issues", "GET"],
       ["/api/issues", "POST"],
       ["/api/issues/members", "GET"],
       ["/api/issues/private", "PATCH"],
       ["/api/issues/private/activity", "GET"],
-      ["/api/audits/runs/private/activity", "GET"],
+      ["/api/forms/runs/private/activity", "GET"],
       ["/api/account-settings/deletion", "GET"],
       ["/api/account-settings/deletion", "POST"],
       ["/api/account-settings/deletion", "DELETE"],
@@ -219,7 +219,7 @@ describe("api", () => {
     expect(adminRoutes.map(({ path }) => path.split("/")[3])).toEqual(
       expect.arrayContaining([
         undefined,
-        "audit-templates",
+        "form-templates",
         "jobs",
         "organizations",
         "users",
@@ -243,9 +243,9 @@ describe("api", () => {
     }
   });
 
-  it("requires authentication for audits", async () => {
+  it("requires authentication for forms", async () => {
     const response = await app.request(
-      "/api/audits/templates",
+      "/api/forms/templates",
       undefined,
       authBindings(),
     );

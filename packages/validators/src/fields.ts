@@ -1,14 +1,14 @@
 import { z } from "zod";
-import { auditLimits } from "./rules";
+import { formLimits } from "./rules";
 
 /**
- * A checklist section or item ID, kept exactly as sent: answers and issues
+ * A template section or question ID, kept exactly as sent: answers and issues
  * refer to it, so it is never trimmed. Its length is checked without the
  * padding, as earlier releases did, so stored forms still read.
  */
-export const ChecklistIdSchema = z.string().refine((id) => {
+export const DefinitionIdSchema = z.string().refine((id) => {
   const visible = id.trim();
-  return visible !== "" && visible.length <= auditLimits.itemId;
+  return visible !== "" && visible.length <= formLimits.itemId;
 });
 
 /** A person a record names, such as its creator or assignee. */

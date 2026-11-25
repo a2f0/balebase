@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { act, useState } from "react";
 import { installDom } from "../testing/dom";
-import type { OfflineAudit } from "./offlineStore";
+import type { OfflineForm } from "./offlineStore";
 import {
   type Edit,
   type OfflineAnswerStorage,
@@ -12,20 +12,20 @@ const { mount, settle } = installDom({
   url: "http://localhost:5173/offline",
 });
 
-const audit = {
-  id: "audit-1",
+const form = {
+  id: "form-1",
   local: {},
   sending: [],
   server: { answers: {}, revision: 0, status: "in_progress" },
-} as unknown as OfflineAudit;
+} as unknown as OfflineForm;
 
 let latest: ReturnType<typeof useOfflineAnswers> | undefined;
 let storage: OfflineAnswerStorage | undefined;
-/** Shows the editor another copy of the audit, as a sync would. */
-let show: ((next: OfflineAudit) => void) | undefined;
+/** Shows the editor another copy of the form, as a sync would. */
+let show: ((next: OfflineForm) => void) | undefined;
 
 function Harness() {
-  const [shown, setShown] = useState(audit);
+  const [shown, setShown] = useState(form);
   show = setShown;
   if (!storage) throw new Error("No storage");
   latest = useOfflineAnswers(shown, "device", storage);
@@ -37,7 +37,7 @@ async function mountAnswers(failures: Error[], queueFailure?: Error) {
   const queued: string[] = [];
   const written: Edit[] = [];
   storage = {
-    completeAudit: async (_key, id) => {
+    completeForm: async (_key, id) => {
       if (queueFailure) throw queueFailure;
       queued.push(id);
     },
@@ -67,7 +67,7 @@ async function answer(
   await settle();
 }
 
-describe("offline audit answers", () => {
+describe("offline form answers", () => {
   it("retries an answer with the time and base it was given with", async () => {
     // The first write and its retry both fail, so the answer stays unwritten.
     const { answers, written } = await mountAnswers([
@@ -78,7 +78,7 @@ describe("offline audit answers", () => {
     // A sync shows a server answer the person never saw before answering.
     await act(async () =>
       show?.({
-        ...audit,
+        ...form,
         server: {
           answers: {
             exit: {

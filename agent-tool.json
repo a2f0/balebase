@@ -354,7 +354,7 @@
           {
             "name": "projects",
             "label": "Projects",
-            "alt": "Projects: the Harborline Electric job list with each project's crew and audit forms."
+            "alt": "Projects: the Harborline Electric job list with each project's crew and form templates."
           },
           {
             "name": "issues",
@@ -362,14 +362,14 @@
             "alt": "Issues: open and resolved work items with priority, assignee, and where each was raised."
           },
           {
-            "name": "audits",
-            "label": "Audits",
-            "alt": "Audits: in-progress and completed safety audits started from the NFPA 70E and residential checklists."
+            "name": "forms",
+            "label": "Forms",
+            "alt": "Forms: in-progress and completed safety forms started from the NFPA 70E and residential templates."
           },
           {
-            "name": "audit",
-            "label": "Audit",
-            "alt": "An NFPA 70E audit in progress, showing the issues it raised with their site photos."
+            "name": "form",
+            "label": "Form",
+            "alt": "An NFPA 70E form in progress, showing the issues it raised with their site photos."
           },
           {
             "name": "equipment",

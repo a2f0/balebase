@@ -3,8 +3,8 @@ import { productName } from "@balebase/ui/brand";
 import { DialogHost } from "@balebase/ui/react";
 import type {
   Project,
-  ProjectForm,
   ProjectSummary,
+  ProjectTemplate,
 } from "@balebase/validators/projects";
 import { DeviceContext, type DeviceState } from "../offline/offlineContext";
 import type { OfflineWorkspace } from "../offline/offlineStore";
@@ -21,12 +21,12 @@ beforeAll(async () => {
 
 const owner = { email: "owner@example.com", id: "owner", name: "Olivia" };
 const member = { email: "sam@example.com", id: "sam", name: "Sam" };
-function publishedForm(
+function publishedTemplate(
   id: string,
   name: string,
-  scope: ProjectForm["scope"],
+  scope: ProjectTemplate["scope"],
   version: number,
-): ProjectForm {
+): ProjectTemplate {
   return {
     createdAt: "2026-09-01T00:00:00.000Z",
     currentVersion: version,
@@ -59,15 +59,15 @@ function publishedForm(
   };
 }
 
-const forms: ProjectForm[] = [
-  publishedForm("walk", "Site walk", "organization", 3),
-  publishedForm("nfpa", "NFPA 70E", "global", 1),
+const templates: ProjectTemplate[] = [
+  publishedTemplate("walk", "Site walk", "organization", 3),
+  publishedTemplate("nfpa", "NFPA 70E", "global", 1),
 ];
 
 const edits: unknown[] = [];
 
 /**
- * Serves one project, applying member and form changes, and records writes.
+ * Serves one project, applying member and template changes, and records writes.
  * `elsewhere` is merged into the project when a member is added, as another
  * manager's saved edit would be; `initial` into the project as first served.
  */
@@ -81,8 +81,8 @@ function stubApi(
   let project: Project = {
     createdAt: "2026-10-01T00:00:00.000Z",
     description: "North wing",
-    formCount: 0,
-    forms: [],
+    templateCount: 0,
+    templates: [],
     id: "project-1",
     isMember: false,
     memberCount: 0,
@@ -98,7 +98,7 @@ function stubApi(
       return Response.json({ events: [], nextCursor: null });
     if (method === "GET")
       return Response.json({
-        availableForms: forms,
+        availableTemplates: templates,
         canManage,
         directory: [owner, member],
         project,
@@ -132,9 +132,16 @@ function stubApi(
     } else {
       const enabled =
         method === "PUT"
-          ? [...project.forms, ...forms.filter((form) => form.id === target)]
-          : project.forms.filter((form) => form.id !== target);
-      project = { ...project, formCount: enabled.length, forms: enabled };
+          ? [
+              ...project.templates,
+              ...templates.filter((template) => template.id === target),
+            ]
+          : project.templates.filter((template) => template.id !== target);
+      project = {
+        ...project,
+        templateCount: enabled.length,
+        templates: enabled,
+      };
     }
     return Response.json({ project });
   });
@@ -177,17 +184,17 @@ async function openTab(container: HTMLElement, label: string) {
   ) as HTMLElement;
 }
 
-/** A device workspace holding `audits`, with the jobs that sync them. */
+/** A device workspace holding `forms`, with the jobs that sync them. */
 function deviceWith(
-  audits: OfflineWorkspace["audits"],
+  forms: OfflineWorkspace["forms"],
   jobs: OfflineWorkspace["jobs"] = [],
 ): DeviceState {
   return {
     error: undefined,
     online: true,
     workspace: {
-      audits,
-      forms: [],
+      forms,
+      templates: [],
       issues: [],
       jobs,
       key: "device",
@@ -202,24 +209,24 @@ function deviceWith(
 
 type Job = OfflineWorkspace["jobs"][number];
 
-/** A sync job in `status`: the audit `id`'s start, or else a photo. */
+/** A sync job in `status`: the form `id`'s start, or else a photo. */
 function job(
   id: string,
   status: Job["status"],
-  { audit = false, error }: { audit?: boolean; error?: string } = {},
+  { form = false, error }: { form?: boolean; error?: string } = {},
 ): Job {
   return {
     attempts: 1,
     dependsOn: [],
     id,
-    operation: audit
+    operation: form
       ? {
           id,
           projectId: "project-1",
           answers: {},
           templateId: "walk",
           templateVersion: 3,
-          type: "auditStart",
+          type: "formStart",
         }
       : { id, type: "image", filename: "", issueId: "" },
     retryAt: 0,
@@ -242,15 +249,15 @@ function toggle(container: HTMLElement, name: string) {
   );
 }
 
-/** The collection a form is listed in, by the collection's heading. */
+/** The collection a template is listed in, by the collection's heading. */
 function collectionOf(container: HTMLElement, name: string) {
-  return [...container.querySelectorAll(".auditCollection")]
+  return [...container.querySelectorAll(".formCollection")]
     .find((section) =>
-      [...section.querySelectorAll(".auditTemplateName, .rowTitle")].some(
+      [...section.querySelectorAll(".formTemplateName, .rowTitle")].some(
         (title) => title.textContent === name,
       ),
     )
-    ?.querySelector(".auditCollectionTitle")?.firstChild?.textContent;
+    ?.querySelector(".formCollectionTitle")?.firstChild?.textContent;
 }
 
 /** Chooses `item` from the menu of the row titled `name`. */
@@ -268,7 +275,7 @@ function listed(id: string, name: string): ProjectSummary {
   return {
     createdAt: "2026-10-01T00:00:00.000Z",
     description: "North wing",
-    formCount: 1,
+    templateCount: 1,
     id,
     isMember: false,
     memberCount: 2,
@@ -301,7 +308,7 @@ function rowTitles(container: HTMLElement, heading: string) {
 }
 
 describe("project detail", () => {
-  it("shows members, audit forms, setup, and activity on separate tabs", async () => {
+  it("shows members, forms, setup, and activity on separate tabs", async () => {
     const { writes } = stubApi(true);
     const container = await render();
     const strip = container.querySelector(
@@ -310,7 +317,7 @@ describe("project detail", () => {
     const tabs = [...(strip?.querySelectorAll('[role="tab"]') ?? [])];
     expect(tabs.map((tab) => tab.textContent)).toEqual([
       "Members",
-      "Audit forms",
+      "Forms",
       "Project setup",
       "Activity",
     ]);
@@ -335,8 +342,8 @@ describe("project detail", () => {
     expect(shown()).toEqual(["Activity"]);
     expect(tabs[3]?.getAttribute("aria-selected")).toBe("true");
     expect(tabs[0]?.getAttribute("tabindex")).toBe("-1");
-    await click(queryButton("Audit forms", container));
-    expect(shown()).toEqual(["Audit forms"]);
+    await click(queryButton("Forms", container));
+    expect(shown()).toEqual(["Forms"]);
     await click(queryButton("Project setup", container));
     expect(shown()).toEqual(["Project setup"]);
     await click(queryButton("Members", container));
@@ -347,7 +354,7 @@ describe("project detail", () => {
     expect(writes).toEqual(["PUT /api/projects/project-1/members/sam"]);
   });
 
-  it("lets a manager add members and turn audit forms on and off", async () => {
+  it("lets a manager add members and turn form templates on and off", async () => {
     const { writes } = stubApi(true);
     const container = await render();
     expect(container.textContent).toContain("Hospital renovation");
@@ -367,7 +374,7 @@ describe("project detail", () => {
     await click(walk);
     await settle();
     expect(toggle(container, "Site walk")?.checked).toBe(true);
-    expect(container.textContent).toContain("1 form on");
+    expect(container.textContent).toContain("1 template on");
     await click(toggle(container, "Site walk"));
     await settle();
     expect(toggle(container, "Site walk")?.checked).toBe(false);
@@ -376,57 +383,57 @@ describe("project detail", () => {
     await settle();
     expect(writes).toEqual([
       "PUT /api/projects/project-1/members/sam",
-      "PUT /api/projects/project-1/forms/walk",
-      "DELETE /api/projects/project-1/forms/walk",
+      "PUT /api/projects/project-1/templates/walk",
+      "DELETE /api/projects/project-1/templates/walk",
       "DELETE /api/projects/project-1/members/sam",
     ]);
   });
 
-  it("lists forms as the Audits page does, without editing them", async () => {
+  it("lists templates as the Forms page does, without editing them", async () => {
     stubApi(true);
     const container = await render();
-    expect(collectionOf(container, "NFPA 70E")).toBe("Global forms");
-    expect(collectionOf(container, "Site walk")).toBe("Organization forms");
-    const card = toggle(container, "Site walk")?.closest(".auditTemplateCard");
+    expect(collectionOf(container, "NFPA 70E")).toBe("Global templates");
+    expect(collectionOf(container, "Site walk")).toBe("Organization templates");
+    const card = toggle(container, "Site walk")?.closest(".formTemplateCard");
     expect(card?.textContent).toContain("Site walk checklist");
     expect(card?.textContent).toContain("Published");
     expect(card?.textContent).toContain("1 item");
     expect(card?.textContent).toContain("v3");
-    for (const label of ["Edit", "Customize", "Start audit"])
+    for (const label of ["Edit", "Customize", "Start form"])
       expect(queryButton(label, card as HTMLElement)).toBeFalsy();
 
     const setup = toggle(container, "Site walk")?.closest('[role="tabpanel"]');
     await click(queryButton("List", setup as HTMLElement));
-    const row = toggle(container, "Site walk")?.closest(".auditTemplateRow");
+    const row = toggle(container, "Site walk")?.closest(".formTemplateRow");
     expect(row?.textContent).toContain("Site walk checklist");
-    expect(collectionOf(container, "NFPA 70E")).toBe("Global forms");
+    expect(collectionOf(container, "NFPA 70E")).toBe("Global templates");
   });
 
-  it("starts audits from the forms turned on for the project", async () => {
-    const walk = forms.filter((form) => form.id === "walk");
-    stubApi(false, {}, { formCount: 1, forms: walk });
+  it("starts forms from the templates turned on for the project", async () => {
+    const walk = templates.filter((template) => template.id === "walk");
+    stubApi(false, {}, { templateCount: 1, templates: walk });
     const container = await render();
-    const panel = await openTab(container, "Audit forms");
-    expect(collectionOf(panel, "Site walk")).toBe("Organization forms");
+    const panel = await openTab(container, "Forms");
+    expect(collectionOf(panel, "Site walk")).toBe("Organization templates");
     expect(panel.textContent).not.toContain("NFPA 70E");
     expect(panel.querySelector('input[role="switch"]')).toBeNull();
-    expect(panel.textContent).toContain("No audits on this device");
+    expect(panel.textContent).toContain("No forms on this device");
     // Without a device workspace (not yet prepared) nothing starts.
-    await click(queryButton("Start audit", panel));
+    await click(queryButton("Start form", panel));
     await settle();
     expect(panel.textContent).toContain(
-      "This device is still getting ready for audits.",
+      "This device is still getting ready for forms.",
     );
   });
 
-  it("lists the audits this device started for the project", async () => {
+  it("lists the forms this device started for the project", async () => {
     stubApi(false);
-    const [walk] = forms;
-    if (!walk) throw new Error("Missing form.");
+    const [walk] = templates;
+    if (!walk) throw new Error("Missing template.");
     const started = (
       id: string,
       projectId: string,
-      status: OfflineWorkspace["audits"][number]["status"],
+      status: OfflineWorkspace["forms"][number]["status"],
     ) => ({
       id,
       projectId,
@@ -446,14 +453,14 @@ describe("project detail", () => {
           started("other", "project-2", "draft"),
         ],
         [
-          job("ww", "blocked", { audit: true, error: "Form gone" }),
-          job("sss", "synced", { audit: true }),
-          job("pppp", "synced", { audit: true }),
+          job("ww", "blocked", { form: true, error: "Template gone" }),
+          job("sss", "synced", { form: true }),
+          job("pppp", "synced", { form: true }),
         ],
       ),
       (pathname) => visited.push(pathname),
     );
-    const panel = await openTab(container, "Audit forms");
+    const panel = await openTab(container, "Forms");
     const rows = [...panel.querySelectorAll(".rowList .row")].map(
       (row) => row.textContent,
     );
@@ -461,29 +468,29 @@ describe("project detail", () => {
     expect(rows[0]).toContain("Up to date");
     expect(rows[1]).toContain("Synced");
     expect(rows[2]).toContain("Not synced");
-    expect(rows[2]).toContain("Form gone");
+    expect(rows[2]).toContain("Template gone");
     expect(rows[3]).toContain("Draft");
-    for (const label of ["Open audit", "View"])
+    for (const label of ["Open form", "View"])
       await click(queryButton(label, panel));
     for (const button of panel.querySelectorAll("button"))
       if (button.textContent === "Continue") await click(button);
     await settle();
     expect(visited).toEqual([
-      "/audits/runs/sss",
-      "/projects/project-1/audits/ww",
-      "/projects/project-1/audits/pppp",
-      "/projects/project-1/audits/d",
+      "/forms/runs/sss",
+      "/projects/project-1/forms/ww",
+      "/projects/project-1/forms/pppp",
+      "/projects/project-1/forms/d",
     ]);
   });
 
-  it("counts an audit synced only once its issues and photos are", async () => {
+  it("counts a form synced only once its issues and photos are", async () => {
     stubApi(false);
-    const [walk] = forms;
-    if (!walk) throw new Error("Missing form.");
+    const [walk] = templates;
+    if (!walk) throw new Error("Missing template.");
     const device = deviceWith(
       [
         {
-          id: "audit",
+          id: "form",
           projectId: "project-1",
           ...unanswered,
           startedAt: "2026-10-01T00:00:00.000Z",
@@ -492,7 +499,7 @@ describe("project detail", () => {
         },
       ],
       [
-        job("audit", "synced", { audit: true }),
+        job("form", "synced", { form: true }),
         job("issue", "synced"),
         job("photo", "blocked", { error: "Photo refused" }),
       ],
@@ -504,7 +511,7 @@ describe("project detail", () => {
         images: [{ filename: "a.png", id: "photo" }],
         operation: {
           assignedTo: null,
-          auditId: "audit",
+          formId: "form",
           description: "",
           id: "issue",
           itemId: "item",
@@ -518,17 +525,17 @@ describe("project detail", () => {
     const container = await render(device, (pathname) =>
       visited.push(pathname),
     );
-    const panel = await openTab(container, "Audit forms");
+    const panel = await openTab(container, "Forms");
     const row = panel.querySelector(".rowList .row")?.textContent;
     expect(row).toContain("Not synced");
     expect(row).toContain("Photo refused");
     await click(queryButton("View", panel));
-    expect(visited).toEqual(["/projects/project-1/audits/audit"]);
+    expect(visited).toEqual(["/projects/project-1/forms/form"]);
   });
 
   it("shows the device's copy when the API cannot be reached", async () => {
-    const [walk] = forms;
-    if (!walk) throw new Error("Missing form.");
+    const [walk] = templates;
+    if (!walk) throw new Error("Missing template.");
     respond(async () =>
       Response.json({ error: "Unavailable" }, { status: 503 }),
     );
@@ -536,9 +543,9 @@ describe("project detail", () => {
     const workspace = device.workspace;
     if (!workspace) throw new Error("Missing workspace.");
     workspace.projects = [
-      { description: "", formIds: ["walk"], id: "project-1", name: "Site" },
+      { description: "", templateIds: ["walk"], id: "project-1", name: "Site" },
     ];
-    workspace.forms = [walk];
+    workspace.templates = [walk];
     for (const pathname of ["/projects", "/projects/project-1"]) {
       const { container } = await mount(
         <DeviceContext.Provider value={device}>
@@ -553,13 +560,13 @@ describe("project detail", () => {
         pathname === "/projects" ? "Your projects" : "Site walk",
       );
       if (pathname !== "/projects")
-        expect(queryButton("Start audit", container)).toBeTruthy();
+        expect(queryButton("Start form", container)).toBeTruthy();
     }
   });
 
-  it("keeps audits for projects the device no longer lists within reach", async () => {
-    const [walk] = forms;
-    if (!walk) throw new Error("Missing form.");
+  it("keeps forms for projects the device no longer lists within reach", async () => {
+    const [walk] = templates;
+    if (!walk) throw new Error("Missing template.");
     respond(async () => Response.json({ canManage: false, projects: [] }));
     const visited: string[] = [];
     const device = deviceWith([
@@ -581,9 +588,9 @@ describe("project detail", () => {
       </DeviceContext.Provider>,
     );
     await settle();
-    expect(container.textContent).toContain("Other audits on this device");
+    expect(container.textContent).toContain("Other forms on this device");
     await click(queryButton("Continue", container));
-    expect(visited).toEqual(["/projects/deleted-project/audits/left-behind"]);
+    expect(visited).toEqual(["/projects/deleted-project/forms/left-behind"]);
   });
 
   it("lists deleted projects and lets a manager restore one", async () => {
@@ -865,16 +872,18 @@ describe("project detail", () => {
     expect(container.querySelector("select")).toBeNull();
     expect(container.querySelector('input[type="checkbox"]')).toBeNull();
     expect(queryButton("Edit", container)).toBeFalsy();
-    expect(container.textContent).toContain("No global forms turned on");
-    expect(container.textContent).toContain("No organization forms turned on");
+    expect(container.textContent).toContain("No global templates turned on");
+    expect(container.textContent).toContain(
+      "No organization templates turned on",
+    );
     expect(writes).toEqual([]);
   });
 
-  it("shows members the forms turned on, without switches", async () => {
-    const walk = forms.filter((form) => form.id === "walk");
-    stubApi(false, {}, { formCount: 1, forms: walk });
+  it("shows members the templates turned on, without switches", async () => {
+    const walk = templates.filter((template) => template.id === "walk");
+    stubApi(false, {}, { templateCount: 1, templates: walk });
     const container = await render();
-    expect(collectionOf(container, "Site walk")).toBe("Organization forms");
+    expect(collectionOf(container, "Site walk")).toBe("Organization templates");
     expect(container.textContent).not.toContain("NFPA 70E");
     expect(container.querySelector('input[role="switch"]')).toBeNull();
   });

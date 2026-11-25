@@ -282,7 +282,7 @@ async function countOrganizationTemplates(
 ) {
   const row = await database
     .prepare(
-      `SELECT COUNT(*) AS count FROM audit_template_families
+      `SELECT COUNT(*) AS count FROM form_template_families
        WHERE scope = 'organization' AND organization_id = ?`,
     )
     .bind(organizationId)

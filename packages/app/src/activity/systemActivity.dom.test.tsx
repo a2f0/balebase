@@ -17,7 +17,7 @@ const maintenance: ActivityActor = {
   email: "",
   id: null,
   name: "Balebase maintenance",
-  source: "purgeExpiredFreeAuditRuns",
+  source: "purgeExpiredFreeFormRuns",
   type: "system",
 };
 
@@ -53,15 +53,15 @@ describe("system and provider activity", () => {
         events: [
           activity(
             4,
-            "organization.audit_runs_purged",
+            "organization.form_runs_purged",
             { id: "org", label: "Acme", type: "organization" },
             { completedBefore: "2026-07-27", count: 3, retentionDays: 30 },
           ),
           activity(
             3,
-            "project.form_disabled",
+            "project.template_disabled",
             { id: "project", label: "Site A", type: "project" },
-            { reason: "form_purged", templateId: "form", title: "Safety" },
+            { reason: "template_purged", templateId: "form", title: "Safety" },
           ),
           activity(
             2,
@@ -89,12 +89,16 @@ describe("system and provider activity", () => {
     await settle();
     const rows = rowsOf(container);
     expect(rows[0]).toContain(
-      "Balebase maintenance removed audits past Free-plan retention",
+      "Balebase maintenance removed forms past Free-plan retention",
     );
     expect(rows[0]).toContain("Automatic maintenance");
-    expect(rows[0]).toContain("3 completed audits from before");
-    expect(rows[1]).toContain("Balebase maintenance turned off an audit form");
-    expect(rows[1]).toContain("Safety · The discarded global form was purged");
+    expect(rows[0]).toContain("3 completed forms from before");
+    expect(rows[1]).toContain(
+      "Balebase maintenance turned off a form template",
+    );
+    expect(rows[1]).toContain(
+      "Safety · The discarded global template was purged",
+    );
     expect(rows[1]).toContain("Open project");
     expect(rows[2]).toContain(
       "Balebase maintenance permanently deleted an email from Trash",
