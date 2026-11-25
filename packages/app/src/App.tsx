@@ -315,8 +315,6 @@ function AuthenticatedWorkspace({
     pathname === "/inbox";
   return (
     <WorkspaceShell
-      // Each account reads the shell's settings afresh; sign-out clears them.
-      key={session.user.id}
       accountLoadError={accounts.loadError}
       accounts={accounts.accounts}
       activePage={route.page}

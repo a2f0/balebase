@@ -88,16 +88,24 @@ export function WorkspaceShell({
   contentKey,
   ...sidebar
 }: WorkspaceShellProps) {
-  const [sidebarWidth, setSidebarWidth] = useState(readSidebarWidth);
+  const session = sidebar.activeSessionToken;
+  const [width, setWidth] = useState(() => ({
+    session,
+    value: readSidebarWidth(),
+  }));
+  // Another account reads the width afresh: after a sign-out cleared it, the
+  // account left signed in starts from the default.
+  if (width.session !== session)
+    setWidth({ session, value: readSidebarWidth() });
   const shellStyle = {
-    "--sidebar-width": `${sidebarWidth}px`,
+    "--sidebar-width": `${width.value}px`,
   } as CSSProperties;
   return (
     <div className="shell" style={shellStyle}>
       <Sidebar {...sidebar} />
       <SidebarResizeHandle
-        onWidthChange={setSidebarWidth}
-        width={sidebarWidth}
+        onWidthChange={(value) => setWidth({ session, value })}
+        width={width.value}
       />
       <main className="shellMain" key={contentKey}>
         {children}
