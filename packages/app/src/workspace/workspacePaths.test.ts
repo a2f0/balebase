@@ -6,6 +6,7 @@ import {
   backgroundCheckPath,
   businessIdForPath,
   businessPath,
+  capabilityForPath,
   contractIdForPath,
   contractPath,
   contractTemplateIdForPath,
@@ -163,6 +164,16 @@ describe("workspace paths", () => {
       "check/1",
     );
     expect(backgroundCheckIdForPath("/background-checks")).toBeUndefined();
+  });
+
+  it("names the capability a path's pages need", () => {
+    expect(capabilityForPath("/finance/accounts/a1")).toBe("finance");
+    expect(capabilityForPath("/background-checks")).toBe("background_checks");
+    expect(capabilityForPath("/background-checks/c1")).toBe(
+      "background_checks",
+    );
+    expect(capabilityForPath("/background-checks-old")).toBeUndefined();
+    expect(capabilityForPath("/organization/requests/r1")).toBeUndefined();
   });
 
   it("round-trips contract paths", () => {

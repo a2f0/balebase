@@ -346,6 +346,12 @@ bun run deploy:verify   # check all production URLs
 `DEPLOY_TIER=staging` selects staging for `deploy:verify` and
 `deploy:email:verify`; `bun run deploy:staging:verify` is the shortcut.
 
+Deploy the app right after the API when migration
+`0108_hr_background_checks.sql` ships. An app built before it knows only the
+Finance capability, so saving the HR group's Access tab there removes its
+Background checks access; turn it back on from a current build if that
+happens. Native builds keep that editor until their next release.
+
 Website builds publish the shared screenshot capture
 ([screenshots](../CONTRIBUTING.md#screenshots)) and refuse one that is
 running, failed, or uncommitted; check the take-screenshots skill's `status`

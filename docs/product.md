@@ -298,7 +298,9 @@ Better Auth's default team is turned off. Finance navigation and every
 capability and enabled paid features for the organization. The Background
 checks page and every background check request need membership in a group
 with the Background checks capability; owners and admins outside such a group
-don't see background checks.
+don't see background checks. Group membership doesn't follow roles: someone
+demoted from owner or admin keeps the HR group, and its background checks,
+until removed from it, and a new owner or admin joins only when added.
 
 **Organization → Access** lists groups as compact rows; each opens a group
 page (`/organization/access/groups/<id>`) with **Members**, **Access** (name

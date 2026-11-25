@@ -138,6 +138,41 @@ describe("background checks", () => {
     expect(visited).toEqual(["/background-checks/created"]);
   });
 
+  it("opens nothing for a request that answers after the page went away", async () => {
+    const visited: string[] = [];
+    let answer: ((response: Response) => void) | undefined;
+    respond(async (url, init) => {
+      if (url.pathname === "/api/organization-settings/people")
+        return Response.json(people);
+      if (init?.method === "POST")
+        return new Promise<Response>((resolve) => {
+          answer = resolve;
+        });
+      return Response.json({ requirements: [] });
+    });
+    const view = await mount(
+      <PaidFeaturesContext value>
+        <BackgroundChecks
+          onNavigate={(path) => visited.push(path)}
+          pathname="/background-checks"
+        />
+      </PaidFeaturesContext>,
+    );
+    await click("Request a check");
+    await settle();
+    await fill(view.container.querySelector("select"), "member:member-pat");
+    await fill(
+      view.container.querySelector<HTMLInputElement>("input[type=date]"),
+      "2026-12-31",
+    );
+    await click("Add check");
+    expect(answer).toBeDefined();
+    await view.unmount();
+    answer?.(Response.json({ ids: ["late"] }, { status: 201 }));
+    await settle();
+    expect(visited).toEqual([]);
+  });
+
   it("keeps the request form closed to new checks without paid features", async () => {
     respond(async (url) =>
       url.pathname === "/api/organization-settings/people"

@@ -50,6 +50,10 @@ const options: Array<{ kind: EmployeeRequirementKind; title: string }> = [
   { kind: "credit_check", title: "Credit check" },
 ];
 
+function optionKeyOf(option: { kind: string; title: string } | undefined) {
+  return option ? `${option.kind}:${option.title}` : "";
+}
+
 export function RequirementDraftEditor({
   drafts,
   disabled,
@@ -65,10 +69,15 @@ export function RequirementDraftEditor({
   const offered = options.filter(
     ({ kind }) => kind !== "background_check" || handlesBackgroundChecks,
   );
-  const [optionIndex, setOptionIndex] = useState(0);
+  // Chosen by name, not position, so a choice stays put when access changes
+  // what is offered; one no longer offered falls back to the first.
+  const [optionKey, setOptionKey] = useState(optionKeyOf(options[0]));
   const [dueDate, setDueDate] = useState("");
   const [customTitle, setCustomTitle] = useState("");
-  const selected = offered[optionIndex] ?? { kind: "form", title: "W-4" };
+  const selected = offered.find(
+    (option) => optionKeyOf(option) === optionKey,
+  ) ??
+    offered[0] ?? { kind: "form", title: "W-4" };
   function add() {
     const title =
       selected.title === "Other form" ? customTitle.trim() : selected.title;
@@ -91,16 +100,16 @@ export function RequirementDraftEditor({
         <Field label="Requirement">
           <Select
             disabled={disabled}
-            onChange={(event) => setOptionIndex(Number(event.target.value))}
-            value={optionIndex}
+            onChange={(event) => setOptionKey(event.target.value)}
+            value={optionKeyOf(selected)}
           >
-            {offered.map((option, index) => (
+            {offered.map((option) => (
               <option
                 disabled={
                   option.kind === "background_check" && !paidFeaturesEnabled
                 }
-                key={`${option.kind}-${option.title}`}
-                value={index}
+                key={optionKeyOf(option)}
+                value={optionKeyOf(option)}
               >
                 {option.title}
               </option>

@@ -5,6 +5,7 @@ import {
   createFixture,
   createRequirement,
   jsonPost,
+  mockCheckr,
   orgId,
 } from "../testing/employeeFormFixture";
 import { seedMember } from "../testing/seed";
@@ -244,6 +245,50 @@ describe("background check access", () => {
       );
     expect(response.status).toBe(409);
     expect(requirementCount(fixture)).toBe(0);
+  });
+
+  it("refreshes an ordered credit check for a manager outside HR, until they stop managing", async () => {
+    const fixture = await createFixture();
+    configureCheckr(fixture);
+    const id = await createRequirement(fixture, "credit_check", "Credit check");
+    fixture.database
+      .query(
+        `UPDATE employee_requirements
+         SET checkr_candidate_id = 'candidate-1', checkr_report_id = 'report-1',
+             checkr_report_status = 'pending', status = 'in_progress'
+         WHERE id = ?`,
+      )
+      .run(id);
+    setHrMember(fixture, "owner", false);
+    const report = { status: "pending" };
+    const checkr = mockCheckr(() =>
+      Response.json({ candidate_id: "candidate-1", id: "report-1", ...report }),
+    );
+    const refresh = () =>
+      fixture
+        .app("owner", "owner")
+        .request(`/${id}/checkr/refresh`, { method: "POST" });
+    try {
+      expect((await refresh()).status).toBe(200);
+
+      // The refresh's write re-checks the role for a credit check.
+      report.status = "suspended";
+      fixture.beforeRun("checkr_refresh_revision + 1", () => {
+        fixture.database
+          .query("UPDATE member SET role = 'member' WHERE userId = 'owner'")
+          .run();
+      });
+      expect((await refresh()).status).toBe(409);
+      expect(
+        fixture.database
+          .query(
+            "SELECT checkr_report_status FROM employee_requirements WHERE id = ?",
+          )
+          .get(id),
+      ).toEqual({ checkr_report_status: "pending" });
+    } finally {
+      checkr.restore();
+    }
   });
 
   it("shows background check history only to those with Background checks access", async () => {

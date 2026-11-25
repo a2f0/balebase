@@ -7,6 +7,8 @@ import {
   PageBody,
   PageHeader,
 } from "@balebase/ui/react";
+import type { OrganizationCapability } from "@balebase/validators/organizationGroups";
+
 import { type ReactNode, useEffect, useState } from "react";
 import {
   accountReturnPath,
@@ -46,9 +48,8 @@ import {
 } from "./workspace/useWorkspaceOrganizations";
 import { WorkspaceShell, type WorkspaceUser } from "./workspace/WorkspaceShell";
 import {
-  backgroundCheckPath,
+  capabilityForPath,
   isRootAdminPath,
-  isWithin,
   movedWorkspacePath,
   organizationPathRequiresAccess,
   signingTokenForPath,
@@ -386,13 +387,19 @@ function blockedWorkspaceContent(
   if (organizationPathRequiresAccess(pathname) && access.isPending) {
     return <LoadingScreen />;
   }
+  const capability = capabilityForPath(pathname);
   if (
-    isWithin(pathname, "/finance") &&
+    capability &&
     !access.twoFactorRequirement &&
     !access.seatRequirement &&
-    !access.can("finance")
+    !access.can(capability)
   ) {
-    if (access.confirmed && !access.paidFeaturesEnabled) {
+    // Background checks don't need paid features to be read.
+    if (
+      capability === "finance" &&
+      access.confirmed &&
+      !access.paidFeaturesEnabled
+    ) {
       const canManage = canManageOrganization(access.memberRole);
       return (
         <FatalState
@@ -406,26 +413,20 @@ function blockedWorkspaceContent(
     }
     return (
       <FeatureAccessDenied
-        message="Finance group membership is required."
-        onNavigate={() => navigate("/")}
-      />
-    );
-  }
-  if (
-    isWithin(pathname, backgroundCheckPath()) &&
-    !access.twoFactorRequirement &&
-    !access.seatRequirement &&
-    !access.can("background_checks")
-  ) {
-    return (
-      <FeatureAccessDenied
-        message="Background checks group membership is required. An owner or admin can add you to a group with Background checks access, such as HR."
+        message={capabilityDenials[capability]}
         onNavigate={() => navigate("/")}
       />
     );
   }
   return undefined;
 }
+
+/** What someone outside every group granting a page's capability reads. */
+const capabilityDenials: Record<OrganizationCapability, string> = {
+  background_checks:
+    "Background checks group membership is required. An owner or admin can add you to a group with Background checks access, such as HR.",
+  finance: "Finance group membership is required.",
+};
 
 function NoOrganization() {
   return (

@@ -369,11 +369,6 @@ employeeForms.onError((error, context) => {
   return respondToUnexpectedError(error, context);
 });
 
-/**
- * The request the path names, when the signed-in person handles its kind.
- * Someone who handles no kind is refused before the lookup, so the answer
- * never says whether the request exists.
- */
 /** The member, or pending invitee, a request is for. */
 function findTarget(
   context: Context<ApiEnv>,
@@ -392,6 +387,11 @@ function findTarget(
     .first<{ email: string; user_id: string | null }>();
 }
 
+/**
+ * The request the path names, when the signed-in person handles its kind.
+ * Someone who handles no kind is refused before the lookup, so the answer
+ * never says whether the request exists.
+ */
 async function findHandledRequirement(context: Context<ApiEnv>) {
   const access = await requirementAccess(context);
   if (!access.forms && !access.backgroundChecks) {

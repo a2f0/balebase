@@ -18,7 +18,7 @@ import {
   type EmployeeRequirement,
   isBackgroundCheck,
 } from "@balebase/validators/employeeForms";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useManagedRequirements } from "../employeeForms/EmployeeForms";
 import { RequirementSections } from "../employeeForms/OrganizationRequirementPage";
 import { requirementBadge } from "../employeeForms/requirementStatus";
@@ -69,6 +69,15 @@ function BackgroundCheckList({
   const { action, busy, error, loading, notice, reload, requirements } =
     useManagedRequirements();
   const [requesting, setRequesting] = useState(false);
+  // Tags each request, so one that answers after the form closed or the page
+  // went away opens nothing.
+  const requestTag = useRef(0);
+  useEffect(
+    () => () => {
+      requestTag.current += 1;
+    },
+    [],
+  );
   const checks = requirements?.filter(({ kind }) => isBackgroundCheck(kind));
   return (
     <Page>
@@ -94,8 +103,12 @@ function BackgroundCheckList({
         {requesting && (
           <BackgroundCheckRequestForm
             busy={busy}
-            onCancel={() => setRequesting(false)}
+            onCancel={() => {
+              requestTag.current += 1;
+              setRequesting(false);
+            }}
             onRequest={async (target, dueDate) => {
+              const tag = ++requestTag.current;
               let created: string | undefined;
               await action(async () => {
                 const { ids } = await api.employeeForms.create(target, [
@@ -103,7 +116,8 @@ function BackgroundCheckList({
                 ]);
                 created = ids[0];
               }, "Background check added.");
-              if (created) onNavigate(backgroundCheckPath(created));
+              if (created && tag === requestTag.current)
+                onNavigate(backgroundCheckPath(created));
             }}
           />
         )}
