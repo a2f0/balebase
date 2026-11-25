@@ -4,7 +4,7 @@ import {
 } from "@balebase/validators/employeeForms";
 import { type Context, Hono } from "hono";
 import type { ApiEnv } from "../auth/apiEnv";
-import { requireManager } from "../organizations/organizationMembers";
+import { requireCapability } from "../organizations/organizationGroups";
 import { requirePaidFeature } from "../organizations/paidFeatureAccess";
 import { requestActor } from "../shared/activity";
 import { readBody, respond } from "../shared/respond";
@@ -27,6 +27,11 @@ import {
   type RequirementRow,
   screeningActive,
 } from "./employeeFormRecords";
+import {
+  handlerRequired,
+  handlesKind,
+  requirementAccess,
+} from "./requirementAccess";
 import {
   disclosureFingerprint,
   screeningDisclosures,
@@ -53,7 +58,7 @@ employeeFormScreening.use(
 
 employeeFormScreening.post(
   "/:id/checkr/request",
-  requireManager(),
+  requireCapability("background_checks"),
   async (context) => {
     const row = await findRequirement(context);
     if (
@@ -227,36 +232,41 @@ employeeFormScreening.post("/:id/checkr/submit", async (context) => {
   });
 });
 
-employeeFormScreening.post(
-  "/:id/checkr/refresh",
-  requireManager(),
-  async (context) => {
-    const row = await findRequirement(context);
-    if (!row?.checkr_report_id) {
-      return context.json({ error: "Screening not submitted." }, 404);
-    }
-    const refreshed = await refreshCheckrScreening(
-      context.env,
-      {
-        ...row,
-        checkr_report_id: row.checkr_report_id,
-        organization_id: context.get("organizationId"),
-      },
-      requestActor(context),
-      "manual",
-    );
-    if (!refreshed) {
-      return context.json({ error: "Screening changed. Please refresh." }, 409);
-    }
-    return respond(context, employeeFormsRoutes.refreshScreening, {
-      reportStatus: refreshed.reportStatus,
-      result: refreshed.result,
-    });
-  },
-);
+employeeFormScreening.post("/:id/checkr/refresh", async (context) => {
+  const access = await requirementAccess(context);
+  if (!access.forms && !access.backgroundChecks) {
+    return context.json({ error: handlerRequired("form") }, 403);
+  }
+  const row = await findRequirement(context);
+  if (!row?.checkr_report_id) {
+    return context.json({ error: "Screening not submitted." }, 404);
+  }
+  // Credit reports ordered through Checkr's hosted invitations still refresh,
+  // for the managers who handle them.
+  if (!handlesKind(access, row.kind)) {
+    return context.json({ error: handlerRequired(row.kind) }, 403);
+  }
+  const refreshed = await refreshCheckrScreening(
+    context.env,
+    {
+      ...row,
+      checkr_report_id: row.checkr_report_id,
+      organization_id: context.get("organizationId"),
+    },
+    requestActor(context),
+    "manual",
+  );
+  if (!refreshed) {
+    return context.json({ error: "Screening changed. Please refresh." }, 409);
+  }
+  return respond(context, employeeFormsRoutes.refreshScreening, {
+    reportStatus: refreshed.reportStatus,
+    result: refreshed.result,
+  });
+});
 
 // The signed authorization behind the ordered report, for the person and
-// managers.
+// those who handle background checks.
 employeeFormScreening.get("/:id/checkr/consent", async (context) => {
   const row = await findRequirement(context);
   if (!row?.checkr_consent_id || !(await canAccessRequirement(context, row))) {

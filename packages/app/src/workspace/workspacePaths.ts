@@ -78,6 +78,17 @@ export function projectFormForPath(pathname: string) {
   return { formId: decode(match[2]), projectId: decode(match[1]) };
 }
 
+/** The background check list, or one background check. */
+export function backgroundCheckPath(requirementId?: string) {
+  return requirementId
+    ? `/background-checks/${encodeURIComponent(requirementId)}`
+    : "/background-checks";
+}
+
+export function backgroundCheckIdForPath(pathname: string) {
+  return recordIdForPath(pathname, "/background-checks");
+}
+
 /** The business list, or one business. */
 export function businessPath(businessId?: string) {
   return businessId

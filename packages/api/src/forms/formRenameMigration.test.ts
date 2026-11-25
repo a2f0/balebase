@@ -110,7 +110,7 @@ it("carries audits, their issues, photos, history, and jobs over to forms", () =
     users: count(database, "user"),
   };
 
-  applyMigrations(database, { from: "0107" });
+  applyMigrations(database, { before: "0108", from: "0107" });
 
   expect(database.query("PRAGMA foreign_key_check").all()).toEqual([]);
   for (const table of [

@@ -34,7 +34,7 @@ const groupId = { id: "Group id from list_groups." };
 
 const groupFields = {
   capabilities:
-    'Capabilities members of this group receive. "finance" grants the Finance pages and tools.',
+    'Capabilities members of this group receive. "finance" grants the Finance pages and tools; "background_checks" grants the Background checks page and the background check tools.',
   name: "Group name, unique in the organization.",
   userIds:
     "User ids (not member ids) of the organization members in the group. This replaces the current members.",

@@ -234,16 +234,16 @@ export const contractTools: McpTool[] = [
   },
   {
     description:
-      "Lists employee requirements (forms, background checks, credit checks) with due dates, status, uploads, and Checkr progress.",
+      "Lists employee requirements (forms, background checks, credit checks) with due dates, status, uploads, and Checkr progress. Owners and admins see forms and credit checks; members of a group with Background checks access see background checks; anyone else sees only their own.",
     name: "list_employee_requirements",
-    // The key's creator manages requirements; their own list is the app's.
+    // The key's creator handles requirements; their own list is the app's.
     omit: ["for"],
     route: employeeFormsRoutes.list,
     title: "List employee requirements",
   },
   {
     description:
-      "Assigns forms or screenings to one member or pending invitation. Send exactly one of memberId and invitationId.",
+      "Assigns forms or screenings to one member or pending invitation. Send exactly one of memberId and invitationId. Background checks need Background checks access; other kinds need an owner or admin.",
     descriptions: {
       invitationId:
         "A pending invitation id from list_people; use instead of memberId.",
@@ -275,7 +275,7 @@ export const contractTools: McpTool[] = [
   },
   {
     description:
-      "Lists one employee requirement's history, newest first, 50 events per page: assignment, due date and status changes, uploads, and background check requests. Organization owners and admins only. Pass nextCursor to page.",
+      "Lists one employee requirement's history, newest first, 50 events per page: assignment, due date and status changes, uploads, and background check requests. Owners and admins read forms and credit checks; members of a group with Background checks access read background checks. Pass nextCursor to page.",
     descriptions: { ...requirementId, ...activityCursor },
     name: "list_employee_requirement_activity",
     route: employeeFormsRoutes.activity,
@@ -291,7 +291,7 @@ export const contractTools: McpTool[] = [
     title: "Delete employee requirement",
   },
   {
-    description: `Requests a Checkr background check at a work location. ${productName} emails the person, who reviews the disclosures, enters their details, and signs the authorization in the app; ${productName} then orders the report. Credit checks are tracked manually.`,
+    description: `Requests a Checkr background check at a work location. ${productName} emails the person, who reviews the disclosures, enters their details, and signs the authorization in the app; ${productName} then orders the report. Needs Background checks access. Credit checks are tracked manually.`,
     descriptions: {
       ...requirementId,
       city: "Optional work city.",

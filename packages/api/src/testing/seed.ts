@@ -94,7 +94,7 @@ export function seedGroup(
     capabilities?: string[];
     userIds?: string[];
     /** Marks the group as one the product keeps, as sign-up's Finance group. */
-    builtIn?: "finance";
+    builtIn?: "finance" | "hr";
   },
 ) {
   const name = group.name ?? "Finance";
@@ -142,7 +142,8 @@ export function seedGroup(
 /**
  * A user who owns their default organization, as sign-up leaves them: the
  * organization `org_<id>` with the owner membership `member_<id>` and its
- * Finance group.
+ * Finance group. Sign-up's HR group is left out; seed one with `seedGroup`
+ * (`builtIn: "hr"`) where a test handles background checks.
  */
 export function seedAccount(
   database: Database,

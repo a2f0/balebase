@@ -20,6 +20,7 @@ function Shell({ session }: { session: string }) {
     activeOrganizationId: undefined,
     activePage: "projects",
     activeSessionToken: session,
+    canAccessBackgroundChecks: false,
     canAccessFinance: false,
     children: <span>Workspace content</span>,
     contentKey: undefined,

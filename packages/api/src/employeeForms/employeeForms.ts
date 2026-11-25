@@ -2,13 +2,8 @@ import {
   type EmployeeRequirementUpdate,
   employeeFormsRoutes,
 } from "@balebase/validators/employeeForms";
-import { Hono } from "hono";
+import { type Context, Hono } from "hono";
 import type { ApiEnv } from "../auth/apiEnv";
-import {
-  canManage,
-  requireManager,
-  stillManages,
-} from "../organizations/organizationMembers";
 import { paidFeaturesEnabled } from "../organizations/paidFeatureAccess";
 import { activityBatch, findActivity, requestActor } from "../shared/activity";
 import { readBody, respond } from "../shared/respond";
@@ -23,6 +18,12 @@ import {
 } from "./employeeFormRecords";
 import { employeeFormScreening } from "./employeeFormScreening";
 import {
+  handlerRequired,
+  handlesKind,
+  requirementAccess,
+  stillHandlesKind,
+} from "./requirementAccess";
+import {
   jsonBoolean,
   requirementActivityStatement,
 } from "./requirementActivity";
@@ -32,9 +33,11 @@ const employeeForms = new Hono<ApiEnv>();
 employeeForms.get("/", async (context) => {
   const organizationId = context.get("organizationId");
   // My documents lists only the person's own requests, as the person sees
-  // them, even when they also manage the organization.
+  // them, even when they also handle the organization's.
   const own = context.req.query("for") === "me";
-  const manager = !own && canManage(context);
+  const access = own
+    ? { backgroundChecks: false, forms: false }
+    : await requirementAccess(context);
   const userId = context.get("authSession").user.id;
   const result = await context.env.DB.prepare(
     `SELECT requirement.id, requirement.kind, requirement.title,
@@ -58,30 +61,46 @@ employeeForms.get("/", async (context) => {
      LEFT JOIN user AS target ON target.id = member.userId
      LEFT JOIN invitation ON invitation.id = requirement.invitation_id
      WHERE requirement.organization_id = ?
-       AND (${manager ? "1 = 1" : "member.userId = ?"})
+       AND (member.userId = ?
+         OR (? AND requirement.kind <> 'background_check')
+         OR (? AND requirement.kind = 'background_check'))
      ORDER BY requirement.due_date ASC, requirement.created_at ASC`,
   )
     .bind(
-      ...(manager
-        ? [userId, organizationId]
-        : [userId, organizationId, userId]),
+      userId,
+      organizationId,
+      userId,
+      access.forms ? 1 : 0,
+      access.backgroundChecks ? 1 : 0,
     )
     .all<RequirementRow>();
   const paidEnabled = await paidFeaturesEnabled(context.env.DB, organizationId);
   return respond(context, employeeFormsRoutes.list, {
     requirements: result.results.map((row) =>
-      toRequirement(row, manager, context.env, paidEnabled),
+      toRequirement(
+        row,
+        handlesKind(access, row.kind),
+        context.env,
+        paidEnabled,
+      ),
     ),
   });
 });
 
-employeeForms.post("/", requireManager(), async (context) => {
+employeeForms.post("/", async (context) => {
   const body = await readBody(
     context,
     employeeFormsRoutes.create,
     "A target and requirements are required.",
   );
   if (body instanceof Response) return body;
+  const access = await requirementAccess(context);
+  const refused = body.requirements.find(
+    ({ kind }) => !handlesKind(access, kind),
+  );
+  if (refused) {
+    return context.json({ error: handlerRequired(refused.kind) }, 403);
+  }
   const memberId = body.memberId || null;
   const invitationId = body.invitationId || null;
   const organizationId = context.get("organizationId");
@@ -101,17 +120,22 @@ employeeForms.post("/", requireManager(), async (context) => {
   const { requirements } = body;
   const ids = requirements.map(() => crypto.randomUUID());
   const actor = requestActor(context);
-  const manages = stillManages(organizationId, actor.userId);
   const database = context.env.DB;
-  // Each request is recorded as it was assigned; a manager demoted meanwhile
-  // assigns nothing.
+  // Each request is recorded as it was assigned; someone who stopped handling
+  // its kind meanwhile assigns nothing.
   const inserted = await activityBatch(
     database,
     actor.apiKey,
-    requirements.flatMap((requirement, index) => [
-      database
-        .prepare(
-          `INSERT INTO employee_requirements
+    requirements.flatMap((requirement, index) => {
+      const manages = stillHandlesKind(
+        organizationId,
+        actor.userId,
+        requirement.kind,
+      );
+      return [
+        database
+          .prepare(
+            `INSERT INTO employee_requirements
            (id, organization_id, invitation_id, member_id, target_email,
             assigned_user_id,
             kind, title, due_date, created_at, updated_at)
@@ -121,35 +145,36 @@ employeeForms.post("/", requireManager(), async (context) => {
              WHERE id = ? AND organizationId = ?
                ${memberId ? "" : "AND status = 'pending'"}
            ) AND ${manages.sql}`,
-        )
-        .bind(
-          ids[index] ?? "",
-          organizationId,
-          invitationId,
-          memberId,
-          target.email.toLowerCase(),
-          target.user_id,
-          requirement.kind,
-          requirement.title,
-          requirement.dueDate,
-          now,
-          now,
-          memberId ?? invitationId,
-          organizationId,
-          ...manages.bindings,
-        ),
-      requirementActivityStatement(database, {
-        action: "employee_requirement.assigned",
-        actorId: actor.userId,
-        details: {
-          bindings: [],
-          sql: `'dueDate', due_date,
+          )
+          .bind(
+            ids[index] ?? "",
+            organizationId,
+            invitationId,
+            memberId,
+            target.email.toLowerCase(),
+            target.user_id,
+            requirement.kind,
+            requirement.title,
+            requirement.dueDate,
+            now,
+            now,
+            memberId ?? invitationId,
+            organizationId,
+            ...manages.bindings,
+          ),
+        requirementActivityStatement(database, {
+          action: "employee_requirement.assigned",
+          actorId: actor.userId,
+          details: {
+            bindings: [],
+            sql: `'dueDate', due_date,
             'invited', ${jsonBoolean("invitation_id IS NOT NULL")}`,
-        },
-        organizationId,
-        requirementId: ids[index] ?? "",
-      }),
-    ]),
+          },
+          organizationId,
+          requirementId: ids[index] ?? "",
+        }),
+      ];
+    }),
   );
   if (
     inserted.some((result, index) => index % 2 === 0 && !result.meta.changes)
@@ -162,9 +187,9 @@ employeeForms.post("/", requireManager(), async (context) => {
   return respond(context, employeeFormsRoutes.create, { ids }, 201);
 });
 
-employeeForms.patch("/:id", requireManager(), async (context) => {
-  const row = await findRequirement(context);
-  if (!row) return context.json({ error: "Requirement not found." }, 404);
+employeeForms.patch("/:id", async (context) => {
+  const row = await findHandledRequirement(context);
+  if (row instanceof Response) return row;
   const body = await readBody(
     context,
     employeeFormsRoutes.update,
@@ -178,7 +203,7 @@ employeeForms.patch("/:id", requireManager(), async (context) => {
   const now = new Date().toISOString();
   const organizationId = context.get("organizationId");
   const actor = requestActor(context);
-  const manages = stillManages(organizationId, actor.userId);
+  const manages = stillHandlesKind(organizationId, actor.userId, row.kind);
   const guard = {
     bindings: [
       row.id,
@@ -267,11 +292,11 @@ employeeForms.patch("/:id", requireManager(), async (context) => {
   return respond(context, employeeFormsRoutes.update, { ok: true });
 });
 
-// One request's history, for managers only, as the workspace feed's
+// One request's history, for those who handle it, as the workspace feed's
 // requested forms and checks are; the person never reads it.
-employeeForms.get("/:id/activity", requireManager(), async (context) => {
-  const row = await findRequirement(context);
-  if (!row) return context.json({ error: "Requirement not found." }, 404);
+employeeForms.get("/:id/activity", async (context) => {
+  const row = await findHandledRequirement(context);
+  if (row instanceof Response) return row;
   const page = await findActivity(
     context.env.DB,
     context.get("organizationId"),
@@ -286,9 +311,9 @@ employeeForms.get("/:id/activity", requireManager(), async (context) => {
     : context.json({ error: "Invalid activity cursor." }, 400);
 });
 
-employeeForms.delete("/:id", requireManager(), async (context) => {
-  const row = await findRequirement(context);
-  if (!row) return context.json({ error: "Requirement not found." }, 404);
+employeeForms.delete("/:id", async (context) => {
+  const row = await findHandledRequirement(context);
+  if (row instanceof Response) return row;
   if (screeningActive(row)) {
     return context.json(
       { error: "An ordered Checkr screening cannot be removed." },
@@ -297,7 +322,7 @@ employeeForms.delete("/:id", requireManager(), async (context) => {
   }
   const organizationId = context.get("organizationId");
   const actor = requestActor(context);
-  const manages = stillManages(organizationId, actor.userId);
+  const manages = stillHandlesKind(organizationId, actor.userId, row.kind);
   const guard = {
     bindings: [row.id, organizationId, ...manages.bindings],
     sql: `id = ? AND organization_id = ? AND checkr_starting_at IS NULL
@@ -350,6 +375,24 @@ employeeForms.onError((error, context) => {
   }
   return respondToUnexpectedError(error, context);
 });
+
+/**
+ * The request the path names, when the signed-in person handles its kind.
+ * Someone who handles no kind is refused before the lookup, so the answer
+ * never says whether the request exists.
+ */
+async function findHandledRequirement(context: Context<ApiEnv>) {
+  const access = await requirementAccess(context);
+  if (!access.forms && !access.backgroundChecks) {
+    return context.json({ error: handlerRequired("form") }, 403);
+  }
+  const row = await findRequirement(context);
+  if (!row) return context.json({ error: "Requirement not found." }, 404);
+  if (!handlesKind(access, row.kind)) {
+    return context.json({ error: handlerRequired(row.kind) }, 403);
+  }
+  return row;
+}
 
 /** Whether the requirement, as it is now, can take the update's status. */
 function isValidRequirementUpdate(

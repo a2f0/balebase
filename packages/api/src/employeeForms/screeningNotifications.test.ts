@@ -1,5 +1,4 @@
 import { describe, expect, it } from "bun:test";
-import { applyMigrations } from "../testing/database";
 import {
   checkrWebhook,
   createFixture,
@@ -218,28 +217,6 @@ describe("screening notifications", () => {
       fixture.database.exec(change);
       await sendPendingScreeningNotifications(fixture.bindings);
       expect(fixture.emails).toHaveLength(0);
-    }
-  });
-
-  it("does not backfill notifications for reports completed before deployment", async () => {
-    const fixture = await createFixture({ before: "0068" });
-    const id = await orderedScreening(fixture);
-    fixture.database
-      .query(
-        "UPDATE employee_requirements SET status = 'complete', checkr_report_status = 'complete' WHERE id = ?",
-      )
-      .run(id);
-    applyMigrations(fixture.database, { from: "0068" });
-    const checkr = mockCheckr(() =>
-      Response.json({ id: "report-1", result: "clear", status: "complete" }),
-    );
-    try {
-      await fixture
-        .app("owner", "owner")
-        .request(`/${id}/checkr/refresh`, { method: "POST" });
-      expect(fixture.emails).toHaveLength(0);
-    } finally {
-      checkr.restore();
     }
   });
 

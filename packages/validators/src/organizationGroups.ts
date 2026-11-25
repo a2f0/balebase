@@ -16,10 +16,10 @@ export const adminsGroupId = "admins";
 const OrganizationGroupSchema = z.object({
   /**
    * Groups the product keeps: `admins` lists owners and admins and cannot be
-   * changed here; `finance` is the organization's starting Finance group,
-   * which can be edited but not deleted.
+   * changed here; `finance` and `hr` are the organization's starting Finance
+   * and HR groups, which can be edited but not deleted.
    */
-  builtIn: z.enum(["admins", "finance"]).nullable(),
+  builtIn: z.enum(["admins", "finance", "hr"]).nullable(),
   capabilities: z.array(OrganizationCapabilitySchema),
   createdAt: z.string(),
   id: z.string(),

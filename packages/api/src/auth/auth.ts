@@ -302,7 +302,7 @@ function configuredOrganizationPlugin(env: Bindings, waitUntil: WaitUntil) {
       },
       afterCreateOrganization: async ({ organization, user }) => {
         await updateDefaultOrganization(env.DB, user.id, organization.id);
-        await createDefaultFinanceGroup(env.DB, organization.id, user.id);
+        await createDefaultGroups(env.DB, organization.id, user.id);
       },
       afterAcceptInvitation: async ({
         invitation,
@@ -431,7 +431,7 @@ async function provisionDefaultOrganization(
       update: { defaultOrganizationId: organizationRecord.id },
       where: [{ field: "id", value: user.id }],
     });
-    await createDefaultFinanceGroup(database, organizationRecord.id, user.id);
+    await createDefaultGroups(database, organizationRecord.id, user.id);
   } catch (error) {
     await adapter.delete({
       model: "organization",
@@ -441,49 +441,63 @@ async function provisionDefaultOrganization(
   }
 }
 
-async function createDefaultFinanceGroup(
+/**
+ * The groups every organization starts with, both built in: Finance, which
+ * grants Finance, and HR, which grants Background checks. The creator joins
+ * both, so they can use and hand out each feature.
+ */
+async function createDefaultGroups(
   database: D1Database,
   organizationId: string,
   userId: string,
 ) {
-  const groupId = crypto.randomUUID();
   const now = new Date().toISOString();
-  await database.batch([
-    database
-      .prepare(
-        `INSERT INTO "team"
-         ("id", "name", "organizationId", "memberCount", "createdAt", "updatedAt")
-         VALUES (?, 'Finance', ?, 1, ?, ?)`,
-      )
-      .bind(groupId, organizationId, now, now),
-    database
-      .prepare(
-        `INSERT INTO "teamMember"
-         ("id", "teamId", "userId", "membershipKey", "createdAt")
-         VALUES (?, ?, ?, NULL, ?)`,
-      )
-      .bind(crypto.randomUUID(), groupId, userId, now),
-    database
-      .prepare(
-        `INSERT INTO "organization_group_capability"
-         ("organization_id", "team_id", "capability") VALUES (?, ?, 'finance')`,
-      )
-      .bind(organizationId, groupId),
-    // The starting Finance group is kept: it can change, not be deleted.
-    database
-      .prepare(
-        `INSERT INTO organization_builtin_group (team_id, organization_id, kind)
-         VALUES (?, ?, 'finance')`,
-      )
-      .bind(groupId, organizationId),
-    // The organization's creator grants themselves Finance access.
-    groupCreatedActivity(database, {
-      actorId: userId,
-      groupId,
-      occurredAt: now,
-      organizationId,
+  await database.batch(
+    (
+      [
+        { capability: "finance", kind: "finance", name: "Finance" },
+        { capability: "background_checks", kind: "hr", name: "HR" },
+      ] as const
+    ).flatMap(({ capability, kind, name }) => {
+      const groupId = crypto.randomUUID();
+      return [
+        database
+          .prepare(
+            `INSERT INTO "team"
+             ("id", "name", "organizationId", "memberCount", "createdAt", "updatedAt")
+             VALUES (?, ?, ?, 1, ?, ?)`,
+          )
+          .bind(groupId, name, organizationId, now, now),
+        database
+          .prepare(
+            `INSERT INTO "teamMember"
+             ("id", "teamId", "userId", "membershipKey", "createdAt")
+             VALUES (?, ?, ?, NULL, ?)`,
+          )
+          .bind(crypto.randomUUID(), groupId, userId, now),
+        database
+          .prepare(
+            `INSERT INTO "organization_group_capability"
+             ("organization_id", "team_id", "capability") VALUES (?, ?, ?)`,
+          )
+          .bind(organizationId, groupId, capability),
+        // A starting group is kept: it can change, not be deleted.
+        database
+          .prepare(
+            `INSERT INTO organization_builtin_group (team_id, organization_id, kind)
+             VALUES (?, ?, ?)`,
+          )
+          .bind(groupId, organizationId, kind),
+        // The organization's creator grants themselves the group's access.
+        groupCreatedActivity(database, {
+          actorId: userId,
+          groupId,
+          occurredAt: now,
+          organizationId,
+        }),
+      ];
     }),
-  ]);
+  );
 }
 
 async function prepareSession(

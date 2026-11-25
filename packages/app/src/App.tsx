@@ -18,6 +18,7 @@ import { useAccountSessions } from "./account/accountSessions";
 import { AuthPage } from "./auth/AuthPage";
 import type { AuthenticationAction } from "./auth/authActions";
 import { useSessionRefetch } from "./auth/useSessionRefetch";
+import { BackgroundChecksAccessContext } from "./backgroundChecks/BackgroundChecksAccess";
 import { SigningPage } from "./contracts/SigningPage";
 import { useRevokedFinanceCleanup } from "./finance/useRevokedFinanceCleanup";
 import { Library } from "./library/Library";
@@ -45,6 +46,7 @@ import {
 } from "./workspace/useWorkspaceOrganizations";
 import { WorkspaceShell, type WorkspaceUser } from "./workspace/WorkspaceShell";
 import {
+  backgroundCheckPath,
   isRootAdminPath,
   isWithin,
   movedWorkspacePath,
@@ -320,6 +322,7 @@ function AuthenticatedWorkspace({
       activePage={route.page}
       activeOrganizationId={workspace.activeOrganizationId}
       activeSessionToken={session.session.token}
+      canAccessBackgroundChecks={access.can("background_checks")}
       canAccessFinance={access.can("finance")}
       contentKey={contentKey}
       onAccountChange={guardWorkspaceChange(accounts.switchAccount)}
@@ -334,33 +337,35 @@ function AuthenticatedWorkspace({
       user={session.user}
     >
       <PaidFeaturesContext value={access.paidFeaturesEnabled}>
-        {/* Device pages check their own access. */}
-        {offlinePage ?? (
-          <OrganizationGate
-            access={access}
-            navigate={navigate}
-            pathname={pathname}
-            signOut={guardWorkspaceChange(accounts.signOutActiveAccount)}
-          >
-            {showContent ? (
-              route.render({
-                access,
-                addAccount,
-                library,
-                navigate,
-                onSecurityChanged: async () => {
-                  await onSessionChanged();
-                  await access.refresh();
-                },
-                pathname,
-                user: session.user,
-                workspace,
-              })
-            ) : (
-              <NoOrganization />
-            )}
-          </OrganizationGate>
-        )}
+        <BackgroundChecksAccessContext value={access.can("background_checks")}>
+          {/* Device pages check their own access. */}
+          {offlinePage ?? (
+            <OrganizationGate
+              access={access}
+              navigate={navigate}
+              pathname={pathname}
+              signOut={guardWorkspaceChange(accounts.signOutActiveAccount)}
+            >
+              {showContent ? (
+                route.render({
+                  access,
+                  addAccount,
+                  library,
+                  navigate,
+                  onSecurityChanged: async () => {
+                    await onSessionChanged();
+                    await access.refresh();
+                  },
+                  pathname,
+                  user: session.user,
+                  workspace,
+                })
+              ) : (
+                <NoOrganization />
+              )}
+            </OrganizationGate>
+          )}
+        </BackgroundChecksAccessContext>
       </PaidFeaturesContext>
     </WorkspaceShell>
   );
@@ -399,7 +404,25 @@ function blockedWorkspaceContent(
         />
       );
     }
-    return <FeatureAccessDenied onNavigate={() => navigate("/")} />;
+    return (
+      <FeatureAccessDenied
+        message="Finance group membership is required."
+        onNavigate={() => navigate("/")}
+      />
+    );
+  }
+  if (
+    isWithin(pathname, backgroundCheckPath()) &&
+    !access.twoFactorRequirement &&
+    !access.seatRequirement &&
+    !access.can("background_checks")
+  ) {
+    return (
+      <FeatureAccessDenied
+        message="Background checks group membership is required. An owner or admin can add you to a group with Background checks access, such as HR."
+        onNavigate={() => navigate("/")}
+      />
+    );
   }
   return undefined;
 }
@@ -461,11 +484,17 @@ function AdminAccessDenied({ onNavigate }: { onNavigate: () => void }) {
   );
 }
 
-function FeatureAccessDenied({ onNavigate }: { onNavigate: () => void }) {
+function FeatureAccessDenied({
+  message,
+  onNavigate,
+}: {
+  message: string;
+  onNavigate: () => void;
+}) {
   return (
     <FatalState
       action="Return to your library"
-      message="Finance group membership is required."
+      message={message}
       onAction={onNavigate}
     />
   );

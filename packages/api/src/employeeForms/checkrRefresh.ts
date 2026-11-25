@@ -1,8 +1,8 @@
-import { stillManages } from "../organizations/organizationMembers";
 import { activityBatch } from "../shared/activity";
 import type { Bindings } from "../types";
 import { getCheckrReport } from "./checkr";
 import { isClosedReportStatus } from "./checkrScreening";
+import { stillHandlesRequirement } from "./requirementAccess";
 import {
   jsonBoolean,
   type ScreeningActor,
@@ -131,8 +131,9 @@ export async function refreshCheckrScreening(
 }
 
 /**
- * The refresh's guard (the revision it read, and for a manager that they
- * still manage) and whether it changes what the screening shows.
+ * The refresh's guard (the revision it read, and for a person that they still
+ * handle the screening's kind) and whether it changes what the screening
+ * shows.
  */
 function refreshGuard(
   row: CheckrScreeningRow,
@@ -142,7 +143,7 @@ function refreshGuard(
   const manages =
     "type" in actor
       ? { bindings: [], sql: "1 = 1" }
-      : stillManages(row.organization_id, actor.userId);
+      : stillHandlesRequirement(row.organization_id, actor.userId);
   return {
     changed: {
       bindings: [next.status, next.reportStatus, next.result],

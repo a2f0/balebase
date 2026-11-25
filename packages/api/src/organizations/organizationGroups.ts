@@ -5,6 +5,7 @@ import {
   organizationGroupsRoutes,
 } from "@balebase/validators/organizationGroups";
 import type { OrganizationMember } from "@balebase/validators/organizationSettings";
+import { organizationCapabilityLabels } from "@balebase/validators/rules";
 import { type Context, Hono } from "hono";
 import { createMiddleware } from "hono/factory";
 import type { ApiEnv } from "../auth/apiEnv";
@@ -33,7 +34,7 @@ const adminsFollowRoles =
 const builtInKept = "Built-in groups can't be deleted.";
 
 interface GroupRow {
-  built_in: "finance" | null;
+  built_in: "finance" | "hr" | null;
   created_at: string;
   id: string;
   name: string;
@@ -252,13 +253,15 @@ export function requireCapability(capability: OrganizationCapability) {
       capability,
     );
     if (!hasAccess) {
-      return context.json(
-        { error: `${capabilityLabel(capability)} group membership required.` },
-        403,
-      );
+      return context.json({ error: capabilityRequired(capability) }, 403);
     }
     return next();
   });
+}
+
+/** The refusal for someone whose groups don't grant `capability`. */
+export function capabilityRequired(capability: OrganizationCapability) {
+  return `${organizationCapabilityLabels[capability]} group membership required.`;
 }
 
 async function listUserCapabilities(
@@ -289,23 +292,42 @@ export async function userHasCapability(
   userId: string,
   capability: OrganizationCapability,
 ) {
+  const held = stillHasCapability(organizationId, userId, capability);
   return Boolean(
     await database
-      .prepare(
-        `SELECT 1
-         FROM organization_group_capability AS access
-         JOIN "team" ON "team"."id" = access.team_id
-         JOIN "teamMember" ON "teamMember"."teamId" = "team"."id"
-         WHERE access.organization_id = ? AND access.capability = ?
-           AND "team"."organizationId" = ? AND "teamMember"."userId" = ?
-           AND (access.capability <> 'finance' OR EXISTS (
-             SELECT 1 FROM organization WHERE id = access.organization_id
-               AND paid_features_enabled = 1))
-         LIMIT 1`,
-      )
-      .bind(organizationId, capability, organizationId, userId)
+      .prepare(`SELECT 1 WHERE ${held.sql}`)
+      .bind(...held.bindings)
       .first(),
   );
+}
+
+/**
+ * Holds while `userId` belongs to a group that grants `capability`, read
+ * inside the write's transaction: someone removed from the group after the
+ * request began cannot complete it. Finance also needs paid features.
+ */
+export function stillHasCapability(
+  organizationId: string,
+  userId: string,
+  capability: OrganizationCapability,
+) {
+  const paid =
+    capability === "finance"
+      ? `AND EXISTS (SELECT 1 FROM organization
+           WHERE id = access.organization_id AND paid_features_enabled = 1)`
+      : "";
+  return {
+    bindings: [organizationId, capability, organizationId, userId],
+    sql: `EXISTS (
+      SELECT 1
+      FROM organization_group_capability AS access
+      JOIN "team" ON "team"."id" = access.team_id
+      JOIN "teamMember" ON "teamMember"."teamId" = "team"."id"
+      WHERE access.organization_id = ? AND access.capability = ?
+        AND "team"."organizationId" = ? AND "teamMember"."userId" = ?
+        ${paid}
+    )`,
+  };
 }
 
 async function listGroups(database: D1Database, organizationId: string) {
@@ -658,10 +680,6 @@ function grantStatements(
         ),
     ),
   ];
-}
-
-function capabilityLabel(capability: OrganizationCapability) {
-  return capability[0]?.toUpperCase() + capability.slice(1);
 }
 
 export { organizationGroups };

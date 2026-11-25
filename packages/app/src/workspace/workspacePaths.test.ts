@@ -2,6 +2,8 @@ import { describe, expect, it } from "bun:test";
 import {
   adminOrganizationIdForPath,
   adminOrganizationPath,
+  backgroundCheckIdForPath,
+  backgroundCheckPath,
   businessIdForPath,
   businessPath,
   contractIdForPath,
@@ -152,6 +154,15 @@ describe("workspace paths", () => {
     expect(equipmentIdForPath(equipmentPath("item/1"))).toBe("item/1");
     expect(equipmentIdForPath("/equipment")).toBeUndefined();
     expect(equipmentIdForPath("/equipment/%E0%A4")).toBe("%E0%A4");
+  });
+
+  it("round-trips background check paths", () => {
+    expect(backgroundCheckPath()).toBe("/background-checks");
+    expect(backgroundCheckPath("check/1")).toBe("/background-checks/check%2F1");
+    expect(backgroundCheckIdForPath(backgroundCheckPath("check/1"))).toBe(
+      "check/1",
+    );
+    expect(backgroundCheckIdForPath("/background-checks")).toBeUndefined();
   });
 
   it("round-trips contract paths", () => {

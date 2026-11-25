@@ -48,7 +48,14 @@ const members = [
 const groups = [
   group("admins", "Admins", "admins", ["user-owner"]),
   group("finance", "Finance", "finance", ["user-owner"], ["finance"]),
-  group("ops", "Operations", null, ["user-mark"]),
+  group("hr", "HR", "hr", ["user-owner"], ["background_checks"]),
+  group(
+    "ops",
+    "Operations",
+    null,
+    ["user-mark"],
+    ["finance", "background_checks"],
+  ),
 ];
 
 /** Serves the groups and their history, and records every write. */
@@ -102,17 +109,19 @@ describe("organization groups", () => {
     expect(rows.map((row) => row.textContent)).toEqual([
       "AdminsBuilt-in1 member · Owners and admins",
       "FinanceBuilt-in1 member · Finance access",
-      "Operations1 member · No feature access",
+      "HRBuilt-in1 member · Background checks access",
+      "Operations1 member · Finance and Background checks access",
     ]);
     expect(rows.map((row) => row.getAttribute("href"))).toEqual([
       "/organization/access/groups/admins",
       "/organization/access/groups/finance",
+      "/organization/access/groups/hr",
       "/organization/access/groups/ops",
     ]);
     // No member pickers or delete buttons on the list itself.
     expect(container.querySelector('input[type="checkbox"]')).toBeNull();
     expect(queryButton("Delete group", container)).toBeNull();
-    await click(rows[2]);
+    await click(rows[3]);
     expect(paths).toEqual(["/organization/access/groups/ops"]);
   });
 
@@ -144,6 +153,39 @@ describe("organization groups", () => {
         },
         method: "PATCH",
         path: "/api/organization-groups/finance",
+      },
+    ]);
+  });
+
+  it("grants each access from its own checkbox, keeping the built-in HR group", async () => {
+    const { writes } = stubApi();
+    await render("hr");
+    expect(container.textContent).toContain("but not delete it");
+    expect(queryButton("Delete group", container)).toBeNull();
+    await click(queryButton("Access", container));
+    const access = Object.fromEntries(
+      [...container.querySelectorAll("label.groupCapability")].map((label) => [
+        label.textContent,
+        label.querySelector("input"),
+      ]),
+    );
+    expect(
+      Object.entries(access).map(([label, input]) => [label, input?.checked]),
+    ).toEqual([
+      ["Finance access", false],
+      ["Background checks access", true],
+    ]);
+    await click(access["Finance access"]);
+    await click(queryButton("Save group", container));
+    expect(writes).toEqual([
+      {
+        body: {
+          capabilities: ["finance", "background_checks"],
+          name: "HR",
+          userIds: ["user-owner"],
+        },
+        method: "PATCH",
+        path: "/api/organization-groups/hr",
       },
     ]);
   });

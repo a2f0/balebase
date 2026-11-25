@@ -75,7 +75,16 @@ export const financeLimits = {
 } as const;
 
 /** What membership in a group can grant. */
-export const organizationCapabilities = ["finance"] as const;
+export const organizationCapabilities = [
+  "finance",
+  "background_checks",
+] as const;
+
+/** Each capability's name where people choose or read a group's access. */
+export const organizationCapabilityLabels = {
+  background_checks: "Background checks",
+  finance: "Finance",
+} as const satisfies Record<(typeof organizationCapabilities)[number], string>;
 
 /** Features controlled together by the organization's paid-features setting. */
 export const paidFeatures = {

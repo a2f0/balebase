@@ -52,7 +52,8 @@ describe("organization role activity", () => {
       events: page?.events,
       nextCursor: null,
     });
-    // Signing up created the Finance group; its owner sees that grant.
+    // Signing up created the HR and Finance groups, newest event first; their
+    // owner sees both grants.
     const groups = await app.request(
       "/api/activity?resourceType=organization_group",
       { headers: { cookie: fixture.owner.cookie } },
@@ -61,6 +62,16 @@ describe("organization role activity", () => {
     );
     expect(await groups.json()).toMatchObject({
       events: [
+        {
+          action: "organization.group_created",
+          actor: { id: fixture.owner.id },
+          details: {
+            capabilities: ["background_checks"],
+            members: [{ userId: fixture.owner.id }],
+            name: "HR",
+          },
+          root: { label: "HR", type: "organization_group" },
+        },
         {
           action: "organization.group_created",
           actor: { id: fixture.owner.id },

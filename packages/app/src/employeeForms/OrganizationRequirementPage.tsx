@@ -124,7 +124,7 @@ function ManagedRequirement({
 }
 
 /** The request's details and next step, and its history, as tabs. */
-function RequirementSections({
+export function RequirementSections({
   action,
   busy,
   onNavigate,

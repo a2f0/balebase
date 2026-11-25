@@ -37,7 +37,12 @@ test("the canon's seated people are members with their roles", () => {
      JOIN user ON user.id = teamMember.userId
      GROUP BY team.id ORDER BY team.name`,
   );
-  expect(groups.map(({ name }) => name)).toEqual(["Field crew", "Finance"]);
+  // Sign-up's HR group keeps its owner; canon names no HR group.
+  expect(groups.map(({ name }) => name)).toEqual([
+    "Field crew",
+    "Finance",
+    "HR",
+  ]);
   expect(groups[1]?.members.split(",").toSorted()).toEqual([
     "dana@harborline.example.com",
     "jordan@harborline.example.com",

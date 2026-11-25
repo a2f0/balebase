@@ -1,6 +1,7 @@
 import { Field, Page, PageBody, PageHeader, Select } from "@balebase/ui/react";
 import type { ActivityResourceType } from "@balebase/validators/activity";
 import { useEffect, useState } from "react";
+import { useHandlesBackgroundChecks } from "../backgroundChecks/BackgroundChecksAccess";
 import { ActivityFeed } from "./ActivityFeed";
 
 const resourceLabels: Record<ActivityResourceType, string> = {
@@ -31,20 +32,26 @@ function isResourceType(value: string): value is ActivityResourceType {
   return Object.hasOwn(resourceLabels, value);
 }
 
+interface FilterAccess {
+  canAccessBackgroundChecks: boolean;
+  canAccessFinance: boolean;
+  canManage: boolean;
+}
+
 /**
- * Finance resources need Finance access; groups, invitations, billing, and the
- * forms and checks requested of people need a manager.
+ * Finance resources need Finance access; groups, invitations, and billing
+ * need a manager. Requests of people are forms and credit checks, which
+ * managers handle, and background checks, which Background checks access
+ * reads.
  */
-function canFilter(
-  value: string,
-  access: { canAccessFinance: boolean; canManage: boolean },
-) {
+function canFilter(value: string, access: FilterAccess) {
   if (value.startsWith("finance_")) return access.canAccessFinance;
+  if (value === "employee_requirement")
+    return access.canManage || access.canAccessBackgroundChecks;
   if (
     value === "organization_group" ||
     value === "organization_invitation" ||
-    value === "organization_billing" ||
-    value === "employee_requirement"
+    value === "organization_billing"
   )
     return access.canManage;
   return true;
@@ -59,18 +66,17 @@ export function Activity({
   canAccessFinance?: boolean;
   canManage?: boolean;
 }) {
+  const canAccessBackgroundChecks = useHandlesBackgroundChecks();
   const [selected, setSelected] = useState<ActivityResourceType>();
   useEffect(() => {
+    const access = { canAccessBackgroundChecks, canAccessFinance, canManage };
     setSelected((previous) =>
-      previous && !canFilter(previous, { canAccessFinance, canManage })
-        ? undefined
-        : previous,
+      previous && !canFilter(previous, access) ? undefined : previous,
     );
-  }, [canAccessFinance, canManage]);
+  }, [canAccessBackgroundChecks, canAccessFinance, canManage]);
+  const access = { canAccessBackgroundChecks, canAccessFinance, canManage };
   const resourceType =
-    selected && canFilter(selected, { canAccessFinance, canManage })
-      ? selected
-      : undefined;
+    selected && canFilter(selected, access) ? selected : undefined;
   return (
     <Page>
       <PageHeader
@@ -89,9 +95,7 @@ export function Activity({
           >
             <option value="">All resources</option>
             {Object.entries(resourceLabels)
-              .filter(([value]) =>
-                canFilter(value, { canAccessFinance, canManage }),
-              )
+              .filter(([value]) => canFilter(value, access))
               .map(([value, label]) => (
                 <option key={value} value={value}>
                   {label}

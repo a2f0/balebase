@@ -89,6 +89,24 @@ function reportEvent(id: string) {
   };
 }
 
+/** Adds `userId` to Acme's HR group, or takes them out of it. */
+function setHrMember(fixture: Fixture, userId: string, member: boolean) {
+  if (member) {
+    fixture.database
+      .query(
+        `INSERT INTO teamMember (id, teamId, userId, membershipKey, createdAt)
+         VALUES (?, 'team_hr_org_owner', ?, NULL, '2026-01-01')`,
+      )
+      .run(`hr-${userId}`, userId);
+    return;
+  }
+  fixture.database
+    .query(
+      "DELETE FROM teamMember WHERE teamId = 'team_hr_org_owner' AND userId = ?",
+    )
+    .run(userId);
+}
+
 const refresh = (
   fixture: Fixture,
   id: string,
@@ -146,7 +164,10 @@ describe("screening activity", () => {
     const checkr = reportAt({ result: "consider", status: "complete" });
     const before = state(fixture, id);
     try {
-      expect((await refresh(fixture, id, "member")).status).toBe(403);
+      // An owner outside the HR group doesn't handle background checks.
+      setHrMember(fixture, "owner", false);
+      expect((await refresh(fixture, id)).status).toBe(403);
+      setHrMember(fixture, "owner", true);
 
       // Another refresh landed first.
       fixture.beforeRun("checkr_refresh_revision + 1", () => {
@@ -160,16 +181,12 @@ describe("screening activity", () => {
       });
       expect((await refresh(fixture, id)).status).toBe(409);
 
-      // The manager stopped being one while the refresh ran.
-      fixture.beforeRun("checkr_refresh_revision + 1", () => {
-        fixture.database
-          .query("UPDATE member SET role = 'member' WHERE userId = 'owner'")
-          .run();
-      });
+      // They left the HR group while the refresh ran.
+      fixture.beforeRun("checkr_refresh_revision + 1", () =>
+        setHrMember(fixture, "owner", false),
+      );
       expect((await refresh(fixture, id)).status).toBe(409);
-      fixture.database
-        .query("UPDATE member SET role = 'owner' WHERE userId = 'owner'")
-        .run();
+      setHrMember(fixture, "owner", true);
 
       // The event failing rolls the refresh back.
       failInserts(fixture, "employee_requirement.screening_updated");

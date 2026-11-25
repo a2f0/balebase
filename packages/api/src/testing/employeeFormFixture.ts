@@ -11,7 +11,7 @@ import type { Bindings } from "../types";
 import { testBindings } from "./bindings";
 import { queryHooks, toD1 } from "./d1";
 import { createTestDatabase } from "./database";
-import { seedAccount, seedMember } from "./seed";
+import { seedAccount, seedGroup, seedMember } from "./seed";
 import { testApp } from "./session";
 
 export const orgId = "org_owner";
@@ -321,6 +321,15 @@ function seedPeople(database: Database) {
       id,
       ...(id === "owner" ? { organizationName: "Acme" } : {}),
     });
+  // Acme's owner handles its background checks through its HR group, as
+  // sign-up and migration 0108 arrange.
+  seedGroup(database, {
+    builtIn: "hr",
+    capabilities: ["background_checks"],
+    name: "HR",
+    organizationId: orgId,
+    userIds: ["owner"],
+  });
   seedMember(database, {
     createdAt: now(),
     id: "employee-member",
