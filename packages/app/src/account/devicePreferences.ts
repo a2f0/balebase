@@ -6,7 +6,8 @@ import { reloadThemePreference, themeStorageKey } from "./theme";
 /**
  * The display settings this browser keeps for whoever is signed in. Offline
  * work, saved bank transactions, and Plaid's pending repair reports are not
- * settings: sign-out locks or keeps them as their own modules decide.
+ * settings: sign-out locks or keeps them as their own modules decide. Add a
+ * new display setting's key here, and note it beside the key.
  */
 const devicePreferenceKeys = [
   formTemplateViewStorageKey,

@@ -1,5 +1,6 @@
 import type { ExpenseCategory } from "@balebase/validators/finance";
 
+// Sign-out clears it with the other display settings (../account/devicePreferences.ts).
 export const hideEmptyCategoriesStorageKey =
   "balebase.finance-hide-empty-categories";
 

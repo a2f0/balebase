@@ -3,6 +3,7 @@ export type FormTemplateView = "grid" | "list";
 /** Every template list opens as a list until the person picks the grid. */
 export const defaultFormTemplateView: FormTemplateView = "list";
 
+// Sign-out clears it with the other display settings (../account/devicePreferences.ts).
 export const formTemplateViewStorageKey = "balebase.form-template-view";
 
 interface StorageReader {

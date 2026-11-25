@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it } from "bun:test";
 import { act } from "react";
 import { installDom } from "../testing/dom";
 import { useAccountSessions } from "./accountSessions";
@@ -7,6 +7,12 @@ import { reloadThemePreference } from "./theme";
 const { mount, respond } = installDom({
   globals: (window) => ({ localStorage: window.localStorage }),
   url: "http://localhost:5173/projects",
+});
+
+// Later files start from an empty device and the system theme.
+afterEach(() => {
+  localStorage.clear();
+  reloadThemePreference();
 });
 
 const session = {

@@ -2,6 +2,7 @@ export const defaultSidebarWidth = 240;
 export const maximumSidebarWidth = 400;
 export const minimumSidebarWidth = 200;
 
+// Sign-out clears it with the other display settings (../account/devicePreferences.ts).
 export const sidebarWidthStorageKey = "balebase.sidebar-width";
 const keyboardResizeStep = 16;
 

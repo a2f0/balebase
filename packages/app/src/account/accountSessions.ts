@@ -96,7 +96,7 @@ export function useAccountSessions(
     }
     // Invalidate preparations started while revocation was still in flight.
     lockOfflineWorkspace();
-    // Display settings belong to whoever signed out, not to the next person.
+    // Sign-out resets this device's display settings for the next person.
     clearDevicePreferences();
     // Saved bank transactions can be read again online; drop them.
     if (userId) await clearUserTransactions(userId).catch(() => undefined);

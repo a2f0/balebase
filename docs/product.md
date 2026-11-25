@@ -126,7 +126,7 @@ Finance on transactions from**, picks the period Finance's filter starts on:
 device's local calendar (`PATCH /api/account-settings/finance-period`, also
 returned with the session). It applies to the overview and Categories' counts
 alike and combines with both switches; the period can still be changed on the
-page, and **Clear filters** returns to all time. Like the theme and default
+page, and **Clear filters** returns to all time. Like the default
 organization, these are personal choices and record no activity.
 The theme, the sidebar's width, Categories' **Hide categories with no
 transactions** switch, and the grid or list layout of template lists (a list
