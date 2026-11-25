@@ -127,11 +127,14 @@ function ManagedRequirement({
 export function RequirementSections({
   action,
   busy,
+  linkPeople = true,
   onNavigate,
   requirement,
 }: {
   action: ReturnType<typeof useManagedRequirements>["action"];
   busy: boolean;
+  /** Whether the viewer can open People, which is for owners and admins. */
+  linkPeople?: boolean;
   onNavigate: (pathname: string) => void;
   requirement: EmployeeRequirement;
 }) {
@@ -159,6 +162,7 @@ export function RequirementSections({
             title={requirement.title}
           >
             <RequirementFacts
+              linkPeople={linkPeople}
               onNavigate={onNavigate}
               requirement={requirement}
             />
@@ -195,9 +199,11 @@ export function RequirementSections({
 }
 
 function RequirementFacts({
+  linkPeople,
   onNavigate,
   requirement,
 }: {
+  linkPeople: boolean;
   onNavigate: (pathname: string) => void;
   requirement: EmployeeRequirement;
 }) {
@@ -207,7 +213,7 @@ function RequirementFacts({
     <dl className="keyValue">
       <dt>Requested from</dt>
       <dd>
-        {requirement.memberId ? (
+        {requirement.memberId && linkPeople ? (
           <AppLink
             href={organizationPeoplePath(requirement.memberId)}
             onNavigate={onNavigate}

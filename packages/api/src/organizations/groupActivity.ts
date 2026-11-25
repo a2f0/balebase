@@ -125,6 +125,8 @@ export function groupUpdatedActivity(
   event: GroupEvent,
   input: {
     capabilities: OrganizationCapability[];
+    /** Only these can be removed; the group keeps its others. */
+    managedCapabilities: OrganizationCapability[];
     name: string;
     userIds: string[];
   },
@@ -132,6 +134,7 @@ export function groupUpdatedActivity(
 ) {
   const userIds = JSON.stringify(input.userIds);
   const capabilities = JSON.stringify(input.capabilities);
+  const managed = JSON.stringify(input.managedCapabilities);
   const { groupId, organizationId } = event;
   return insertGroupEvent(database, "organization.group_updated", event, {
     condition: {
@@ -163,6 +166,7 @@ export function groupUpdatedActivity(
         groupId,
         groupId,
         capabilities,
+        managed,
       ],
       sql: `JOIN (
         SELECT
@@ -196,6 +200,7 @@ export function groupUpdatedActivity(
             SELECT capability FROM organization_group_capability
             WHERE team_id = ?
               AND capability NOT IN (SELECT value FROM json_each(?))
+              AND capability IN (SELECT value FROM json_each(?))
             ORDER BY capability`)} AS removed_capabilities
       ) AS delta`,
     },

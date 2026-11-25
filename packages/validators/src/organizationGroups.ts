@@ -35,6 +35,16 @@ function unique<Value>(values: Value[]) {
 
 const OrganizationGroupInputSchema = z.object({
   capabilities: z.array(OrganizationCapabilitySchema).transform(unique),
+  /**
+   * The capabilities this save decides; the group keeps its others. When it
+   * is left out, an API key's save decides every capability, and a signed-in
+   * app's decides Finance alone, as apps built before Background checks
+   * offered nothing else.
+   */
+  managedCapabilities: z
+    .array(OrganizationCapabilitySchema)
+    .transform(unique)
+    .optional(),
   name: requiredText(groupLimits.name),
   /** Replaces the group's members; blanks and repeats are dropped. */
   userIds: z

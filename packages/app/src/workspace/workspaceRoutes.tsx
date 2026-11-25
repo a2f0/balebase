@@ -149,8 +149,12 @@ const routes: WorkspaceRoute[] = [
     // App blocks this path without Background checks access.
     matches: within("/background-checks"),
     page: "backgroundChecks",
-    render: ({ navigate, pathname }) => (
-      <BackgroundChecks onNavigate={navigate} pathname={pathname} />
+    render: ({ access, navigate, pathname }) => (
+      <BackgroundChecks
+        canManage={canManageOrganization(access.memberRole)}
+        onNavigate={navigate}
+        pathname={pathname}
+      />
     ),
   },
   {

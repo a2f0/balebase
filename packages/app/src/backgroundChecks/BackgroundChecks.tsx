@@ -41,9 +41,12 @@ const title = "Background check";
  * each stands, and open one to request it from Checkr or read its result.
  */
 export function BackgroundChecks({
+  canManage = false,
   onNavigate,
   pathname,
 }: {
+  /** Owners and admins can open the People pages a check names. */
+  canManage?: boolean;
   onNavigate: (pathname: string) => void;
   pathname: string;
 }) {
@@ -52,6 +55,7 @@ export function BackgroundChecks({
   // responses after navigation.
   return requirementId ? (
     <BackgroundCheckPage
+      canManage={canManage}
       key={requirementId}
       onNavigate={onNavigate}
       requirementId={requirementId}
@@ -316,9 +320,11 @@ function BackgroundCheckRequestForm({
 }
 
 function BackgroundCheckPage({
+  canManage,
   onNavigate,
   requirementId,
 }: {
+  canManage: boolean;
   onNavigate: (pathname: string) => void;
   requirementId: string;
 }) {
@@ -374,6 +380,7 @@ function BackgroundCheckPage({
           <RequirementSections
             action={action}
             busy={busy}
+            linkPeople={canManage}
             onNavigate={onNavigate}
             requirement={check}
           />

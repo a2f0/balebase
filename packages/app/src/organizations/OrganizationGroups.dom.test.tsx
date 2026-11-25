@@ -148,6 +148,7 @@ describe("organization groups", () => {
       {
         body: {
           capabilities: ["finance"],
+          managedCapabilities: ["finance", "background_checks"],
           name: "Accounts",
           userIds: ["user-owner", "user-mark"],
         },
@@ -181,6 +182,7 @@ describe("organization groups", () => {
       {
         body: {
           capabilities: ["finance", "background_checks"],
+          managedCapabilities: ["finance", "background_checks"],
           name: "HR",
           userIds: ["user-owner"],
         },

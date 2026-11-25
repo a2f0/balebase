@@ -493,6 +493,8 @@ function useGroupEditor(
           capabilities: organizationCapabilities.filter((capability) =>
             capabilities.has(capability),
           ),
+          // This editor shows every capability, so its save decides each.
+          managedCapabilities: [...organizationCapabilities],
           name: name.trim(),
           userIds: [...memberIds],
         });

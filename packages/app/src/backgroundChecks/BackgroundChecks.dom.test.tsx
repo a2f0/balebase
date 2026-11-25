@@ -215,6 +215,22 @@ describe("background checks", () => {
     );
     expect(check.container.textContent).toContain("Requested from");
     expect(check.container.textContent).toContain("Pat Person");
+    // People is for owners and admins; the name links only for them.
+    expect(
+      check.container.querySelector('a[href^="/organization/people"]'),
+    ).toBeNull();
+    const managed = await mount(
+      <BackgroundChecks
+        canManage
+        onNavigate={() => {}}
+        pathname="/background-checks/check-1"
+      />,
+    );
+    expect(
+      managed.container.querySelector(
+        'a[href="/organization/people/member-pat"]',
+      ),
+    ).toBeTruthy();
     expect(
       check.container.querySelector('a[href="/background-checks"]'),
     ).toBeTruthy();

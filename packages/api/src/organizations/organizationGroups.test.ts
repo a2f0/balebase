@@ -12,6 +12,108 @@ import { organizationSettings } from "./organizationSettings";
 const organizationId = "org_owner-user";
 
 describe("organization groups", () => {
+  it("keeps the capabilities a save doesn't decide, as an app built before Background checks saves", async () => {
+    const fixture = createFixture();
+    seedGroup(fixture.database, {
+      builtIn: "hr",
+      capabilities: ["background_checks"],
+      id: "hr",
+      name: "HR",
+      organizationId,
+      userIds: ["owner-user"],
+    });
+    const owner = groupsApp(fixture.bindings, "owner-user");
+    const capabilities = () =>
+      fixture.database
+        .query(
+          "SELECT capability FROM organization_group_capability WHERE team_id = 'hr'",
+        )
+        .all();
+    const lastChange = () =>
+      JSON.parse(
+        (
+          fixture.database
+            .query(
+              `SELECT details FROM activity_events
+               WHERE root_id = 'hr' ORDER BY id DESC LIMIT 1`,
+            )
+            .get() as { details: string }
+        ).details,
+      );
+
+    // An older app sends Finance's checkbox alone with every save.
+    const added = await owner("PATCH", "/hr", {
+      capabilities: [],
+      name: "HR",
+      userIds: ["owner-user", "member-user"],
+    });
+    expect(added.status).toBe(200);
+    expect(capabilities()).toEqual([{ capability: "background_checks" }]);
+    expect(lastChange()).toMatchObject({
+      addedCapabilities: [],
+      addedMembers: [{ userId: "member-user" }],
+      removedCapabilities: [],
+    });
+
+    // The current app decides every capability it shows.
+    const revoked = await owner("PATCH", "/hr", {
+      capabilities: ["finance"],
+      managedCapabilities: ["finance", "background_checks"],
+      name: "HR",
+      userIds: ["owner-user", "member-user"],
+    });
+    expect(revoked.status).toBe(200);
+    expect(capabilities()).toEqual([{ capability: "finance" }]);
+    expect(lastChange()).toMatchObject({
+      addedCapabilities: ["finance"],
+      removedCapabilities: ["background_checks"],
+    });
+  });
+
+  it("lets an API key's save decide every capability", async () => {
+    const fixture = createFixture();
+    seedGroup(fixture.database, {
+      builtIn: "hr",
+      capabilities: ["background_checks"],
+      id: "hr",
+      name: "HR",
+      organizationId,
+      userIds: ["owner-user"],
+    });
+    fixture.database
+      .query(
+        `INSERT INTO organization_api_keys
+         (id, organization_id, name, access, token_prefix, token_hash,
+          created_by, created_at)
+         VALUES ('key', ?, 'Assistant', 'write', 'test', 'hash', 'owner-user', ?)`,
+      )
+      .run(organizationId, now());
+    const app = testApp({}, identity("owner-user"));
+    app.use("*", async (context, next) => {
+      context.set("apiKey", {
+        access: "write",
+        channel: "mcp",
+        id: "key",
+        organizationId,
+      });
+      await next();
+    });
+    app.route("/", organizationGroups);
+    const saved = await requester(app, fixture.bindings)("PATCH", "/hr", {
+      capabilities: [],
+      name: "HR",
+      userIds: ["owner-user"],
+    });
+    expect(saved.status).toBe(200);
+    expect(
+      fixture.database
+        .query(
+          "SELECT capability FROM organization_group_capability WHERE team_id = 'hr'",
+        )
+        .all(),
+    ).toEqual([]);
+  });
+
   it("hides paid Finance access without deleting grants and restores it when enabled", async () => {
     const fixture = createFixture();
     const owner = groupsApp(fixture.bindings, "owner-user");

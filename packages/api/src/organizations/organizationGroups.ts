@@ -5,7 +5,10 @@ import {
   organizationGroupsRoutes,
 } from "@balebase/validators/organizationGroups";
 import type { OrganizationMember } from "@balebase/validators/organizationSettings";
-import { organizationCapabilityLabels } from "@balebase/validators/rules";
+import {
+  organizationCapabilities,
+  organizationCapabilityLabels,
+} from "@balebase/validators/rules";
 import { type Context, Hono } from "hono";
 import { createMiddleware } from "hono/factory";
 import type { ApiEnv } from "../auth/apiEnv";
@@ -55,6 +58,28 @@ interface GroupInput {
   capabilities: OrganizationCapability[];
   name: string;
   userIds: string[];
+}
+
+/** A save of an existing group: what it grants, and which grants it decides. */
+interface GroupUpdate extends GroupInput {
+  managedCapabilities: OrganizationCapability[];
+}
+
+/**
+ * The capabilities a save decides, as `managedCapabilities` says: those it
+ * names (with any it grants), or, when it names none, every capability for an
+ * API key and Finance alone for an app built before Background checks.
+ */
+function managedCapabilities(
+  context: Context<ApiEnv>,
+  input: GroupInput & {
+    managedCapabilities?: OrganizationCapability[] | undefined;
+  },
+): OrganizationCapability[] {
+  const declared =
+    input.managedCapabilities ??
+    (context.get("apiKey") ? [...organizationCapabilities] : ["finance"]);
+  return [...new Set([...declared, ...input.capabilities])];
 }
 
 const organizationGroups = new Hono<ApiEnv>();
@@ -215,7 +240,11 @@ organizationGroups.patch("/:id", requireManager(), async (context) => {
       409,
     );
   }
-  if (!(await updateGroup(context, groupId, input))) {
+  const update = {
+    ...input,
+    managedCapabilities: managedCapabilities(context, input),
+  };
+  if (!(await updateGroup(context, groupId, update))) {
     return groupWriteRefused(context, groupId);
   }
   return respond(context, organizationGroupsRoutes.update, { id: groupId });
@@ -546,7 +575,7 @@ async function createGroup(
 async function updateGroup(
   context: Context<ApiEnv>,
   groupId: string,
-  input: GroupInput,
+  input: GroupUpdate,
 ) {
   const write = groupWrite(context, groupId);
   const { database, event, guard, organizationId } = write;
@@ -566,18 +595,21 @@ async function updateGroup(
         organizationId,
         ...guard.bindings,
       ),
-    // Unchanged members and capabilities keep their rows.
+    // Unchanged members and capabilities keep their rows, as do capabilities
+    // the save doesn't decide.
     database
       .prepare(
         `DELETE FROM organization_group_capability
          WHERE organization_id = ? AND team_id = ?
            AND capability NOT IN (SELECT value FROM json_each(?))
+           AND capability IN (SELECT value FROM json_each(?))
            AND ${writable.sql}`,
       )
       .bind(
         organizationId,
         groupId,
         JSON.stringify(input.capabilities),
+        JSON.stringify(input.managedCapabilities),
         ...writable.bindings,
       ),
     database

@@ -85,6 +85,8 @@ export const workspaceTools: McpTool[] = [
     description: "Creates a group with a name, capabilities, and members.",
     descriptions: groupFields,
     name: "create_group",
+    // A key's save decides every capability.
+    omit: ["managedCapabilities"],
     route: organizationGroupsRoutes.create,
     title: "Create group",
   },
@@ -93,6 +95,7 @@ export const workspaceTools: McpTool[] = [
       "Replaces a group's name, capabilities, and members. Send every field, including members who should stay.",
     descriptions: { ...groupId, ...groupFields },
     name: "update_group",
+    omit: ["managedCapabilities"],
     route: organizationGroupsRoutes.update,
     title: "Update group",
   },

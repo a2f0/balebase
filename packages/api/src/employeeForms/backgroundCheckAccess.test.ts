@@ -230,8 +230,13 @@ describe("background check access", () => {
       "Background check",
     );
     const employee = fixture.app("employee", "member");
-    for (const path of [`/${checkId}/activity`, "/missing/activity"]) {
-      const response = await employee.request(path);
+    for (const [path, init] of [
+      [`/${checkId}/activity`, undefined],
+      ["/missing/activity", undefined],
+      [`/${checkId}/checkr/refresh`, { method: "POST" }],
+      ["/missing/checkr/refresh", { method: "POST" }],
+    ] as const) {
+      const response = await employee.request(path, init);
       expect(response.status).toBe(403);
       expect(await response.json()).toEqual({ error: managerRequired });
     }

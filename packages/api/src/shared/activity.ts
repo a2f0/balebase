@@ -60,8 +60,9 @@ const pageSize = 50;
 
 /**
  * Background checks requested of people. Only members of a group with the
- * Background checks capability read them; each event snapshots the request's
- * kind.
+ * Background checks capability read them. It relies on every requirement
+ * event snapshotting the request's kind (`requirementActivityStatement` and
+ * `requirementDetails` do): an event without one reads as a form's.
  */
 const backgroundCheckActivity = `(root_type = 'employee_requirement'
   AND COALESCE(json_extract(details, '$.kind'), '') = 'background_check')`;

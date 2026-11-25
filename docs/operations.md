@@ -346,11 +346,9 @@ bun run deploy:verify   # check all production URLs
 `DEPLOY_TIER=staging` selects staging for `deploy:verify` and
 `deploy:email:verify`; `bun run deploy:staging:verify` is the shortcut.
 
-Deploy the app right after the API when migration
-`0108_hr_background_checks.sql` ships. An app built before it knows only the
-Finance capability, so saving the HR group's Access tab there removes its
-Background checks access; turn it back on from a current build if that
-happens. Native builds keep that editor until their next release. An
+Apps built before migration `0108_hr_background_checks.sql` know only the
+Finance capability. Their group saves name no `managedCapabilities`, so the API
+changes only Finance access and keeps a group's Background checks access. An
 organization created between the migration and the new API Worker has no HR
 group; after the deploy, this should list none:
 
