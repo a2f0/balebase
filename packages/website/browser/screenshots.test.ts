@@ -77,7 +77,7 @@ interface Site {
 const screens = [
   { name: "projects", label: "Projects", alt: "The project list." },
   { name: "issues", label: "Issues", alt: "The open issues." },
-  { name: "audit", label: "Audit", alt: "An audit in progress." },
+  { name: "form", label: "Form", alt: "A form in progress." },
 ];
 const site: Site = {
   dist: join(work, "dist"),
@@ -92,8 +92,8 @@ const site: Site = {
 const longScreens = [
   "projects",
   "issues",
-  "audits",
-  "audit",
+  "forms",
+  "form",
   "equipment",
   "businesses",
   "contracts",
@@ -353,14 +353,14 @@ it("keeps the gallery's text and controls readable in both themes", async () => 
 it("opens a deep link on its layout and screen, in a page that fits a phone", async () => {
   const page = await openSite(375);
   try {
-    await page.goto("https://website.test/screenshots/mobile/audit/");
-    expect(await page.title()).toBe("Audit, phone screenshot — Balebase");
+    await page.goto("https://website.test/screenshots/mobile/form/");
+    expect(await page.title()).toBe("Form, phone screenshot — Balebase");
     await page.waitForSelector(".shots-gallery[data-project='mobile']");
     await page.waitForFunction(
-      () => document.querySelector(".shots-title")?.textContent === "Audit",
+      () => document.querySelector(".shots-title")?.textContent === "Form",
     );
     expect(await current(page)).toMatchObject({
-      heading: "Audit, phone screenshot",
+      heading: "Form, phone screenshot",
       visibleHeading: null,
       project: "mobile",
     });
@@ -566,8 +566,8 @@ it("rows the phone captures on the home page, linking to the gallery", async () 
         hidden: false,
       },
       {
-        href: "/screenshots/mobile/audit/",
-        alt: "An audit in progress.",
+        href: "/screenshots/mobile/form/",
+        alt: "A form in progress.",
         hidden: false,
       },
     ]);

@@ -13,10 +13,10 @@ const site = {
   id: "project-1",
   name: "Site",
   description: "",
-  formIds: ["form"],
+  templateIds: ["template"],
 };
 
-function form(id: string, name: string, version: number) {
+function template(id: string, name: string, version: number) {
   return {
     id,
     name,
@@ -44,7 +44,7 @@ function fakeApi(projects = [site]) {
   const syncs: (string | null)[] = [];
   const server = {
     failSync: 0,
-    forms: [form("form", "Safety inspection", 2)],
+    templates: [template("template", "Safety inspection", 2)],
     projects,
     revision: 1,
     signedIn: true,
@@ -97,7 +97,7 @@ function fakeApi(projects = [site]) {
       return Response.json({
         changed: true,
         cursor,
-        forms: server.forms,
+        templates: server.templates,
         members: [user],
         projects: server.projects,
       });
@@ -136,8 +136,8 @@ function savedCursor(page: Page, cursor: string) {
 function savedVersion(page: Page, version: number) {
   return page.waitForFunction(
     async (expected) =>
-      (await window.offlineTest.read())?.forms.find(
-        (entry) => entry.id === "form",
+      (await window.offlineTest.read())?.templates.find(
+        (entry) => entry.id === "template",
       )?.version === expected,
     { polling: 100 },
     version,
@@ -150,10 +150,10 @@ async function reconnect(page: Page) {
   await page.setOfflineMode(false);
 }
 
-it("syncs the person's projects and forms to the device when they sign in", async () => {
+it("syncs the person's projects and templates to the device when they sign in", async () => {
   const { api, syncs } = fakeApi();
   await withOfflineBrowser(async (page) => {
-    // The device already holds version 1 of the project form.
+    // The device already holds version 1 of the project template.
     await page.evaluate(() => window.offlineTest.seed());
     await page.evaluate(() => window.offlineTest.lock());
     await open(page);
@@ -164,10 +164,10 @@ it("syncs the person's projects and forms to the device when they sign in", asyn
     const saved = await page.evaluate(() => window.offlineTest.read());
     expect(saved?.cursor).toBe("cursor-1");
     expect(saved?.projects).toEqual([site]);
-    expect(saved?.forms.map((entry) => entry.id)).toEqual(["form"]);
+    expect(saved?.templates.map((entry) => entry.id)).toEqual(["template"]);
     expect(saved?.members.map((entry) => entry.id)).toEqual([user.id]);
-    // Started audits keep their own copy of the form.
-    expect(saved?.audits[0]?.template.version).toBe(1);
+    // Started forms keep their own copy of the template.
+    expect(saved?.forms[0]?.template.version).toBe(1);
     expect(await page.evaluate(() => window.offlineTest.activeKey())).toBe(
       saved?.key ?? "",
     );
@@ -188,7 +188,7 @@ it("sends its cursor on the next sync and keeps stored data when nothing changed
     await Bun.sleep(300);
     expect(await page.evaluate(() => window.offlineTest.read())).toEqual(first);
     // A change on the server arrives as the whole set with a new cursor.
-    server.forms = [form("form", "Safety inspection", 3)];
+    server.templates = [template("template", "Safety inspection", 3)];
     server.revision = 2;
     const before = syncs.length;
     await reconnect(page);
@@ -201,15 +201,15 @@ it("sends its cursor on the next sync and keeps stored data when nothing changed
 
 it("stores an empty project list and a cursor for someone with no projects", async () => {
   const { api, server, syncs } = fakeApi([]);
-  server.forms = [];
+  server.templates = [];
   await withOfflineBrowser(async (page) => {
     await open(page);
     await syncsRequested(syncs, 1);
     await savedCursor(page, "cursor-1");
     const saved = await page.evaluate(() => window.offlineTest.read());
     expect(saved?.projects).toEqual([]);
+    expect(saved?.templates).toEqual([]);
     expect(saved?.forms).toEqual([]);
-    expect(saved?.audits).toEqual([]);
     expect(await page.evaluate(() => window.offlineTest.activeKey())).toBe(
       saved?.key ?? "",
     );
@@ -226,7 +226,7 @@ it("retries a failed sync when the device reconnects", async () => {
     // The device is prepared, but holds nothing from the failed sync.
     const prepared = await page.evaluate(() => window.offlineTest.read());
     expect(prepared?.cursor).toBeUndefined();
-    expect(prepared?.forms).toEqual([]);
+    expect(prepared?.templates).toEqual([]);
     expect(prepared?.projects).toEqual([]);
     await reconnect(page);
     await syncsRequested(syncs, 2);
@@ -249,7 +249,7 @@ it("syncs again after signing out and back into the same account", async () => {
         document.getElementById("session-state")?.textContent === "signed-out",
       { polling: 100 },
     );
-    server.forms = [form("form", "Safety inspection", 3)];
+    server.templates = [template("template", "Safety inspection", 3)];
     server.revision = 2;
     const before = syncs.length;
     server.signedIn = true;

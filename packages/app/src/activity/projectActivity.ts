@@ -17,8 +17,8 @@ export function projectActivitySummary({
     case "project.member_added":
     case "project.member_removed":
       return textValue(details.userName) || textValue(details.userEmail);
-    case "project.form_enabled":
-    case "project.form_disabled":
+    case "project.template_enabled":
+    case "project.template_disabled":
       return [textValue(details.title), systemReasonLabel(details.reason)]
         .filter(Boolean)
         .join(" · ");

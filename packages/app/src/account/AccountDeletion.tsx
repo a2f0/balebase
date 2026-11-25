@@ -33,9 +33,9 @@ export function AccountDeletion() {
     >
       <p>
         Your account stays active until it is purged. Leave or delete your
-        organizations first; active memberships, admin access, or retained
-        audit, financial, and contract records can prevent deletion.
-        Organization records are managed separately.
+        organizations first; active memberships, admin access, or retained form,
+        financial, and contract records can prevent deletion. Organization
+        records are managed separately.
       </p>
       {requestedAt && (
         <p>

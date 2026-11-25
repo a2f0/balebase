@@ -6,34 +6,34 @@ import {
   offlineAnswersError,
   offlineAnswersTransition,
 } from "./offlineAnswersState";
-import { answerBase, offlineAnswers } from "./offlineAuditState";
-import type { OfflineAudit } from "./offlineStore";
+import { answerBase, offlineAnswers } from "./offlineFormState";
+import type { OfflineForm } from "./offlineStore";
 import {
-  completeOfflineAudit,
+  completeOfflineForm,
   saveOfflineAnswer,
   saveOfflineProgress,
 } from "./offlineWork";
 
 /** Device storage the answers are written to; tests pass their own. */
 export interface OfflineAnswerStorage {
-  completeAudit: (key: string, auditId: string) => Promise<unknown>;
+  completeForm: (key: string, formId: string) => Promise<unknown>;
   saveAnswer: (
     key: string,
-    auditId: string,
+    formId: string,
     itemId: string,
     answer: Edit,
   ) => Promise<unknown>;
-  saveProgress: (key: string, auditId: string) => Promise<unknown>;
+  saveProgress: (key: string, formId: string) => Promise<unknown>;
 }
 
 const deviceStorage: OfflineAnswerStorage = {
-  completeAudit: completeOfflineAudit,
+  completeForm: completeOfflineForm,
   saveAnswer: saveOfflineAnswer,
   saveProgress: saveOfflineProgress,
 };
 
 /** What a save queues to sync after writing every answer to the device. */
-export type OfflineAuditSync = "progress" | "completion";
+export type OfflineFormSync = "progress" | "completion";
 
 /**
  * An answer as given: when, over which server answer (`answerBase`), and
@@ -46,16 +46,16 @@ export interface Edit {
 }
 
 /**
- * An audit's answers, each written to the device as it is given. What went
+ * A form's answers, each written to the device as it is given. What went
  * wrong is one machine (`offlineAnswersState.ts`): a failed write lasts until
  * every answer is written, a failed sync request until a save succeeds.
  */
 export function useOfflineAnswers(
-  audit: OfflineAudit,
+  form: OfflineForm,
   key: string,
   storage = deviceStorage,
 ) {
-  const saved = useMemo(() => offlineAnswers(audit), [audit]);
+  const saved = useMemo(() => offlineAnswers(form), [form]);
   const [responses, setResponses] = useState(saved);
   // Each unwritten answer keeps the base it was given over. Item IDs are any
   // text, so they key a Map rather than an object's inherited members.
@@ -70,7 +70,7 @@ export function useOfflineAnswers(
   const error = offlineAnswersError(failures);
   useUnsavedChanges(
     pending > 0 || Boolean(error),
-    "Some audit answers have not been saved on this device.",
+    "Some form answers have not been saved on this device.",
   );
   useEffect(() => {
     setResponses({
@@ -83,7 +83,7 @@ export function useOfflineAnswers(
   function write(itemId: string, edit: Edit) {
     const result = writes.current.then(async () => {
       try {
-        await storage.saveAnswer(key, audit.id, itemId, edit);
+        await storage.saveAnswer(key, form.id, itemId, edit);
       } catch (cause) {
         report({
           message: errorMessage(
@@ -108,7 +108,7 @@ export function useOfflineAnswers(
     const unwritten = dirty.current.get(itemId);
     const edit: Edit = {
       at: new Date().toISOString(),
-      base: unwritten ? unwritten.base : answerBase(audit, itemId),
+      base: unwritten ? unwritten.base : answerBase(form, itemId),
       value,
     };
     dirty.current.set(itemId, edit);
@@ -123,7 +123,7 @@ export function useOfflineAnswers(
     }
   }
   /** Writes any unsaved answers, then queues `sync`, if given. */
-  async function save(sync?: OfflineAuditSync) {
+  async function save(sync?: OfflineFormSync) {
     setSealing(true);
     setPending((count) => count + 1);
     // A failed write reports itself; only queueing reports here.
@@ -133,8 +133,8 @@ export function useOfflineAnswers(
       // by another tab; a sync takes the latest durable snapshot.
       for (const [id, edit] of [...dirty.current]) await write(id, edit);
       written = true;
-      if (sync === "progress") await storage.saveProgress(key, audit.id);
-      if (sync === "completion") await storage.completeAudit(key, audit.id);
+      if (sync === "progress") await storage.saveProgress(key, form.id);
+      if (sync === "completion") await storage.completeForm(key, form.id);
       report({ type: "saved" });
     } catch (cause) {
       if (written)
@@ -143,7 +143,7 @@ export function useOfflineAnswers(
             cause,
             sync === "progress"
               ? "Could not save progress."
-              : "Could not queue audit.",
+              : "Could not queue form.",
           ),
           type: "queueFailed",
         });

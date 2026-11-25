@@ -59,7 +59,7 @@ const features: {
   {
     icon: "issues",
     title: "Give follow-up work an owner",
-    text: "Create issues with a priority and assignee. Track standalone issues alongside those raised from transactions and audits, through to resolution.",
+    text: "Create issues with a priority and assignee. Track standalone issues alongside those raised from transactions and forms, through to resolution.",
     example:
       "Assign an unexpected charge to the person who can investigate it.",
   },
@@ -77,9 +77,9 @@ const steps: { icon: IconName; text: string; title: string }[] = [
     text: "Check which contracts are waiting for signatures and send a reminder. Review employee forms as people submit them.",
   },
   {
-    icon: "audits",
+    icon: "forms",
     title: "Check the work on site",
-    text: "Run an audit from a reusable checklist. Record answers, attach photos to issues, and assign the fixes to your team.",
+    text: "Fill in a form from a reusable template. Record answers, attach photos to issues, and assign the fixes to your team.",
   },
 ];
 
@@ -95,13 +95,13 @@ const essentials: { icon: IconName; text: string; title: string }[] = [
     text: "Manage owners, admins, and members. Control Finance access with groups and require two-factor authentication for members.",
   },
   {
-    icon: "audits",
-    title: "Audits and activity history",
-    text: "Build reusable checklists and track answers, issues, and changes. Each audit keeps the template version it started with.",
+    icon: "forms",
+    title: "Forms and activity history",
+    text: "Build reusable templates and track answers, issues, and changes. Each form keeps the template version it started with.",
   },
 ];
 
-const description = `${productName} is small business management software for expenses, contracts, employee forms, documents, equipment, and audits. Start free and add your team as you grow.`;
+const description = `${productName} is small business management software for expenses, contracts, employee paperwork, documents, equipment, and forms. Start free and add your team as you grow.`;
 // The phone row shows only once a capture has been staged.
 const phoneTour = readGalleryManifest().entries.some(
   (entry) => entry.project === "mobile",
@@ -189,7 +189,7 @@ const phoneTour = readGalleryManifest().entries.some(
               <span class="serifAccent">wherever the job is.</span>
             </h2>
             <p class="lead">
-              A sample electrical contractor's projects, audits, and books, as
+              A sample electrical contractor's projects, forms, and books, as
               {" "}{productName} shows them on a phone.
             </p>
           </div>

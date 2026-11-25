@@ -73,7 +73,7 @@ function confirmUserDeletion(user: AdminUser) {
   return confirmDialog({
     title: `Mark ${user.email} for deletion?`,
     message:
-      "The account stays active until it can be permanently purged after 30 days. Active organization memberships and retained audit, financial, or contract records can prevent deletion. Organizations and their data are managed separately. The user or a root admin can cancel before the account is purged.",
+      "The account stays active until it can be permanently purged after 30 days. Active organization memberships and retained form, financial, or contract records can prevent deletion. Organizations and their data are managed separately. The user or a root admin can cancel before the account is purged.",
     confirmLabel: "Mark for deletion",
     tone: "danger",
     typeToConfirm: user.email,

@@ -28,7 +28,7 @@ export const plans = [
   {
     cadence: "per month",
     description: "For an owner organizing the day-to-day business.",
-    features: ["1 user", "5 form templates", "30-day audit history"],
+    features: ["1 user", "5 form templates", "30-day form history"],
     id: "free",
     name: "Free",
     price: "$0",
@@ -38,7 +38,7 @@ export const plans = [
     description: "For teams managing the business together.",
     features: [
       "Unlimited form templates",
-      "Unlimited audit history",
+      "Unlimited form history",
       "Seats stay in sync with your team",
     ],
     id: "pro",

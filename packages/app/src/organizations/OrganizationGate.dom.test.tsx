@@ -40,8 +40,8 @@ function Workspace({ initialPath }: { initialPath: string }) {
   return (
     <>
       <nav>
-        <button onClick={() => setPathname("/audits")} type="button">
-          Audits
+        <button onClick={() => setPathname("/forms")} type="button">
+          Forms
         </button>
       </nav>
       <OrganizationGate
@@ -56,7 +56,7 @@ function Workspace({ initialPath }: { initialPath: string }) {
             organizationId="org-1"
           />
         ) : (
-          <p>Audits page</p>
+          <p>Forms page</p>
         )}
       </OrganizationGate>
     </>
@@ -124,17 +124,17 @@ async function click(element: Element | undefined) {
 describe("organization seat gate", () => {
   it("sends an unseated owner to Billing and lifts the gate after Checkout", async () => {
     const requests = serveApi("UPGRADE_REQUIRED");
-    await render("/audits");
+    await render("/forms");
     expect(container.textContent).toContain(
       "Upgrade to Pro to restore your access",
     );
-    expect(container.textContent).not.toContain("Audits page");
+    expect(container.textContent).not.toContain("Forms page");
 
     // Stripe returns here; Billing confirms after access already loaded.
     dom.history.replaceState(
       null,
       "",
-      "/audits?checkout=success&session_id=cs_paid",
+      "/forms?checkout=success&session_id=cs_paid",
     );
     await click(link("Go to Billing"));
     expect(container.textContent).toContain("Your Pro subscription is active.");
@@ -142,10 +142,10 @@ describe("organization seat gate", () => {
 
     await click(
       [...container.querySelectorAll("button")].find(
-        (button) => button.textContent === "Audits",
+        (button) => button.textContent === "Forms",
       ),
     );
-    expect(container.textContent).toContain("Audits page");
+    expect(container.textContent).toContain("Forms page");
     expect(container.textContent).not.toContain("Upgrade required");
   });
 

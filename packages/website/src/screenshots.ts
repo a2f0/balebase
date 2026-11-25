@@ -33,7 +33,7 @@ export function readGalleryManifest(
 
 export const galleryTitleTemplate = `{heading} — ${productName}`;
 
-const indexDescription = `See ${productName} on desktop, tablet, and phone, in light and dark themes: projects, audits, issues, equipment, contracts, finance, and more, with one sample company's records.`;
+const indexDescription = `See ${productName} on desktop, tablet, and phone, in light and dark themes: projects, forms, issues, equipment, contracts, finance, and more, with one sample company's records.`;
 
 /**
  * The heading, title, and description of the gallery's index (no project or

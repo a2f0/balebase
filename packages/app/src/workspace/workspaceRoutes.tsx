@@ -1,11 +1,10 @@
 import type { ReactNode } from "react";
 import { AccountSettings } from "../account/AccountSettings";
 import { Activity } from "../activity/Activity";
-import { AdminGlobalAudits } from "../admin/AdminGlobalAudits";
+import { AdminGlobalTemplates } from "../admin/AdminGlobalTemplates";
 import { AdminJobs } from "../admin/AdminJobs";
 import { AdminOrganizations } from "../admin/AdminOrganizations";
 import { AdminUsers } from "../admin/AdminUsers";
-import { Audits } from "../audits/Audits";
 import { Businesses } from "../businesses/Businesses";
 import { Contracts } from "../contracts/Contracts";
 import { MyDocuments } from "../employeeForms/MyDocuments";
@@ -16,6 +15,7 @@ import { FinanceSection } from "../finance/FinanceSection";
 import { FinanceTransactionPage } from "../finance/FinanceTransactionPage";
 import { financePeriodOf } from "../finance/financePeriod";
 import type { CacheScope } from "../finance/transactionCache";
+import { Forms } from "../forms/Forms";
 import { Inbox } from "../inbox/Inbox";
 import { Issues } from "../issues/Issues";
 import { OrganizationInvitation } from "../organizations/OrganizationInvitation";
@@ -30,7 +30,7 @@ import type { WorkspacePage } from "./WorkspaceShell";
 import {
   adminOrganizationPath,
   adminUserPath,
-  globalAuditsPath,
+  globalTemplatesPath,
   isWithin,
   recordIdForPath,
 } from "./workspacePaths";
@@ -102,10 +102,10 @@ const routes: WorkspaceRoute[] = [
     ),
   },
   {
-    matches: within("/audits"),
-    page: "audits",
+    matches: within("/forms"),
+    page: "forms",
     render: ({ access, navigate, pathname }) => (
-      <Audits
+      <Forms
         canPublish={canManageOrganization(access.memberRole)}
         onNavigate={navigate}
         pathname={pathname}
@@ -198,10 +198,10 @@ const routes: WorkspaceRoute[] = [
     ),
   },
   {
-    matches: within(globalAuditsPath()),
-    page: "rootGlobalAudits",
+    matches: within(globalTemplatesPath()),
+    page: "rootGlobalTemplates",
     render: ({ navigate, pathname }) => (
-      <AdminGlobalAudits onNavigate={navigate} pathname={pathname} />
+      <AdminGlobalTemplates onNavigate={navigate} pathname={pathname} />
     ),
   },
   {

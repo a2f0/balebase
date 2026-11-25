@@ -7,8 +7,8 @@ export type ActivitySource =
       type:
         | "admin_organization"
         | "admin_purges"
-        | "audit_run"
-        | "audit_template"
+        | "form_run"
+        | "form_template"
         | "business"
         | "contract_template"
         | "employee_requirement"
@@ -17,7 +17,7 @@ export type ActivitySource =
         | "project"
         | "finance_connection"
         | "finance_transaction"
-        | "global_audit_template"
+        | "global_form_template"
         | "inbound_email"
         | "library_file"
         | "library_folder"
@@ -27,7 +27,7 @@ export type ActivitySource =
 
 /**
  * One page of a record's history, or the organization's without a source. A
- * global form's history is read through Global Audits, when managing it, and
+ * global form's history is read through Global templates, when managing it, and
  * an organization's own history by root admins through its admin page, and
  * the purge history of accounts and organizations on the admin Jobs page.
  */
@@ -43,10 +43,10 @@ export function listActivity(
       return api.adminOrganizations.activity(id, cursor);
     case "admin_purges":
       return api.adminJobs.purges(cursor);
-    case "audit_run":
-      return api.audits.runActivity(id, cursor);
-    case "audit_template":
-      return api.audits.templateActivity(id, cursor);
+    case "form_run":
+      return api.forms.runActivity(id, cursor);
+    case "form_template":
+      return api.forms.templateActivity(id, cursor);
     case "business":
       return api.businesses.activity(id, cursor);
     case "contract_template":
@@ -59,8 +59,8 @@ export function listActivity(
       return api.finance.connectionActivity(id, cursor);
     case "finance_transaction":
       return api.finance.transactionActivity(id, cursor);
-    case "global_audit_template":
-      return api.adminAuditTemplates.activity(id, cursor);
+    case "global_form_template":
+      return api.adminFormTemplates.activity(id, cursor);
     case "inbound_email":
       return api.inbox.activity(id, cursor);
     case "issue":

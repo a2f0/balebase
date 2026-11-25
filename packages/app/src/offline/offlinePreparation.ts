@@ -22,7 +22,7 @@ export async function prepareOfflineDevice(
     (current) => current ?? emptyOfflineWorkspace(identity),
   );
   activateOfflineWorkspace(key, epoch);
-  // Unsynced audits and photos live here; ask the browser not to evict them.
+  // Unsynced forms and photos live here; ask the browser not to evict them.
   await navigator.storage?.persist?.().catch(() => false);
 }
 

@@ -52,7 +52,7 @@ export function actorDetail(actor: ActivityActor) {
 
 export const systemActionLabels: Record<string, string> = {
   "inbox.email_purged": "permanently deleted an email from Trash",
-  "organization.audit_runs_purged": "removed audits past Free-plan retention",
+  "organization.form_runs_purged": "removed forms past Free-plan retention",
   "organization.purged": "permanently deleted an organization",
   "user.purged": "permanently deleted an account",
 };
@@ -85,11 +85,11 @@ function purgeRequester({ action, details }: ActivityEvent) {
   }
 }
 
-/** How many audits Free-plan retention removed. */
+/** How many forms Free-plan retention removed. */
 export function retentionSummary({ details }: ActivityEvent) {
   const count = typeof details.count === "number" ? details.count : 0;
   const before = textValue(details.completedBefore);
-  return `${count} completed audit${count === 1 ? "" : "s"}${before ? ` from before ${formatDate(before)}` : ""} removed`;
+  return `${count} completed form${count === 1 ? "" : "s"}${before ? ` from before ${formatDate(before)}` : ""} removed`;
 }
 
 /** What a trashed email's purge removed with it. */
@@ -105,9 +105,10 @@ export function emailPurgeSummary({ details }: ActivityEvent) {
   ].join(" · ");
 }
 
-/** Why maintenance removed a link or a project's form. */
+/** Why maintenance removed a link or a project's template. */
 export function systemReasonLabel(reason: unknown) {
   if (reason === "email_purged") return "The email was purged from Trash";
-  if (reason === "form_purged") return "The discarded global form was purged";
+  if (reason === "template_purged")
+    return "The discarded global template was purged";
   return undefined;
 }

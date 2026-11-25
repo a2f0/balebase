@@ -90,23 +90,23 @@ let revision = 0;
 /** The parts of a sent operation a stub server replies from. */
 export interface AppliedOperation {
   answers?: Record<string, { at: string; value: string }>;
-  auditId?: string;
+  formId?: string;
   completion?: unknown;
   id: string;
   type: string;
 }
 
 /**
- * The API's reply to an operation it applied: an audit write answers with
+ * The API's reply to an operation it applied: a form write answers with
  * the server's copy, holding the answers it sent.
  */
 export function appliedReply(operation: AppliedOperation) {
-  if (operation.type !== "auditStart" && operation.type !== "auditSave")
+  if (operation.type !== "formStart" && operation.type !== "formSave")
     return { resourceId: operation.id };
-  const auditId = operation.auditId ?? operation.id;
+  const formId = operation.formId ?? operation.id;
   revision += 1;
   return {
-    audit: {
+    form: {
       answers: Object.fromEntries(
         Object.entries(operation.answers ?? {}).map(
           ([itemId, { at, value }]) => [
@@ -116,10 +116,10 @@ export function appliedReply(operation: AppliedOperation) {
         ),
       ),
       deleted: false,
-      id: auditId,
+      id: formId,
       revision,
       status: operation.completion ? "completed" : "in_progress",
     },
-    resourceId: auditId,
+    resourceId: formId,
   };
 }

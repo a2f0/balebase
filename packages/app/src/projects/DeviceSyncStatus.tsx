@@ -15,21 +15,19 @@ export function DeviceSyncStatus() {
   const problems = [
     ...new Set(waiting.flatMap((job) => (job.error ? [job.error] : []))),
   ];
-  // Answers given to a shared audit wait here until the next sync sends them.
-  const unsent = workspace.audits.filter(
-    (audit) => audit.status !== "draft" && Object.keys(audit.local).length > 0,
+  // Answers given to a shared form wait here until the next sync sends them.
+  const unsent = workspace.forms.filter(
+    (form) => form.status !== "draft" && Object.keys(form.local).length > 0,
   ).length;
-  const open = workspace.audits.filter(
-    (audit) => audit.status !== "completed",
+  const open = workspace.forms.filter(
+    (form) => form.status !== "completed",
   ).length;
   const parts = [
     online ? "Online" : "Offline",
     waiting.length + unsent
       ? `${countLabel(waiting.length + unsent, "item")} waiting to sync`
       : "Nothing waiting to sync",
-    ...(open
-      ? [`${countLabel(open, "audit")} in progress on this device`]
-      : []),
+    ...(open ? [`${countLabel(open, "form")} in progress on this device`] : []),
   ];
   return (
     <Banner

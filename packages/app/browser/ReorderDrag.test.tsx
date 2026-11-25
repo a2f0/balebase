@@ -68,7 +68,7 @@ it("never scrolls past the page while a lifted entry rests at the edge", async (
       entry,
       harness(
         fileURLToPath(
-          new URL("../src/audits/useReorderDrag.ts", import.meta.url),
+          new URL("../src/forms/useReorderDrag.ts", import.meta.url),
         ),
       ),
     );

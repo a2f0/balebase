@@ -4,8 +4,8 @@ import { useEffect, useState } from "react";
 import { ActivityFeed } from "./ActivityFeed";
 
 const resourceLabels: Record<ActivityResourceType, string> = {
-  audit_run: "Audits",
-  audit_template: "Forms",
+  form_run: "Forms",
+  form_template: "Form templates",
   issue: "Workspace issues",
   equipment: "Equipment",
   project: "Projects",

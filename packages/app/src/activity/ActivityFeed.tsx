@@ -18,8 +18,6 @@ import { InfiniteScroll } from "../shared/InfiniteScroll";
 import { formatDateTime } from "../shared/labels";
 import { useCursorPages } from "../shared/useCursorPages";
 import {
-  auditRunPath,
-  auditTemplatePath,
   billingPath,
   businessPath,
   contractPath,
@@ -28,6 +26,8 @@ import {
   financeCategoriesPath,
   financeConnectionPath,
   financeTransactionPath,
+  formRunPath,
+  formTemplatePath,
   issuePath,
   libraryFilePath,
   libraryPath,
@@ -87,8 +87,8 @@ const actionLabels: Record<string, string> = {
   "issue.updated": "edited an issue",
   "api_key.created": "created an API key",
   "api_key.revoked": "revoked an API key",
-  "audit.answer_changed": "changed an answer",
-  "audit.answer_conflict_resolved": "resolved an answer conflict",
+  "form.answer_changed": "changed an answer",
+  "form.answer_conflict_resolved": "resolved an answer conflict",
   "business.created": "added a business",
   "business.deleted": "deleted a business",
   "business.restored": "restored a business",
@@ -104,23 +104,23 @@ const actionLabels: Record<string, string> = {
   "library.folder_created": "created a folder",
   "library.folder_deleted": "deleted a folder",
   "library.folder_renamed": "renamed a folder",
-  "audit.completed": "completed the audit",
-  "audit.offline_synced": "synced an offline audit",
-  "audit.discarded": "discarded the audit",
-  "audit.image_removed": "removed an image",
-  "audit.image_uploaded": "attached an image",
-  "audit.issue_assigned": "changed the issue assignee",
-  "audit.issue_created": "raised an issue",
-  "audit.issue_reopened": "reopened an issue",
-  "audit.issue_resolved": "resolved an issue",
-  "audit.reopened": "reopened the audit",
-  "audit.started": "started the audit",
-  "audit.template_created": "created the form",
-  "audit.template_discarded": "discarded the form",
-  "audit.template_published": "published the form",
-  "audit.template_restored": "restored the form",
-  "audit.template_unpublished": "unpublished the form",
-  "audit.template_version_saved": "saved a form version",
+  "form.completed": "completed the form",
+  "form.offline_synced": "synced an offline form",
+  "form.discarded": "discarded the form",
+  "form.image_removed": "removed an image",
+  "form.image_uploaded": "attached an image",
+  "form.issue_assigned": "changed the issue assignee",
+  "form.issue_created": "raised an issue",
+  "form.issue_reopened": "reopened an issue",
+  "form.issue_resolved": "resolved an issue",
+  "form.reopened": "reopened the form",
+  "form.started": "started the form",
+  "form.template_created": "created the form template",
+  "form.template_discarded": "discarded the form template",
+  "form.template_published": "published the form template",
+  "form.template_restored": "restored the form template",
+  "form.template_unpublished": "unpublished the form template",
+  "form.template_version_saved": "saved a form template version",
   "contract.created": "created a contract",
   "contract.deleted": "deleted a contract",
   "contract.sent": "sent a contract for signature",
@@ -148,8 +148,8 @@ const actionLabels: Record<string, string> = {
   "project.created": "created a project",
   "project.deleted": "deleted a project",
   "project.restored": "restored a project",
-  "project.form_disabled": "turned off an audit form",
-  "project.form_enabled": "turned on an audit form",
+  "project.template_disabled": "turned off a form template",
+  "project.template_enabled": "turned on a form template",
   "project.member_added": "added a project member",
   "project.member_removed": "removed a project member",
   "project.updated": "edited a project",
@@ -387,15 +387,15 @@ function activitySummary(event: ActivityEvent) {
   if (financeSummary !== undefined) return financeSummary;
   const rootSummary = rootSummaries[event.root.type];
   if (rootSummary) return rootSummary(event);
-  if (event.action === "audit.answer_changed") {
+  if (event.action === "form.answer_changed") {
     return `${textValue(details.prompt)} · ${answerLabel(details.before, details.responseType)} → ${answerLabel(details.after, details.responseType)}`;
   }
-  if (event.action === "audit.answer_conflict_resolved") {
+  if (event.action === "form.answer_conflict_resolved") {
     const kept = recordedAnswer(details.kept);
     const discarded = recordedAnswer(details.discarded);
     return `${textValue(details.prompt)} · kept ${answerLabel(kept?.value, details.responseType)} over ${answerLabel(discarded?.value, details.responseType)}`;
   }
-  if (event.action.startsWith("audit.template_")) {
+  if (event.action.startsWith("form.template_")) {
     return `Version ${textValue(details.version)}`;
   }
   return textValue(details.title) || textValue(details.filename) || "Details";
@@ -477,7 +477,7 @@ function ActivityDetails({ event }: { event: ActivityEvent }) {
   )
     return <RecordActivityDetails event={event} />;
   switch (event.action) {
-    case "audit.offline_synced":
+    case "form.offline_synced":
       return (
         <p className="activityDetails">
           Device-reported times: started {textValue(details.clientStartedAt)},
@@ -498,9 +498,9 @@ function ActivityDetails({ event }: { event: ActivityEvent }) {
       );
     case "finance.transaction_categorized":
       return <CategorizationDetails event={event} />;
-    case "audit.answer_conflict_resolved":
+    case "form.answer_conflict_resolved":
       return <AnswerConflictDetails event={event} />;
-    case "audit.answer_changed":
+    case "form.answer_changed":
       return (
         <div className="activityDetails">
           <p>{textValue(details.prompt)}</p>
@@ -513,7 +513,7 @@ function ActivityDetails({ event }: { event: ActivityEvent }) {
         </div>
       );
     case "issue.assigned":
-    case "audit.issue_assigned":
+    case "form.issue_assigned":
       return (
         <div className="activityDetails">
           <p>{textValue(details.title)}</p>
@@ -533,7 +533,7 @@ function ActivityDetails({ event }: { event: ActivityEvent }) {
         </div>
       );
     case "issue.created":
-    case "audit.issue_created":
+    case "form.issue_created":
       return (
         <div className="activityDetails">
           <p>{textValue(details.title)}</p>
@@ -554,19 +554,19 @@ function ActivityDetails({ event }: { event: ActivityEvent }) {
           </p>
         </div>
       );
-    case "audit.image_uploaded":
-    case "audit.image_removed":
+    case "form.image_uploaded":
+    case "form.image_removed":
       return (
         <p className="activityDetails">
           {textValue(details.filename)} · {textValue(details.title)}
         </p>
       );
-    case "audit.template_created":
-    case "audit.template_discarded":
-    case "audit.template_published":
-    case "audit.template_restored":
-    case "audit.template_unpublished":
-    case "audit.template_version_saved":
+    case "form.template_created":
+    case "form.template_discarded":
+    case "form.template_published":
+    case "form.template_restored":
+    case "form.template_unpublished":
+    case "form.template_version_saved":
       return <TemplateDetails details={details} />;
     default:
       return details.title ? (
@@ -575,7 +575,7 @@ function ActivityDetails({ event }: { event: ActivityEvent }) {
   }
 }
 
-/** A form version, and the published global version a copy started from. */
+/** A form template version, and the published global version a copy started from. */
 function TemplateDetails({ details }: { details: ActivityEvent["details"] }) {
   const source = details.copiedFrom;
   const copiedVersion =
@@ -584,7 +584,7 @@ function TemplateDetails({ details }: { details: ActivityEvent["details"] }) {
       : "";
   const copied =
     typeof source === "object" && source !== null
-      ? ` · Copied from ${textValue(Reflect.get(source, "name")) || "a global form"}${copiedVersion && `, version ${copiedVersion}`}`
+      ? ` · Copied from ${textValue(Reflect.get(source, "name")) || "a global template"}${copiedVersion && `, version ${copiedVersion}`}`
       : null;
   return (
     <p className="activityDetails">
@@ -659,7 +659,7 @@ function AnswerConflictDetails({ event }: { event: ActivityEvent }) {
       <p>{line("Discarded", recordedAnswer(details.discarded))}</p>
       <p>
         {details.reason === "completed"
-          ? "The audit had already been completed."
+          ? "The form had already been completed."
           : "The later answer was kept."}
       </p>
     </div>
@@ -700,7 +700,7 @@ function categoryLabel(id: unknown, name: unknown) {
 }
 
 function activityPath(event: ActivityEvent) {
-  if (event.subject.type === "issue" || event.subject.type === "audit_issue")
+  if (event.subject.type === "issue" || event.subject.type === "form_issue")
     return issuePath(event.subject.id);
   if (event.root.type.startsWith("finance_")) return financeActivityPath(event);
   // Deleted equipment has no page to open.
@@ -716,7 +716,7 @@ function activityPath(event: ActivityEvent) {
     return event.action === "project.deleted"
       ? undefined
       : projectPath(event.root.id);
-  if (event.root.type === "audit_run") return auditRunPath(event.root.id);
+  if (event.root.type === "form_run") return formRunPath(event.root.id);
   return contractActivityPath(event);
 }
 
@@ -727,10 +727,10 @@ const contractRecordPaths: Partial<Record<string, (id: string) => string>> = {
   employee_requirement: organizationRequirementPath,
 };
 
-/** Forms; contracts, templates, and requests until deleted; then library. */
+/** Form templates; contracts, templates, and requests until deleted; then library. */
 function contractActivityPath(event: ActivityEvent) {
-  if (event.root.type === "audit_template")
-    return auditTemplatePath(event.root.id);
+  if (event.root.type === "form_template")
+    return formTemplatePath(event.root.id);
   const recordPath = contractRecordPaths[event.root.type];
   if (recordPath)
     return event.action.endsWith(".deleted")
@@ -795,7 +795,6 @@ function organizationActivityPath(event: ActivityEvent) {
 
 /** The button that opens an event's record, by root type. */
 const linkLabels: Partial<Record<string, string>> = {
-  audit_run: "Open audit",
   business: "Open business",
   contract: "Open contract",
   contract_template: "Open template",
@@ -804,6 +803,8 @@ const linkLabels: Partial<Record<string, string>> = {
   finance_category: "Open categories",
   finance_connection: "Open connection",
   finance_transaction: "Open transaction",
+  form_run: "Open form",
+  form_template: "Open template",
   library_file: "Open file history",
   library_folder: "Open folder",
   organization_billing: "Open billing",
@@ -813,7 +814,7 @@ const linkLabels: Partial<Record<string, string>> = {
 };
 
 function activityLinkLabel(event: ActivityEvent) {
-  if (event.subject.type === "issue" || event.subject.type === "audit_issue")
+  if (event.subject.type === "issue" || event.subject.type === "form_issue")
     return "Open issue";
   return linkLabels[event.root.type] ?? "Open form";
 }

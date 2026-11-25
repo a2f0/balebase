@@ -28,9 +28,9 @@ function inZone(zone: string, options: Intl.DateTimeFormatOptions) {
 }
 
 test("countLabel pluralizes regular and irregular nouns", () => {
-  expect(countLabel(0, "audit")).toBe("0 audits");
-  expect(countLabel(1, "audit")).toBe("1 audit");
-  expect(countLabel(2, "audit")).toBe("2 audits");
+  expect(countLabel(0, "form")).toBe("0 forms");
+  expect(countLabel(1, "form")).toBe("1 form");
+  expect(countLabel(2, "form")).toBe("2 forms");
   expect(countLabel(1, "business", "businesses")).toBe("1 business");
   expect(countLabel(3, "business", "businesses")).toBe("3 businesses");
 });

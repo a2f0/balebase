@@ -29,10 +29,10 @@ export const screens: readonly Screen[] = [
     route: "/issues",
     ready: "Replace corroded breaker in panel 2B",
   },
-  { name: "audits", route: "/audits", ready: "NFPA 70E" },
+  { name: "forms", route: "/forms", ready: "NFPA 70E" },
   {
-    name: "audit",
-    route: "/audits",
+    name: "form",
+    route: "/forms",
     open: "Started by Luis Ferreira",
     tab: "Issues",
     ready: "Missing arc-flash labels on east switchgear",

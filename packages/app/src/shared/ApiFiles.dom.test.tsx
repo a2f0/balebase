@@ -18,7 +18,7 @@ const {
   mount,
   respond,
   window: dom,
-} = installDom({ url: "http://localhost:5173/audits" });
+} = installDom({ url: "http://localhost:5173/forms" });
 let container: HTMLElement;
 
 async function render(element: ReactNode) {

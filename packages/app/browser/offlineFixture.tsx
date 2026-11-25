@@ -1,10 +1,10 @@
 import { DialogHost } from "@balebase/ui/react";
-import type { AuditTemplate } from "@balebase/validators/audits";
+import type { FormTemplate } from "@balebase/validators/forms";
 import { useState } from "react";
 import { createRoot } from "react-dom/client";
-import { answerBase, offlineAnswers } from "../src/offline/offlineAuditState";
 import { DeviceContext } from "../src/offline/offlineContext";
-import { pullOfflineAudits } from "../src/offline/offlinePull";
+import { answerBase, offlineAnswers } from "../src/offline/offlineFormState";
+import { pullOfflineForms } from "../src/offline/offlinePull";
 import {
   activateOfflineWorkspace,
   activeOfflineKey,
@@ -18,12 +18,12 @@ import {
 } from "../src/offline/offlineStore";
 import { syncOfflineWorkspace } from "../src/offline/offlineSync";
 import {
-  completeOfflineAudit,
+  completeOfflineForm,
   createOfflineIssue,
   retryOfflineWork,
   saveOfflineAnswer,
   saveOfflineProgress,
-  startOfflineAudit,
+  startOfflineForm,
 } from "../src/offline/offlineWork";
 import { useOfflineWorkspace } from "../src/offline/useOfflineWorkspace";
 import { DeviceProjects } from "../src/projects/DeviceProjects";
@@ -40,10 +40,10 @@ const project = {
   id: "project-1",
   name: "Site",
   description: "",
-  formIds: ["form"],
+  templateIds: ["template"],
 };
-const template: AuditTemplate = {
-  id: "form",
+const template: FormTemplate = {
+  id: "template",
   name: "Safety inspection",
   description: "Offline checklist",
   scope: "organization",
@@ -79,7 +79,7 @@ function App() {
   const [path, setPath] = useState(location.pathname);
   const navigate = useWorkspaceNavigation(setPath);
   if (path.startsWith("/issues/")) return <p>Synced issue</p>;
-  if (path.startsWith("/audits/runs/")) return <p>Synced audit</p>;
+  if (path.startsWith("/forms/runs/")) return <p>Synced form</p>;
   return (
     <DeviceContext.Provider value={device}>
       <DeviceProjects onNavigate={navigate} pathname={path} />
@@ -90,10 +90,10 @@ function App() {
 const testApi = {
   key,
   activeKey: activeOfflineKey,
-  /** The device path of an audit this fixture started. */
-  auditPath: (auditId: string) =>
-    `/projects/${project.id}/audits/${encodeURIComponent(auditId)}`,
-  /** Stores a synced project and its form, then starts an audit from it. */
+  /** The device path of a form this fixture started. */
+  formPath: (formId: string) =>
+    `/projects/${project.id}/forms/${encodeURIComponent(formId)}`,
+  /** Stores a synced project and its template, then starts a form from it. */
   async seed() {
     await changeOfflineWorkspace(
       key,
@@ -105,36 +105,36 @@ const testApi = {
             organizationName: "Test team",
           }),
           projects: [project],
-          forms: [template],
+          templates: [template],
           members: [user],
         },
     );
     activateOfflineWorkspace(key);
-    return startOfflineAudit(key, template, project.id);
+    return startOfflineForm(key, template, project.id);
   },
   read: () => readOfflineWorkspace(key),
-  /** Answers the only item over the answer the audit shows now. */
+  /** Answers the only item over the answer the form shows now. */
   answer: async (id: string, value: string) => {
-    const audit = (await readOfflineWorkspace(key))?.audits.find(
+    const form = (await readOfflineWorkspace(key))?.forms.find(
       (entry) => entry.id === id,
     );
     return saveOfflineAnswer(key, id, "check", {
       at: new Date().toISOString(),
-      base: audit ? answerBase(audit, "check") : null,
+      base: form ? answerBase(form, "check") : null,
       value,
     });
   },
-  /** The answers an audit shows. */
+  /** The answers a form shows. */
   answers: async (id: string) => {
-    const audit = (await readOfflineWorkspace(key))?.audits.find(
+    const form = (await readOfflineWorkspace(key))?.forms.find(
       (entry) => entry.id === id,
     );
-    return audit && offlineAnswers(audit);
+    return form && offlineAnswers(form);
   },
   progress: (id: string) => saveOfflineProgress(key, id),
-  complete: (id: string) => completeOfflineAudit(key, id),
-  /** Raises an issue, with one photo, on the audit's only item. */
-  issue: (auditId: string) =>
+  complete: (id: string) => completeOfflineForm(key, id),
+  /** Raises an issue, with one photo, on the form's only item. */
+  issue: (formId: string) =>
     createOfflineIssue(
       key,
       {
@@ -148,7 +148,7 @@ const testApi = {
           type: "image/png",
         }),
       ],
-      { auditId, itemId: "check" },
+      { formId, itemId: "check" },
     ),
   photo: (id: string) =>
     offlineImage(key, id).then(async (blob) => ({
@@ -157,9 +157,9 @@ const testApi = {
     })),
   retry: () => retryOfflineWork(key),
   sync: () => syncOfflineWorkspace(key),
-  /** Reads the server's copy of each shared audit, as a project sync does. */
+  /** Reads the server's copy of each shared form, as a project sync does. */
   pull: () =>
-    pullOfflineAudits(
+    pullOfflineForms(
       { scope, user, organizationName: "Test team" },
       offlineAccessEpoch(),
     ),
@@ -169,7 +169,7 @@ const testApi = {
     readOfflineWorkspace(offlineScopeKey({ ...scope, userId: "other" })),
   abort: () =>
     changeOfflineWorkspace(key, (workspace) => {
-      if (workspace) workspace.forms = [];
+      if (workspace) workspace.templates = [];
       throw new Error("Simulated storage failure");
     }),
   /** Renders the device's projects at `path` (the seeded project by default). */

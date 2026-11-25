@@ -30,7 +30,7 @@ export function PageHeader({
   title,
 }: {
   actions?: ReactNode;
-  /** A link or button rendered above the eyebrow, e.g. "← Audits". */
+  /** A link or button rendered above the eyebrow, e.g. "← Forms". */
   back?: ReactNode;
   description?: ReactNode;
   eyebrow?: ReactNode;

@@ -24,7 +24,7 @@ async function fixtureScript() {
 const fixturePage =
   '<!doctype html><div id="root"></div><script type="module" src="/fixture.js"></script>';
 
-it("persists audits and photos across reload, retries in dependency order, and isolates tabs and accounts", async () => {
+it("persists forms and photos across reload, retries in dependency order, and isolates tabs and accounts", async () => {
   const script = await fixtureScript();
   const requests: string[] = [];
   const received = new Set<string>();
@@ -78,14 +78,14 @@ it("persists audits and photos across reload, retries in dependency order, and i
     const page = await browser.newPage();
     await page.goto(server.url.href);
     await page.waitForFunction(() => Boolean(window.offlineTest));
-    const auditId = await page.evaluate(() => window.offlineTest.seed());
+    const formId = await page.evaluate(() => window.offlineTest.seed());
     await page.setOfflineMode(true);
     await page.evaluate(async (id) => {
       await window.offlineTest.answer(id, "fail");
       await window.offlineTest.issue(id);
-    }, auditId);
+    }, formId);
     expect(
-      await page.evaluate((id) => window.offlineTest.answers(id), auditId),
+      await page.evaluate((id) => window.offlineTest.answers(id), formId),
     ).toEqual({ check: "fail" });
     await page.evaluate(() => window.offlineTest.sync());
     expect(requests).toEqual([]);
@@ -95,7 +95,7 @@ it("persists audits and photos across reload, retries in dependency order, and i
     const restored = await page.evaluate(() => window.offlineTest.read());
     expect(restored?.issues).toHaveLength(1);
     expect(
-      await page.evaluate((id) => window.offlineTest.answers(id), auditId),
+      await page.evaluate((id) => window.offlineTest.answers(id), formId),
     ).toEqual({ check: "fail" });
     const imageId = restored?.issues[0]?.images[0]?.id;
     if (!imageId) throw new Error("Image was not persisted");
@@ -109,12 +109,12 @@ it("persists audits and photos across reload, retries in dependency order, and i
       window.offlineTest.abort().catch(() => undefined),
     );
     expect(
-      (await page.evaluate(() => window.offlineTest.read()))?.forms,
+      (await page.evaluate(() => window.offlineTest.read()))?.templates,
     ).toHaveLength(1);
-    // Raising the issue put its audit on the server first. That response is
+    // Raising the issue put its form on the server first. That response is
     // lost, so the issue and its photo keep waiting for it.
     await page.evaluate(() => window.offlineTest.sync());
-    expect(requests).toEqual(["auditStart"]);
+    expect(requests).toEqual(["formStart"]);
     expect(
       (await page.evaluate(() => window.offlineTest.read()))?.jobs.every(
         (job) => job.status === "pending",
@@ -128,7 +128,7 @@ it("persists audits and photos across reload, retries in dependency order, and i
       page.evaluate(() => window.offlineTest.sync()),
       otherTab.evaluate(() => window.offlineTest.sync()),
     ]);
-    expect(requests).toEqual(["auditStart", "auditStart", "issue", "image"]);
+    expect(requests).toEqual(["formStart", "formStart", "issue", "image"]);
     expect(received.size).toBe(3);
     expect(
       (await page.evaluate(() => window.offlineTest.read()))?.jobs.every(
@@ -137,7 +137,7 @@ it("persists audits and photos across reload, retries in dependency order, and i
     ).toBe(true);
     // A different authenticated account cannot drain the saved account's work.
     deny = true;
-    await page.evaluate((id) => window.offlineTest.issue(id), auditId);
+    await page.evaluate((id) => window.offlineTest.issue(id), formId);
     await page.evaluate(() => window.offlineTest.sync());
     expect(
       (await page.evaluate(() => window.offlineTest.read()))?.jobs.filter(
@@ -154,8 +154,8 @@ it("persists audits and photos across reload, retries in dependency order, and i
     await page.bringToFront();
     await page.evaluate((id) => {
       window.offlineTest.activate();
-      window.offlineTest.mount(window.offlineTest.auditPath(id));
-    }, auditId);
+      window.offlineTest.mount(window.offlineTest.formPath(id));
+    }, formId);
     await page.waitForFunction(() =>
       document.body.textContent?.includes("Broken rail"),
     );
@@ -170,7 +170,7 @@ it("persists audits and photos across reload, retries in dependency order, and i
   }
 }, 30_000);
 
-it("syncs a shared audit both ways: sends answers, takes each write's outcome, and reads changes made elsewhere", async () => {
+it("syncs a shared form both ways: sends answers, takes each write's outcome, and reads changes made elsewhere", async () => {
   const script = await fixtureScript();
   const sent: { type: string; answers: Record<string, unknown> }[] = [];
   // The server's copy; `keep` makes it keep its own answer to `check`, as a
@@ -186,7 +186,7 @@ it("syncs a shared audit both ways: sends answers, takes each write's outcome, a
     status: string;
   } = { answers: {}, revision: 0, status: "in_progress" };
   let keep = false;
-  // The audit is gone, though a write's receipt still replays.
+  // The form is gone, though a write's receipt still replays.
   let gone = false;
   const state = (id: string) => ({ ...copy, deleted: false, id });
   const server = Bun.serve({
@@ -202,7 +202,7 @@ it("syncs a shared audit both ways: sends answers, takes each write's outcome, a
         const { operation } = (await request.json()) as {
           operation: {
             answers: Record<string, { at: string; value: string }>;
-            auditId?: string;
+            formId?: string;
             id: string;
             type: string;
           };
@@ -212,11 +212,11 @@ it("syncs a shared audit both ways: sends answers, takes each write's outcome, a
           if (!keep)
             copy.answers[itemId] = { at, value, version: operation.id };
         copy.revision += 1;
-        const auditId = operation.auditId ?? operation.id;
-        if (gone) return Response.json({ resourceId: auditId });
-        return Response.json({ audit: state(auditId), resourceId: auditId });
+        const formId = operation.formId ?? operation.id;
+        if (gone) return Response.json({ resourceId: formId });
+        return Response.json({ form: state(formId), resourceId: formId });
       }
-      if (path.startsWith("/api/offline/audits/"))
+      if (path.startsWith("/api/offline/forms/"))
         return Response.json(state(path.split("/").at(-1) ?? ""));
       return new Response(fixturePage, {
         headers: { "content-type": "text/html" },
@@ -230,14 +230,14 @@ it("syncs a shared audit both ways: sends answers, takes each write's outcome, a
     await page.goto(server.url.href);
     await page.waitForFunction(() => Boolean(window.offlineTest));
     const id = await page.evaluate(() => window.offlineTest.seed());
-    const audit = async () =>
-      (await page.evaluate(() => window.offlineTest.read()))?.audits[0];
+    const form = async () =>
+      (await page.evaluate(() => window.offlineTest.read()))?.forms[0];
     const answers = () =>
-      page.evaluate((auditId) => window.offlineTest.answers(auditId), id);
+      page.evaluate((formId) => window.offlineTest.answers(formId), id);
     const answerAndSync = (value: string) =>
       page.evaluate(
-        async (auditId, answer) => {
-          await window.offlineTest.answer(auditId, answer);
+        async (formId, answer) => {
+          await window.offlineTest.answer(formId, answer);
           await window.offlineTest.sync();
         },
         id,
@@ -245,15 +245,15 @@ it("syncs a shared audit both ways: sends answers, takes each write's outcome, a
       );
 
     // Sharing sends the draft's answers, and the server's copy confirms them.
-    await page.evaluate(async (auditId) => {
-      await window.offlineTest.answer(auditId, "pass");
-      await window.offlineTest.progress(auditId);
+    await page.evaluate(async (formId) => {
+      await window.offlineTest.answer(formId, "pass");
+      await window.offlineTest.progress(formId);
       await window.offlineTest.sync();
     }, id);
-    // The start's answers take its ID, the audit's, as their version.
+    // The start's answers take its ID, the form's, as their version.
     expect(copy.answers.check?.version).toBe(id);
-    expect(sent.map(({ type }) => type)).toEqual(["auditStart"]);
-    expect(await audit()).toMatchObject({
+    expect(sent.map(({ type }) => type)).toEqual(["formStart"]);
+    expect(await form()).toMatchObject({
       local: {},
       sending: [],
       server: { answers: { check: { value: "pass" } }, revision: 1 },
@@ -266,9 +266,9 @@ it("syncs a shared audit both ways: sends answers, takes each write's outcome, a
       answers: {
         check: { at: expect.any(String), base: id, value: "fail" },
       },
-      type: "auditSave",
+      type: "formSave",
     });
-    expect(await audit()).toMatchObject({ local: {}, sending: [] });
+    expect(await form()).toMatchObject({ local: {}, sending: [] });
 
     // The server keeps a later answer given online; the device shows it and
     // notes that it replaced this device's.
@@ -280,12 +280,12 @@ it("syncs a shared audit both ways: sends answers, takes each write's outcome, a
     };
     await answerAndSync("pass");
     expect(await answers()).toEqual({ check: "na" });
-    expect((await audit())?.replaced).toEqual({
+    expect((await form())?.replaced).toEqual({
       check: { at: expect.any(String), value: "pass" },
     });
 
     // Reading the server's copy brings in what changed elsewhere, and a
-    // completion made elsewhere seals the audit here.
+    // completion made elsewhere seals the form here.
     copy.answers.check = {
       at: "2099-01-02T00:00:00.000Z",
       value: "fail",
@@ -297,21 +297,21 @@ it("syncs a shared audit both ways: sends answers, takes each write's outcome, a
     copy.status = "completed";
     copy.revision += 1;
     await page.evaluate(() => window.offlineTest.pull());
-    expect((await audit())?.status).toBe("completed");
+    expect((await form())?.status).toBe("completed");
     // Reopening it online opens it here again on the next read.
     copy.status = "in_progress";
     copy.revision += 1;
     await page.evaluate(() => window.offlineTest.pull());
-    expect((await audit())?.status).toBe("inProgress");
+    expect((await form())?.status).toBe("inProgress");
 
-    // A write whose receipt outlived its audit comes back without a copy: it
+    // A write whose receipt outlived its form comes back without a copy: it
     // stays unsynced with the reason, and its answer still shows.
     gone = true;
     await answerAndSync("na");
     const held = await page.evaluate(() => window.offlineTest.read());
     expect(held?.jobs.at(-1)).toMatchObject({
       error:
-        "This audit is no longer on the server. Your local work has been kept.",
+        "This form is no longer on the server. Your local work has been kept.",
       status: "blocked",
     });
     expect(await answers()).toEqual({ check: "na" });
