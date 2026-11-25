@@ -41,9 +41,10 @@ interface RequirementEvent {
 
 /**
  * Shared activity about a form or check requested of a person, snapshotting
- * the requirement and the person inside the batch. Only organization managers
- * read these events. Details never hold screening results, documents, or
- * consent contents.
+ * the requirement and the person inside the batch. Only those who handle the
+ * requirement's kind read these events: owners and admins for forms and credit
+ * checks, Background checks access for background checks. Details never hold
+ * screening results, documents, or consent contents.
  */
 export function requirementActivityStatement(
   database: D1Database,

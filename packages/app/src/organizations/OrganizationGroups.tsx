@@ -13,9 +13,16 @@ import {
   Toast,
   useSectionTabs,
 } from "@balebase/ui/react";
-import type { OrganizationGroup } from "@balebase/validators/organizationGroups";
+import type {
+  OrganizationCapability,
+  OrganizationGroup,
+} from "@balebase/validators/organizationGroups";
 import type { OrganizationMember } from "@balebase/validators/organizationSettings";
-import { groupLimits } from "@balebase/validators/rules";
+import {
+  groupLimits,
+  organizationCapabilities,
+  organizationCapabilityLabels,
+} from "@balebase/validators/rules";
 import { type FormEvent, useCallback, useState } from "react";
 import { ActivityFeed } from "../activity/ActivityFeed";
 import { AppButtonLink, AppLink } from "../shared/AppLink";
@@ -207,8 +214,11 @@ function GroupCreateForm({
 function groupSummary(group: OrganizationGroup) {
   const members = countLabel(group.memberUserIds.length, "member");
   if (group.builtIn === "admins") return `${members} · Owners and admins`;
-  return group.capabilities.includes("finance")
-    ? `${members} · Finance access`
+  const access = organizationCapabilities
+    .filter((capability) => group.capabilities.includes(capability))
+    .map((capability) => organizationCapabilityLabels[capability]);
+  return access.length
+    ? `${members} · ${new Intl.ListFormat("en", { type: "conjunction" }).format(access)} access`
     : `${members} · No feature access`;
 }
 
@@ -303,8 +313,8 @@ function GroupHeading({
 function builtInDescription(group: OrganizationGroup) {
   if (group.builtIn === "admins")
     return "Every owner and admin, kept in step with member roles. It can't be edited or deleted.";
-  if (group.builtIn === "finance")
-    return "The group every organization starts with. You can rename it and change its members and access, but not delete it.";
+  if (group.builtIn === "finance" || group.builtIn === "hr")
+    return "One of the groups every organization starts with. You can rename it and change its members and access, but not delete it.";
   return undefined;
 }
 
@@ -407,15 +417,19 @@ function GroupAccess({ editor }: { editor: GroupEditor }) {
             value={editor.name}
           />
         </Field>
-        <label className="check groupCapability">
-          <input
-            checked={editor.finance}
-            disabled={editor.busy}
-            onChange={(event) => editor.setFinance(event.target.checked)}
-            type="checkbox"
-          />
-          Finance access
-        </label>
+        {organizationCapabilities.map((capability) => (
+          <label className="check groupCapability" key={capability}>
+            <input
+              checked={editor.capabilities.has(capability)}
+              disabled={editor.busy}
+              onChange={(event) =>
+                editor.setCapability(capability, event.target.checked)
+              }
+              type="checkbox"
+            />
+            {organizationCapabilityLabels[capability]} access
+          </label>
+        ))}
         <SaveGroup editor={editor} label="Save group" />
       </form>
     </Card>
@@ -451,8 +465,8 @@ function useGroupEditor(
   onNavigate: (pathname: string) => void,
 ) {
   const [name, setName] = useState(group.name);
-  const [finance, setFinance] = useState(
-    group.capabilities.includes("finance"),
+  const [capabilities, setCapabilities] = useState(
+    () => new Set<OrganizationCapability>(group.capabilities),
   );
   const [memberIds, setMemberIds] = useState(
     () => new Set(group.memberUserIds),
@@ -476,7 +490,11 @@ function useGroupEditor(
       "save",
       async () => {
         await api.organizationGroups.update(group.id, {
-          capabilities: finance ? ["finance"] : [],
+          capabilities: organizationCapabilities.filter((capability) =>
+            capabilities.has(capability),
+          ),
+          // This editor shows every capability, so its save decides each.
+          managedCapabilities: [...organizationCapabilities],
           name: name.trim(),
           userIds: [...memberIds],
         });
@@ -493,6 +511,13 @@ function useGroupEditor(
       await onChanged();
     });
   };
+  const setCapability = (capability: OrganizationCapability, on: boolean) =>
+    setCapabilities((current) => {
+      const next = new Set(current);
+      if (on) next.add(capability);
+      else next.delete(capability);
+      return next;
+    });
   const toggleMember = (userId: string) =>
     setMemberIds((current) => {
       const next = new Set(current);
@@ -503,14 +528,14 @@ function useGroupEditor(
   return {
     action,
     busy,
+    capabilities,
     error,
-    finance,
     memberIds,
     name,
     notice,
     remove,
     save,
-    setFinance,
+    setCapability,
     setName,
     toggleMember,
   };

@@ -1,5 +1,6 @@
 import type {
   OrganizationGroupInput,
+  OrganizationGroupUpdate,
   organizationGroupsRoutes,
 } from "@balebase/validators/organizationGroups";
 import { endpoint } from "./endpoint";
@@ -52,7 +53,7 @@ export function organizationGroupsApi(transport: Transport) {
     create(input: OrganizationGroupInput) {
       return transport.call(endpoints.create, { body: input });
     },
-    update(id: string, input: OrganizationGroupInput) {
+    update(id: string, input: OrganizationGroupUpdate) {
       return transport.call(endpoints.update, {
         body: input,
         params: { id },

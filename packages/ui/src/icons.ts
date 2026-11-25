@@ -73,6 +73,7 @@ import {
   Upload,
   UserMinus,
   UserPlus,
+  UserSearch,
   Users,
   X,
 } from "lucide";
@@ -146,6 +147,7 @@ export const icons = {
   unlink: Unlink,
   upload: Upload,
   userAdd: UserPlus,
+  userSearch: UserSearch,
   userRemove: UserMinus,
   void: Ban,
 } satisfies Record<string, IconNode>;

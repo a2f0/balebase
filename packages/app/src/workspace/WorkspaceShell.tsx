@@ -24,7 +24,7 @@ import { AppLink } from "../shared/AppLink";
 import { useAction } from "../shared/useAction";
 import { SidebarResizeHandle } from "./SidebarResizeHandle";
 import { readSidebarWidth } from "./sidebarWidth";
-import { financeOverviewPath } from "./workspacePaths";
+import { backgroundCheckPath, financeOverviewPath } from "./workspacePaths";
 
 export interface WorkspaceUser {
   email: string;
@@ -41,6 +41,7 @@ export type WorkspacePage =
   | "activity"
   | "issues"
   | "forms"
+  | "backgroundChecks"
   | "businesses"
   | "contracts"
   | "equipment"
@@ -61,6 +62,7 @@ interface WorkspaceShellProps {
   activePage: WorkspacePage;
   activeOrganizationId: string | undefined;
   activeSessionToken: string;
+  canAccessBackgroundChecks: boolean;
   canAccessFinance: boolean;
   children: ReactNode;
   contentKey: string | undefined;
@@ -120,6 +122,7 @@ function Sidebar({
   activePage,
   activeOrganizationId,
   activeSessionToken,
+  canAccessBackgroundChecks,
   canAccessFinance,
   onAccountChange,
   onAccountSettings,
@@ -140,10 +143,11 @@ function Sidebar({
     setOpen(false);
     onNavigate(pathname);
   };
-  const groups = navigationFor(
-    canAccessFinance && financeStartPath(user),
-    hasRole(user.role, "admin"),
-  );
+  const groups = navigationFor({
+    backgroundChecks: canAccessBackgroundChecks,
+    financeHref: canAccessFinance && financeStartPath(user),
+    isAdmin: hasRole(user.role, "admin"),
+  });
   return (
     <aside className="sidebar onDark" data-open={open} ref={sidebar}>
       <div className="sidebarInner">
@@ -267,8 +271,20 @@ function financeStartPath(user: WorkspaceUser) {
     : "/finance";
 }
 
-/** `financeHref` is where Finance opens, or false without Finance access. */
-function navigationFor(financeHref: string | false, isAdmin: boolean) {
+/**
+ * The sidebar's sections. `financeHref` is where Finance opens, or false
+ * without Finance access; `backgroundChecks` is whether the person's groups
+ * grant Background checks.
+ */
+function navigationFor({
+  backgroundChecks,
+  financeHref,
+  isAdmin,
+}: {
+  backgroundChecks: boolean;
+  financeHref: string | false;
+  isAdmin: boolean;
+}) {
   const workspace: NavigationItem[] = [
     { href: "/", icon: "library", label: "Library", page: "library" },
     {
@@ -288,7 +304,16 @@ function navigationFor(financeHref: string | false, isAdmin: boolean) {
     { href: "/activity", icon: "layers", label: "Activity", page: "activity" },
     { href: "/inbox", icon: "inbox", label: "Inbox", page: "inbox" },
   ];
-  const records: NavigationItem[] = [
+  const records: NavigationItem[] = [];
+  if (backgroundChecks) {
+    records.push({
+      href: backgroundCheckPath(),
+      icon: "userSearch",
+      label: "Background checks",
+      page: "backgroundChecks",
+    });
+  }
+  records.push(
     {
       href: "/businesses",
       icon: "businesses",
@@ -307,7 +332,7 @@ function navigationFor(financeHref: string | false, isAdmin: boolean) {
       label: "Equipment",
       page: "equipment",
     },
-  ];
+  );
   if (financeHref) {
     records.push({
       href: financeHref,

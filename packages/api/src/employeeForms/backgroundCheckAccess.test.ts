@@ -1,0 +1,429 @@
+import { describe, expect, it } from "bun:test";
+import { activity } from "../activity/activity";
+import {
+  configureCheckr,
+  createFixture,
+  createRequirement,
+  jsonPost,
+  mockCheckr,
+  orderedScreening,
+  orgId,
+} from "../testing/employeeFormFixture";
+import { seedMember } from "../testing/seed";
+import { testApp } from "../testing/session";
+
+type Fixture = Awaited<ReturnType<typeof createFixture>>;
+
+const hrGroupId = "team_hr_org_owner";
+const backgroundCheck = {
+  dueDate: "2026-10-01",
+  kind: "background_check",
+  title: "Background check",
+};
+const checksRequired = "Background checks group membership required.";
+const managerRequired = "Organization manager access required.";
+
+/** Adds `userId` to Acme's HR group, or takes them out of it. */
+function setHrMember(fixture: Fixture, userId: string, member: boolean) {
+  if (member) {
+    fixture.database
+      .query(
+        `INSERT INTO teamMember (id, teamId, userId, membershipKey, createdAt)
+         VALUES (?, ?, ?, NULL, '2026-01-01')`,
+      )
+      .run(`hr-${userId}`, hrGroupId, userId);
+    return;
+  }
+  fixture.database
+    .query("DELETE FROM teamMember WHERE teamId = ? AND userId = ?")
+    .run(hrGroupId, userId);
+}
+
+/** Acme's recruiter: a plain member who is in the HR group. */
+function addRecruiter(fixture: Fixture) {
+  seedMember(fixture.database, {
+    id: "recruiter-member",
+    organizationId: orgId,
+    userId: "other",
+  });
+  setHrMember(fixture, "other", true);
+  return fixture.app("other", "member");
+}
+
+/** A signed authorization for `requirementId`, with its stored PDF. */
+function signConsent(fixture: Fixture, requirementId: string) {
+  const key = `consents/${requirementId}.pdf`;
+  fixture.files.set(
+    key,
+    new File(["%PDF-1.7"], "consent.pdf", { type: "application/pdf" }),
+  );
+  fixture.database
+    .query(
+      `INSERT INTO employee_screening_consents
+       (id, organization_id, requirement_id, user_id, signature_name,
+        signed_at, disclosure_version, state_notices, document_key,
+        created_at)
+       VALUES ('consent-1', ?, ?, 'employee', 'Homer Simpson', '2026-10-01',
+               'test', '[]', ?, '2026-10-01')`,
+    )
+    .run(orgId, requirementId, key);
+  fixture.database
+    .query(
+      "UPDATE employee_requirements SET checkr_consent_id = 'consent-1' WHERE id = ?",
+    )
+    .run(requirementId);
+}
+
+function json(method: string, body: unknown): RequestInit {
+  return {
+    body: JSON.stringify(body),
+    headers: { "Content-Type": "application/json" },
+    method,
+  };
+}
+
+async function listedIds(client: ReturnType<Fixture["app"]>) {
+  const response = await client.request("/");
+  expect(response.status).toBe(200);
+  const { requirements } = (await response.json()) as {
+    requirements: Array<{ checkrResult: string | null; id: string }>;
+  };
+  return requirements.map(({ id }) => id);
+}
+
+function requirementCount(fixture: Fixture) {
+  return (
+    fixture.database
+      .query("SELECT COUNT(*) AS count FROM employee_requirements")
+      .get() as { count: number }
+  ).count;
+}
+
+describe("background check access", () => {
+  it("lets an HR member who isn't a manager handle background checks, and only those", async () => {
+    const fixture = await createFixture();
+    configureCheckr(fixture);
+    const recruiter = addRecruiter(fixture);
+    const formId = await createRequirement(fixture, "form", "W-4");
+
+    const created = await recruiter.request(
+      "/",
+      jsonPost({
+        memberId: "employee-member",
+        requirements: [backgroundCheck],
+      }),
+    );
+    expect(created.status).toBe(201);
+    const [checkId = ""] = ((await created.json()) as { ids: string[] }).ids;
+
+    // Forms stay with owners and admins.
+    const form = await recruiter.request(
+      "/",
+      jsonPost({
+        memberId: "employee-member",
+        requirements: [backgroundCheck, { ...backgroundCheck, kind: "form" }],
+      }),
+    );
+    expect(form.status).toBe(403);
+    expect(await form.json()).toEqual({ error: managerRequired });
+    // Pending invitations are for owners and admins.
+    const invitee = await recruiter.request(
+      "/",
+      jsonPost({ invitationId: "invite", requirements: [backgroundCheck] }),
+    );
+    expect(invitee.status).toBe(403);
+    expect(await invitee.json()).toEqual({ error: managerRequired });
+    expect(requirementCount(fixture)).toBe(2);
+
+    expect(await listedIds(recruiter)).toEqual([checkId]);
+    expect(
+      (
+        await recruiter.request(
+          `/${checkId}/checkr/request`,
+          jsonPost({ state: "CA" }),
+        )
+      ).status,
+    ).toBe(200);
+    expect(
+      (
+        await recruiter.request(
+          `/${checkId}`,
+          json("PATCH", { dueDate: "2026-11-01" }),
+        )
+      ).status,
+    ).toBe(200);
+    expect((await recruiter.request(`/${checkId}/activity`)).status).toBe(200);
+
+    for (const response of [
+      await recruiter.request(`/${formId}/activity`),
+      await recruiter.request(
+        `/${formId}`,
+        json("PATCH", { dueDate: "2026-11-01" }),
+      ),
+      await recruiter.request(`/${formId}`, { method: "DELETE" }),
+    ]) {
+      expect(response.status).toBe(403);
+      expect(await response.json()).toEqual({ error: managerRequired });
+    }
+  });
+
+  it("lets an HR member who isn't a manager refresh an ordered check and read its result", async () => {
+    const fixture = await createFixture();
+    const recruiter = addRecruiter(fixture);
+    const id = await orderedScreening(fixture);
+    const checkr = mockCheckr(() =>
+      Response.json({
+        candidate_id: "candidate-1",
+        id: "report-1",
+        result: "clear",
+        status: "complete",
+      }),
+    );
+    try {
+      const refreshed = await recruiter.request(`/${id}/checkr/refresh`, {
+        method: "POST",
+      });
+      expect(refreshed.status).toBe(200);
+    } finally {
+      checkr.restore();
+    }
+    const listed = await recruiter.request("/");
+    const { requirements } = (await listed.json()) as {
+      requirements: Array<{ checkrResult: string | null; id: string }>;
+    };
+    expect(requirements).toEqual([
+      expect.objectContaining({ checkrResult: "clear", id }),
+    ]);
+  });
+
+  it("gives a check's signed authorization to those with Background checks access, whatever their role", async () => {
+    const fixture = await createFixture();
+    const recruiter = addRecruiter(fixture);
+    const id = await orderedScreening(fixture);
+    signConsent(fixture, id);
+    const download = (client: ReturnType<Fixture["app"]>) =>
+      client.request(`/${id}/checkr/consent`);
+
+    expect((await download(recruiter)).status).toBe(200);
+    expect((await download(fixture.app("owner", "owner"))).status).toBe(200);
+    // The person it's about keeps their own copy.
+    expect((await download(fixture.app("employee", "member"))).status).toBe(
+      200,
+    );
+    setHrMember(fixture, "owner", false);
+    expect((await download(fixture.app("owner", "owner"))).status).toBe(404);
+  });
+
+  it("keeps background checks from an owner outside every group that grants them", async () => {
+    const fixture = await createFixture();
+    configureCheckr(fixture);
+    const checkId = await createRequirement(
+      fixture,
+      "background_check",
+      "Background check",
+    );
+    const formId = await createRequirement(fixture, "form", "W-4");
+    setHrMember(fixture, "owner", false);
+    const owner = fixture.app("owner", "owner");
+
+    expect(await listedIds(owner)).toEqual([formId]);
+    for (const response of [
+      await owner.request(
+        "/",
+        jsonPost({
+          memberId: "employee-member",
+          requirements: [backgroundCheck],
+        }),
+      ),
+      await owner.request(
+        `/${checkId}`,
+        json("PATCH", { dueDate: "2026-11-01" }),
+      ),
+      await owner.request(`/${checkId}`, { method: "DELETE" }),
+      await owner.request(`/${checkId}/activity`),
+      // Refused before the report is read, so it says nothing of the order.
+      await owner.request(`/${checkId}/checkr/refresh`, { method: "POST" }),
+      await owner.request(
+        `/${checkId}/checkr/request`,
+        jsonPost({ state: "CA" }),
+      ),
+    ]) {
+      expect(response.status).toBe(403);
+      expect(await response.json()).toEqual({ error: checksRequired });
+    }
+    expect(requirementCount(fixture)).toBe(2);
+
+    // Forms are unaffected.
+    expect(
+      (
+        await owner.request(
+          `/${formId}`,
+          json("PATCH", { dueDate: "2026-11-01" }),
+        )
+      ).status,
+    ).toBe(200);
+  });
+
+  it("refuses a member who handles neither kind before looking the request up", async () => {
+    const fixture = await createFixture();
+    const checkId = await createRequirement(
+      fixture,
+      "background_check",
+      "Background check",
+    );
+    const employee = fixture.app("employee", "member");
+    for (const [path, init] of [
+      [`/${checkId}/activity`, undefined],
+      ["/missing/activity", undefined],
+      [`/${checkId}/checkr/refresh`, { method: "POST" }],
+      ["/missing/checkr/refresh", { method: "POST" }],
+      // Refused before its body is read, valid or not.
+      ["/", jsonPost({ requirements: "nonsense" })],
+    ] as const) {
+      const response = await employee.request(path, init);
+      expect(response.status).toBe(403);
+      expect(await response.json()).toEqual({ error: managerRequired });
+    }
+  });
+
+  it("assigns nothing when the person leaves the HR group mid-request", async () => {
+    const fixture = await createFixture();
+    fixture.beforeRun("INSERT INTO employee_requirements", () =>
+      setHrMember(fixture, "owner", false),
+    );
+    const response = await fixture.app("owner", "owner").request(
+      "/",
+      jsonPost({
+        memberId: "employee-member",
+        requirements: [backgroundCheck],
+      }),
+    );
+    expect(response.status).toBe(409);
+    expect(requirementCount(fixture)).toBe(0);
+    expect(
+      fixture.database
+        .query(
+          "SELECT COUNT(*) AS count FROM activity_events WHERE root_type = 'employee_requirement'",
+        )
+        .get(),
+    ).toEqual({ count: 0 });
+  });
+
+  it("lets an HR member who isn't a manager handle a check an owner requested of an invitee", async () => {
+    const fixture = await createFixture();
+    configureCheckr(fixture);
+    const recruiter = addRecruiter(fixture);
+    const created = await fixture
+      .app("owner", "owner")
+      .request(
+        "/",
+        jsonPost({ invitationId: "invite", requirements: [backgroundCheck] }),
+      );
+    expect(created.status).toBe(201);
+    const [checkId = ""] = ((await created.json()) as { ids: string[] }).ids;
+
+    const listed = await recruiter.request("/");
+    expect(
+      ((await listed.json()) as { requirements: unknown[] }).requirements,
+    ).toMatchObject([{ id: checkId, targetEmail: "invitee@example.com" }]);
+    // Once requested, the Checkr request is theirs to send.
+    expect(
+      (
+        await recruiter.request(
+          `/${checkId}/checkr/request`,
+          jsonPost({ state: "CA" }),
+        )
+      ).status,
+    ).toBe(200);
+  });
+
+  it("assigns an invitee nothing when the owner stops managing mid-request", async () => {
+    const fixture = await createFixture();
+    fixture.beforeRun("INSERT INTO employee_requirements", () => {
+      fixture.database
+        .query("UPDATE member SET role = 'member' WHERE userId = 'owner'")
+        .run();
+    });
+    const response = await fixture
+      .app("owner", "owner")
+      .request(
+        "/",
+        jsonPost({ invitationId: "invite", requirements: [backgroundCheck] }),
+      );
+    expect(response.status).toBe(409);
+    expect(requirementCount(fixture)).toBe(0);
+  });
+
+  it("refreshes an ordered credit check for a manager outside HR, until they stop managing", async () => {
+    const fixture = await createFixture();
+    configureCheckr(fixture);
+    const id = await createRequirement(fixture, "credit_check", "Credit check");
+    fixture.database
+      .query(
+        `UPDATE employee_requirements
+         SET checkr_candidate_id = 'candidate-1', checkr_report_id = 'report-1',
+             checkr_report_status = 'pending', status = 'in_progress'
+         WHERE id = ?`,
+      )
+      .run(id);
+    setHrMember(fixture, "owner", false);
+    const report = { status: "pending" };
+    const checkr = mockCheckr(() =>
+      Response.json({ candidate_id: "candidate-1", id: "report-1", ...report }),
+    );
+    const refresh = () =>
+      fixture
+        .app("owner", "owner")
+        .request(`/${id}/checkr/refresh`, { method: "POST" });
+    try {
+      expect((await refresh()).status).toBe(200);
+
+      // The refresh's write re-checks the role for a credit check.
+      report.status = "suspended";
+      fixture.beforeRun("checkr_refresh_revision + 1", () => {
+        fixture.database
+          .query("UPDATE member SET role = 'member' WHERE userId = 'owner'")
+          .run();
+      });
+      expect((await refresh()).status).toBe(409);
+      expect(
+        fixture.database
+          .query(
+            "SELECT checkr_report_status FROM employee_requirements WHERE id = ?",
+          )
+          .get(id),
+      ).toEqual({ checkr_report_status: "pending" });
+    } finally {
+      checkr.restore();
+    }
+  });
+
+  it("shows background check history only to those with Background checks access", async () => {
+    const fixture = await createFixture();
+    addRecruiter(fixture);
+    await createRequirement(fixture, "background_check", "Background check");
+    await createRequirement(fixture, "form", "W-4");
+    const feed = async (userId: string, role: string) => {
+      const app = testApp(
+        { "/api/activity": activity },
+        { organizationId: orgId, organizationRole: role, userId },
+      );
+      const response = await app.request(
+        "/api/activity?resourceType=employee_requirement",
+        undefined,
+        fixture.bindings,
+      );
+      expect(response.status).toBe(200);
+      const page = (await response.json()) as {
+        events: Array<{ details: { kind: string } }>;
+      };
+      return page.events.map(({ details }) => details.kind);
+    };
+
+    expect(await feed("owner", "owner")).toEqual(["form", "background_check"]);
+    expect(await feed("other", "member")).toEqual(["background_check"]);
+    expect(await feed("employee", "member")).toEqual([]);
+    setHrMember(fixture, "owner", false);
+    expect(await feed("owner", "owner")).toEqual(["form"]);
+  });
+});

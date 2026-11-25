@@ -7,8 +7,9 @@ import { findActivity } from "../shared/activity";
 import { readQuery, respond } from "../shared/respond";
 
 /**
- * The organization activity feed. Finance events need the finance capability;
- * group and two-factor requirement events need an organization manager.
+ * The organization activity feed. Finance events need the finance capability,
+ * background check events the background checks capability; group and
+ * two-factor requirement events need an organization manager.
  */
 export const activity = new Hono<ApiEnv>();
 
@@ -19,19 +20,26 @@ activity.get("/", async (context) => {
     "Invalid activity filters.",
   );
   if (query instanceof Response) return query;
+  const organizationId = context.get("organizationId");
+  const userId = context.get("authSession").user.id;
+  const [finance, backgroundChecks] = await Promise.all([
+    userHasCapability(context.env.DB, organizationId, userId, "finance"),
+    userHasCapability(
+      context.env.DB,
+      organizationId,
+      userId,
+      "background_checks",
+    ),
+  ]);
   const page = await findActivity(
     context.env.DB,
-    context.get("organizationId"),
+    organizationId,
     query.cursor,
     undefined,
-    await userHasCapability(
-      context.env.DB,
-      context.get("organizationId"),
-      context.get("authSession").user.id,
-      "finance",
-    ),
+    finance,
     query.resourceType,
     canManage(context),
+    backgroundChecks,
   );
   return page
     ? respond(context, activityRoutes.list, page)

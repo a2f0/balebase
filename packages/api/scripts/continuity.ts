@@ -59,8 +59,8 @@ export interface ContinuitySeed {
   people: Person[];
   groups: {
     name: string;
-    builtIn: "finance" | null;
-    capabilities: "finance"[];
+    builtIn: "finance" | "hr" | null;
+    capabilities: ("finance" | "background_checks")[];
     members: string[];
   }[];
   businesses: { name: string; incorporationDate: Day }[];

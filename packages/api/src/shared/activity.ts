@@ -59,13 +59,23 @@ export interface ActivityActor {
 const pageSize = 50;
 
 /**
+ * Background checks requested of people. Only members of a group with the
+ * Background checks capability read them. It relies on every requirement
+ * event snapshotting the request's kind (`requirementActivityStatement` and
+ * `requirementDetails` do): an event without one reads as a form's.
+ */
+const backgroundCheckActivity = `(root_type = 'employee_requirement'
+  AND COALESCE(json_extract(details, '$.kind'), '') = 'background_check')`;
+
+/**
  * History only organization managers read: group grants and revocations,
  * invitations (invited addresses), members' two-factor requirements, billing,
- * the organization's deletion and restoration, and the forms and checks
- * requested of people (employee records).
+ * the organization's deletion and restoration, and the forms and credit
+ * checks requested of people (employee records).
  */
 const managerOnlyActivity = `(root_type IN ('organization_group', 'organization_billing',
-                             'organization_invitation', 'employee_requirement')
+                             'organization_invitation')
+  OR (root_type = 'employee_requirement' AND NOT ${backgroundCheckActivity})
   OR action IN ('organization.member_two_factor_requirement_changed',
                 'organization.deletion_requested', 'organization.restored'))`;
 
@@ -82,6 +92,8 @@ export async function findActivity(
   includeFinance = false,
   resourceType?: ActivityResourceType,
   includeManagerOnly = false,
+  /** Callers that authorized the whole root read its background checks too. */
+  includeBackgroundChecks = includeManagerOnly,
 ) {
   if (cursor !== undefined && !/^[1-9]\d{0,15}$/.test(cursor)) return null;
   const before = cursor === undefined ? null : Number(cursor);
@@ -96,6 +108,7 @@ export async function findActivity(
       "root_type NOT IN ('finance_transaction', 'finance_connection', 'finance_category')",
     );
   if (!includeManagerOnly) filters.push(`NOT ${managerOnlyActivity}`);
+  if (!includeBackgroundChecks) filters.push(`NOT ${backgroundCheckActivity}`);
   if (resourceType) {
     filters.push("root_type = ?");
     bindings.push(resourceType);

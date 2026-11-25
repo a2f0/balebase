@@ -2,8 +2,11 @@ import { describe, expect, it } from "bun:test";
 import {
   adminOrganizationIdForPath,
   adminOrganizationPath,
+  backgroundCheckIdForPath,
+  backgroundCheckPath,
   businessIdForPath,
   businessPath,
+  capabilityForPath,
   contractIdForPath,
   contractPath,
   contractTemplateIdForPath,
@@ -152,6 +155,25 @@ describe("workspace paths", () => {
     expect(equipmentIdForPath(equipmentPath("item/1"))).toBe("item/1");
     expect(equipmentIdForPath("/equipment")).toBeUndefined();
     expect(equipmentIdForPath("/equipment/%E0%A4")).toBe("%E0%A4");
+  });
+
+  it("round-trips background check paths", () => {
+    expect(backgroundCheckPath()).toBe("/background-checks");
+    expect(backgroundCheckPath("check/1")).toBe("/background-checks/check%2F1");
+    expect(backgroundCheckIdForPath(backgroundCheckPath("check/1"))).toBe(
+      "check/1",
+    );
+    expect(backgroundCheckIdForPath("/background-checks")).toBeUndefined();
+  });
+
+  it("names the capability a path's pages need", () => {
+    expect(capabilityForPath("/finance/accounts/a1")).toBe("finance");
+    expect(capabilityForPath("/background-checks")).toBe("background_checks");
+    expect(capabilityForPath("/background-checks/c1")).toBe(
+      "background_checks",
+    );
+    expect(capabilityForPath("/background-checks-old")).toBeUndefined();
+    expect(capabilityForPath("/organization/requests/r1")).toBeUndefined();
   });
 
   it("round-trips contract paths", () => {

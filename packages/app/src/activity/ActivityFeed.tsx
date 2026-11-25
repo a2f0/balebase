@@ -18,6 +18,7 @@ import { InfiniteScroll } from "../shared/InfiniteScroll";
 import { formatDateTime } from "../shared/labels";
 import { useCursorPages } from "../shared/useCursorPages";
 import {
+  backgroundCheckPath,
   billingPath,
   businessPath,
   contractPath,
@@ -721,10 +722,16 @@ function activityPath(event: ActivityEvent) {
 }
 
 /** Pages of contracts, templates, and requests, which go once deleted. */
-const contractRecordPaths: Partial<Record<string, (id: string) => string>> = {
+const contractRecordPaths: Partial<
+  Record<string, (id: string, event: ActivityEvent) => string>
+> = {
   contract: contractPath,
   contract_template: contractTemplatePath,
-  employee_requirement: organizationRequirementPath,
+  // Background checks have their own Records page.
+  employee_requirement: (id, { details }) =>
+    details.kind === "background_check"
+      ? backgroundCheckPath(id)
+      : organizationRequirementPath(id),
 };
 
 /** Form templates; contracts, templates, and requests until deleted; then library. */
@@ -735,7 +742,7 @@ function contractActivityPath(event: ActivityEvent) {
   if (recordPath)
     return event.action.endsWith(".deleted")
       ? undefined
-      : recordPath(event.root.id);
+      : recordPath(event.root.id, event);
   return libraryActivityPath(event);
 }
 

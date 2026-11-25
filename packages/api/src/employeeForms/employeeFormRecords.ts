@@ -5,10 +5,10 @@ import type {
 } from "@balebase/validators/employeeForms";
 import type { Context } from "hono";
 import type { ApiEnv } from "../auth/apiEnv";
-import { canManage } from "../organizations/organizationMembers";
 import type { Bindings } from "../types";
 import { checkrConfigured } from "./checkr";
 import { isClosedReportStatus } from "./checkrScreening";
+import { handlesKind, requirementAccess } from "./requirementAccess";
 
 export interface RequirementRow {
   id: string;
@@ -40,9 +40,10 @@ export interface RequirementRow {
   is_subject?: number;
 }
 
+/** `handler`: the viewer handles the request and may read its result. */
 export function toRequirement(
   row: RequirementRow,
-  manager: boolean,
+  handler: boolean,
   env: Bindings,
   paidEnabled: boolean,
 ): EmployeeRequirement {
@@ -78,7 +79,7 @@ export function toRequirement(
       ? { city: row.checkr_work_city, state: row.checkr_work_state }
       : null,
     checkrReportStatus: row.checkr_report_id ? row.checkr_report_status : null,
-    checkrResult: manager ? row.checkr_result : null,
+    checkrResult: handler ? row.checkr_result : null,
     hasCheckrConsent: Boolean(row.checkr_consent_id),
   };
 }
@@ -124,11 +125,12 @@ export async function findRequirement(context: Context<ApiEnv>) {
     .first<RequirementRow>();
 }
 
+/** The person the request is for, or someone who handles its kind. */
 export async function canAccessRequirement(
   context: Context<ApiEnv>,
   row: RequirementRow,
 ) {
-  if (canManage(context)) return true;
+  if (handlesKind(await requirementAccess(context), row.kind)) return true;
   if (!row.member_id) return false;
   const member = await context.env.DB.prepare(
     `SELECT id FROM member WHERE id = ? AND organizationId = ? AND userId = ?`,

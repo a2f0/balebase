@@ -18,6 +18,7 @@ import { useAccountSessions } from "./account/accountSessions";
 import { AuthPage } from "./auth/AuthPage";
 import type { AuthenticationAction } from "./auth/authActions";
 import { useSessionRefetch } from "./auth/useSessionRefetch";
+import { BackgroundChecksAccessContext } from "./backgroundChecks/BackgroundChecksAccess";
 import { SigningPage } from "./contracts/SigningPage";
 import { useRevokedFinanceCleanup } from "./finance/useRevokedFinanceCleanup";
 import { Library } from "./library/Library";
@@ -34,6 +35,7 @@ import { PaidFeaturesContext } from "./organizations/PaidFeatures";
 import { useOrganizationAccess } from "./organizations/useOrganizationAccess";
 import { authClient } from "./shared/authClient";
 import { authCallbackUrl } from "./shared/config";
+import { capabilityGate } from "./workspace/capabilityGate";
 import {
   guardWorkspaceChange,
   useDismissDialogsOnWorkspaceChange,
@@ -46,7 +48,6 @@ import {
 import { WorkspaceShell, type WorkspaceUser } from "./workspace/WorkspaceShell";
 import {
   isRootAdminPath,
-  isWithin,
   movedWorkspacePath,
   organizationPathRequiresAccess,
   signingTokenForPath,
@@ -320,6 +321,7 @@ function AuthenticatedWorkspace({
       activePage={route.page}
       activeOrganizationId={workspace.activeOrganizationId}
       activeSessionToken={session.session.token}
+      canAccessBackgroundChecks={access.can("background_checks")}
       canAccessFinance={access.can("finance")}
       contentKey={contentKey}
       onAccountChange={guardWorkspaceChange(accounts.switchAccount)}
@@ -334,33 +336,35 @@ function AuthenticatedWorkspace({
       user={session.user}
     >
       <PaidFeaturesContext value={access.paidFeaturesEnabled}>
-        {/* Device pages check their own access. */}
-        {offlinePage ?? (
-          <OrganizationGate
-            access={access}
-            navigate={navigate}
-            pathname={pathname}
-            signOut={guardWorkspaceChange(accounts.signOutActiveAccount)}
-          >
-            {showContent ? (
-              route.render({
-                access,
-                addAccount,
-                library,
-                navigate,
-                onSecurityChanged: async () => {
-                  await onSessionChanged();
-                  await access.refresh();
-                },
-                pathname,
-                user: session.user,
-                workspace,
-              })
-            ) : (
-              <NoOrganization />
-            )}
-          </OrganizationGate>
-        )}
+        <BackgroundChecksAccessContext value={access.can("background_checks")}>
+          {/* Device pages check their own access. */}
+          {offlinePage ?? (
+            <OrganizationGate
+              access={access}
+              navigate={navigate}
+              pathname={pathname}
+              signOut={guardWorkspaceChange(accounts.signOutActiveAccount)}
+            >
+              {showContent ? (
+                route.render({
+                  access,
+                  addAccount,
+                  library,
+                  navigate,
+                  onSecurityChanged: async () => {
+                    await onSessionChanged();
+                    await access.refresh();
+                  },
+                  pathname,
+                  user: session.user,
+                  workspace,
+                })
+              ) : (
+                <NoOrganization />
+              )}
+            </OrganizationGate>
+          )}
+        </BackgroundChecksAccessContext>
       </PaidFeaturesContext>
     </WorkspaceShell>
   );
@@ -381,25 +385,33 @@ function blockedWorkspaceContent(
   if (organizationPathRequiresAccess(pathname) && access.isPending) {
     return <LoadingScreen />;
   }
-  if (
-    isWithin(pathname, "/finance") &&
-    !access.twoFactorRequirement &&
-    !access.seatRequirement &&
-    !access.can("finance")
-  ) {
-    if (access.confirmed && !access.paidFeaturesEnabled) {
-      const canManage = canManageOrganization(access.memberRole);
-      return (
-        <FatalState
-          action={
-            canManage ? "Open organization settings" : "Return to your library"
-          }
-          message="Paid features are disabled for this organization. An owner or admin can enable them in Organization settings."
-          onAction={() => navigate(canManage ? "/organization" : "/")}
-        />
-      );
-    }
-    return <FeatureAccessDenied onNavigate={() => navigate("/")} />;
+  const gate = capabilityGate(pathname, {
+    can: access.can,
+    confirmed: access.confirmed,
+    paidFeaturesEnabled: access.paidFeaturesEnabled,
+    requirementPending: Boolean(
+      access.twoFactorRequirement || access.seatRequirement,
+    ),
+  });
+  if (gate?.reason === "paidFeaturesDisabled") {
+    const canManage = canManageOrganization(access.memberRole);
+    return (
+      <FatalState
+        action={
+          canManage ? "Open organization settings" : "Return to your library"
+        }
+        message="Paid features are disabled for this organization. An owner or admin can enable them in Organization settings."
+        onAction={() => navigate(canManage ? "/organization" : "/")}
+      />
+    );
+  }
+  if (gate) {
+    return (
+      <FeatureAccessDenied
+        message={gate.message}
+        onNavigate={() => navigate("/")}
+      />
+    );
   }
   return undefined;
 }
@@ -461,11 +473,17 @@ function AdminAccessDenied({ onNavigate }: { onNavigate: () => void }) {
   );
 }
 
-function FeatureAccessDenied({ onNavigate }: { onNavigate: () => void }) {
+function FeatureAccessDenied({
+  message,
+  onNavigate,
+}: {
+  message: string;
+  onNavigate: () => void;
+}) {
   return (
     <FatalState
       action="Return to your library"
-      message="Finance group membership is required."
+      message={message}
       onAction={onNavigate}
     />
   );

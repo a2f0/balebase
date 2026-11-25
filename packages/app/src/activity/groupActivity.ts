@@ -1,8 +1,9 @@
 import type { ActivityEvent } from "@balebase/validators/activity";
+import { organizationCapabilityLabels } from "@balebase/validators/rules";
 import { textValue } from "./activityLabels";
 import { removalReasonLabel } from "./organizationActivity";
 
-const capabilityLabels: Record<string, string> = { finance: "Finance" };
+const capabilityLabels: Record<string, string> = organizationCapabilityLabels;
 
 function people(value: unknown) {
   return (Array.isArray(value) ? value : [])

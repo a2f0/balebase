@@ -16,10 +16,10 @@ export const adminsGroupId = "admins";
 const OrganizationGroupSchema = z.object({
   /**
    * Groups the product keeps: `admins` lists owners and admins and cannot be
-   * changed here; `finance` is the organization's starting Finance group,
-   * which can be edited but not deleted.
+   * changed here; `finance` and `hr` are the organization's starting Finance
+   * and HR groups, which can be edited but not deleted.
    */
-  builtIn: z.enum(["admins", "finance"]).nullable(),
+  builtIn: z.enum(["admins", "finance", "hr"]).nullable(),
   capabilities: z.array(OrganizationCapabilitySchema),
   createdAt: z.string(),
   id: z.string(),
@@ -44,6 +44,22 @@ const OrganizationGroupInputSchema = z.object({
 });
 export type OrganizationGroupInput = z.input<
   typeof OrganizationGroupInputSchema
+>;
+
+const OrganizationGroupUpdateSchema = OrganizationGroupInputSchema.extend({
+  /**
+   * The capabilities this save decides; the group keeps its others. When it
+   * is left out, an API key's save decides every capability, and a signed-in
+   * app's decides Finance alone, as apps built before Background checks
+   * offered nothing else.
+   */
+  managedCapabilities: z
+    .array(OrganizationCapabilitySchema)
+    .transform(unique)
+    .optional(),
+});
+export type OrganizationGroupUpdate = z.input<
+  typeof OrganizationGroupUpdateSchema
 >;
 
 const GroupIdSchema = z.object({ id: z.string() });
@@ -77,7 +93,7 @@ export const organizationGroupsRoutes = {
   update: route({
     method: "PATCH",
     path: "/api/organization-groups/:id",
-    body: OrganizationGroupInputSchema,
+    body: OrganizationGroupUpdateSchema,
     response: GroupIdSchema,
   }),
   delete: route({

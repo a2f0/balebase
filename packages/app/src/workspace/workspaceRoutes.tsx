@@ -5,6 +5,7 @@ import { AdminGlobalTemplates } from "../admin/AdminGlobalTemplates";
 import { AdminJobs } from "../admin/AdminJobs";
 import { AdminOrganizations } from "../admin/AdminOrganizations";
 import { AdminUsers } from "../admin/AdminUsers";
+import { BackgroundChecks } from "../backgroundChecks/BackgroundChecks";
 import { Businesses } from "../businesses/Businesses";
 import { Contracts } from "../contracts/Contracts";
 import { MyDocuments } from "../employeeForms/MyDocuments";
@@ -143,6 +144,18 @@ const routes: WorkspaceRoute[] = [
         />
       );
     },
+  },
+  {
+    // App blocks this path without Background checks access.
+    matches: within("/background-checks"),
+    page: "backgroundChecks",
+    render: ({ access, navigate, pathname }) => (
+      <BackgroundChecks
+        canManage={canManageOrganization(access.memberRole)}
+        onNavigate={navigate}
+        pathname={pathname}
+      />
+    ),
   },
   {
     matches: within("/businesses"),

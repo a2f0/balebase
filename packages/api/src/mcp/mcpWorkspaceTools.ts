@@ -34,7 +34,7 @@ const groupId = { id: "Group id from list_groups." };
 
 const groupFields = {
   capabilities:
-    'Capabilities members of this group receive. "finance" grants the Finance pages and tools.',
+    'Capabilities members of this group receive. "finance" grants the Finance pages and tools; "background_checks" grants the Background checks page and the background check tools.',
   name: "Group name, unique in the organization.",
   userIds:
     "User ids (not member ids) of the organization members in the group. This replaces the current members.",
@@ -93,6 +93,8 @@ export const workspaceTools: McpTool[] = [
       "Replaces a group's name, capabilities, and members. Send every field, including members who should stay.",
     descriptions: { ...groupId, ...groupFields },
     name: "update_group",
+    // A key's save decides every capability.
+    omit: ["managedCapabilities"],
     route: organizationGroupsRoutes.update,
     title: "Update group",
   },

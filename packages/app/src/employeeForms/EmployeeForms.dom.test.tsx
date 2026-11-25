@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import type { EmployeeRequirement } from "@balebase/validators/employeeForms";
 import { act } from "react";
+import { BackgroundChecksAccessContext } from "../backgroundChecks/BackgroundChecksAccess";
 import { PaidFeaturesContext } from "../organizations/PaidFeatures";
 import { installDom } from "../testing/dom";
 import { EmployeeForms, RequirementDraftEditor } from "./EmployeeForms";
@@ -310,11 +311,13 @@ describe("requesting a Checkr background check", () => {
 describe("paid requirement choices", () => {
   it("fails closed for background checks without blocking ordinary or manual credit forms", async () => {
     const { container } = await mount(
-      <RequirementDraftEditor
-        drafts={[]}
-        disabled={false}
-        onChange={() => {}}
-      />,
+      <BackgroundChecksAccessContext value>
+        <RequirementDraftEditor
+          drafts={[]}
+          disabled={false}
+          onChange={() => {}}
+        />
+      </BackgroundChecksAccessContext>,
     );
     const options = [...container.querySelectorAll("option")];
     expect(
@@ -327,5 +330,27 @@ describe("paid requirement choices", () => {
     expect(
       options.find((option) => option.textContent === "W-4")?.disabled,
     ).toBe(false);
+  });
+
+  it("offers background checks only to those with Background checks access", async () => {
+    const offered = async (handles: boolean) => {
+      const { container } = await mount(
+        <PaidFeaturesContext value>
+          <BackgroundChecksAccessContext value={handles}>
+            <RequirementDraftEditor
+              drafts={[]}
+              disabled={false}
+              onChange={() => {}}
+            />
+          </BackgroundChecksAccessContext>
+        </PaidFeaturesContext>,
+      );
+      return [...container.querySelectorAll("option")].map(
+        (option) => option.textContent,
+      );
+    };
+    expect(await offered(false)).not.toContain("Background check");
+    expect(await offered(false)).toContain("Credit check");
+    expect(await offered(true)).toContain("Background check");
   });
 });

@@ -17,13 +17,17 @@ import {
   isUsStateCode,
 } from "@balebase/validators/rules";
 import { type FormEvent, useCallback, useState } from "react";
+import { useHandlesBackgroundChecks } from "../backgroundChecks/BackgroundChecksAccess";
 import { usePaidFeaturesEnabled } from "../organizations/PaidFeatures";
 import { AppLink } from "../shared/AppLink";
 import { api } from "../shared/apiClient";
 import { formatCalendarDate, formatDate } from "../shared/labels";
 import { useAction } from "../shared/useAction";
 import { useLoad } from "../shared/useLoad";
-import { organizationRequirementPath } from "../workspace/workspacePaths";
+import {
+  backgroundCheckPath,
+  organizationRequirementPath,
+} from "../workspace/workspacePaths";
 import {
   downloadEmployeeForm,
   downloadScreeningConsent,
@@ -46,6 +50,10 @@ const options: Array<{ kind: EmployeeRequirementKind; title: string }> = [
   { kind: "credit_check", title: "Credit check" },
 ];
 
+function optionKeyOf(option: { kind: string; title: string } | undefined) {
+  return option ? `${option.kind}:${option.title}` : "";
+}
+
 export function RequirementDraftEditor({
   drafts,
   disabled,
@@ -56,10 +64,20 @@ export function RequirementDraftEditor({
   onChange: (drafts: RequirementDraft[]) => void;
 }) {
   const paidFeaturesEnabled = usePaidFeaturesEnabled();
-  const [optionIndex, setOptionIndex] = useState(0);
+  // Only those whose groups grant Background checks request them.
+  const handlesBackgroundChecks = useHandlesBackgroundChecks();
+  const offered = options.filter(
+    ({ kind }) => kind !== "background_check" || handlesBackgroundChecks,
+  );
+  // Chosen by name, not position, so a choice stays put when access changes
+  // what is offered; one no longer offered falls back to the first.
+  const [optionKey, setOptionKey] = useState(optionKeyOf(options[0]));
   const [dueDate, setDueDate] = useState("");
   const [customTitle, setCustomTitle] = useState("");
-  const selected = options[optionIndex] ?? { kind: "form", title: "W-4" };
+  const selected = offered.find(
+    (option) => optionKeyOf(option) === optionKey,
+  ) ??
+    offered[0] ?? { kind: "form", title: "W-4" };
   function add() {
     const title =
       selected.title === "Other form" ? customTitle.trim() : selected.title;
@@ -82,16 +100,16 @@ export function RequirementDraftEditor({
         <Field label="Requirement">
           <Select
             disabled={disabled}
-            onChange={(event) => setOptionIndex(Number(event.target.value))}
-            value={optionIndex}
+            onChange={(event) => setOptionKey(event.target.value)}
+            value={optionKeyOf(selected)}
           >
-            {options.map((option, index) => (
+            {offered.map((option) => (
               <option
                 disabled={
                   option.kind === "background_check" && !paidFeaturesEnabled
                 }
-                key={`${option.kind}-${option.title}`}
-                value={index}
+                key={optionKeyOf(option)}
+                value={optionKeyOf(option)}
               >
                 {option.title}
               </option>
@@ -198,10 +216,11 @@ export function EmployeeForms({
     requirements: all,
   } = useManagedRequirements();
   const requirements = all?.filter((item) => inRequirementScope(scope, item));
+  const handlesBackgroundChecks = useHandlesBackgroundChecks();
 
   return (
     <Card
-      description={scopeDescription(scope)}
+      description={scopeDescription(scope, handlesBackgroundChecks)}
       title={
         scope.kind === "member"
           ? "Forms and checks"
@@ -282,8 +301,9 @@ function RequirementAssignmentForm({
 }
 
 /**
- * Every request in the organization, as a manager sees them, and an action
- * that reloads them afterwards.
+ * Every request in the organization the person handles (forms and credit
+ * checks for managers, background checks for those with Background checks
+ * access), and an action that reloads them afterwards.
  */
 export function useManagedRequirements() {
   const loaded = useLoad(
@@ -348,7 +368,11 @@ function RequirementItem({
         <div>
           <strong>
             <AppLink
-              href={organizationRequirementPath(requirement.id)}
+              href={
+                requirement.kind === "background_check"
+                  ? backgroundCheckPath(requirement.id)
+                  : organizationRequirementPath(requirement.id)
+              }
               onNavigate={onNavigate}
             >
               {requirement.title}
@@ -383,7 +407,7 @@ function RequirementItem({
   );
 }
 
-/** A manager's controls for one request, in the list or on its own page. */
+/** A handler's controls for one request, in a list or on its own page. */
 export function RequirementActions({
   action,
   busy,
@@ -761,10 +785,15 @@ function RequirementStatusControl({
   );
 }
 
-function scopeDescription(scope: RequirementScope) {
-  return scope.kind === "unattached"
-    ? "Requests for people who haven’t accepted their invitation yet, or who have left the organization."
-    : "Request tax forms, set due dates, request Checkr background checks, and track credit checks.";
+function scopeDescription(
+  scope: RequirementScope,
+  handlesBackgroundChecks: boolean,
+) {
+  if (scope.kind === "unattached")
+    return "Requests for people who haven’t accepted their invitation yet, or who have left the organization.";
+  return handlesBackgroundChecks
+    ? "Request tax forms, set due dates, request Checkr background checks, and track credit checks."
+    : "Request tax forms, set due dates, and track credit checks. Groups with Background checks access, such as HR, request background checks.";
 }
 
 /** Submitted to Checkr, or being submitted, and not canceled. */

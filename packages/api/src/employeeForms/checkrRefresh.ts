@@ -1,8 +1,8 @@
-import { stillManages } from "../organizations/organizationMembers";
 import { activityBatch } from "../shared/activity";
 import type { Bindings } from "../types";
 import { getCheckrReport } from "./checkr";
 import { isClosedReportStatus } from "./checkrScreening";
+import { stillHandlesRequirement } from "./requirementAccess";
 import {
   jsonBoolean,
   type ScreeningActor,
@@ -19,17 +19,17 @@ export interface CheckrScreeningRow {
   checkr_refresh_revision: number;
 }
 
-/** What brought a refresh: a manager, Checkr's webhook, or the hourly job. */
+/** What brought a refresh: a person, Checkr's webhook, or the hourly job. */
 type ScreeningRefreshVia = "manual" | "scheduled" | "webhook";
 
 // Records the current Checkr report state on an ordered screening, and clears
 // any refresh requested before this one began. Returns null when another
-// refresh or edit changed it first, or when a manager's refresh finds them no
-// longer an owner or admin. Every attempt records checkr_checked_at, so a
+// refresh or edit changed it first, or when a person's refresh finds they no
+// longer handle the check's kind. Every attempt records checkr_checked_at, so a
 // screening Checkr keeps failing on cannot hold its place at the front of the
 // scheduled refresh. A refresh that changes the screening's status, report
 // status, or result records `employee_requirement.screening_updated` in the
-// same transaction, by the manager who asked or by Checkr; a provider event
+// same transaction, by the person who asked or by Checkr; a provider event
 // its cause already recorded holds the change back for a later refresh, so
 // the change never lands without its history.
 export async function refreshCheckrScreening(
@@ -131,8 +131,9 @@ export async function refreshCheckrScreening(
 }
 
 /**
- * The refresh's guard (the revision it read, and for a manager that they
- * still manage) and whether it changes what the screening shows.
+ * The refresh's guard (the revision it read, and for a person that they still
+ * handle the screening's kind) and whether it changes what the screening
+ * shows.
  */
 function refreshGuard(
   row: CheckrScreeningRow,
@@ -142,7 +143,7 @@ function refreshGuard(
   const manages =
     "type" in actor
       ? { bindings: [], sql: "1 = 1" }
-      : stillManages(row.organization_id, actor.userId);
+      : stillHandlesRequirement(row.organization_id, actor.userId);
   return {
     changed: {
       bindings: [next.status, next.reportStatus, next.result],

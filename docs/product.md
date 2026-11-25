@@ -290,20 +290,35 @@ and configuration actions and is separate from this application's user actions.
 
 Organization owners and organization admins can manage groups and group
 members at `/organization`. Groups use Better Auth teams underneath and can
-grant application capabilities. Every organization starts with a Finance group
-containing its initial owner, and with no other group: Better Auth's default
-team is turned off. Finance navigation and every `/api/finance` request
-require membership in a group with the Finance capability and enabled paid
-features for the organization.
+grant application capabilities: Finance and Background checks. Every
+organization starts with two groups containing its initial owner, Finance
+(Finance access) and HR (Background checks access), and with no other group:
+Better Auth's default team is turned off. Finance navigation and every
+`/api/finance` request require membership in a group with the Finance
+capability and enabled paid features for the organization. The Background
+checks page and every background check request need membership in a group
+with the Background checks capability; owners and admins outside such a group
+don't see background checks. Group membership doesn't follow roles: someone
+demoted from owner or admin keeps the HR group, and its background checks,
+until removed from it, and a new owner or admin joins only when added.
 
-**Organization → Access** lists groups as compact rows; each opens a group
-page (`/organization/access/groups/<id>`) with **Members**, **Access** (name
-and Finance access), and **History** tabs. Built-in groups cannot be deleted:
-the starting Finance group can be renamed and its members and access changed,
-and the **Admins** group lists every owner and admin, follows member roles, is
-read-only, and shows role changes as its history. Apply migration
-`0089_mark_built_in_groups.sql` before deploying; it marks each organization's
-starting Finance group as built in.
+**Organization → Access** lists groups as compact rows; each opens a group page
+(`/organization/access/groups/<id>`) with **Members**, **Access** (name and a
+checkbox for each capability), and **History** tabs. Built-in groups cannot be
+deleted: the starting Finance and HR groups can be renamed and their members and
+access changed, and the **Admins** group lists every owner and admin, follows
+member roles, is read-only, and shows role changes as its history. A save of a
+group (`PATCH /api/organization-groups/<id>`) changes only the capabilities its
+`managedCapabilities` names and keeps the group's others. Without that field, an
+API key's save, including the MCP `update_group` tool, decides every capability,
+so an integration that sends `capabilities: ["finance"]` removes Background
+checks; a signed-in app's save decides Finance alone, as apps built before
+Background checks know no other. Apply migration `0089_mark_built_in_groups.sql`
+before deploying; it marks each organization's starting Finance group as built
+in. Apply migration `0108_hr_background_checks.sql` before deploying the API; it
+gives each existing organization a built-in HR group of its owners and admins
+with Background checks access (named **HR (built-in)** where a group named HR
+exists), so no one who handled background checks loses them.
 
 **Organization → General → Paid features** has one **Enable paid features**
 switch for owners and admins. It applies to everyone in that organization,
@@ -667,8 +682,9 @@ annotations and categories, contracts, and the forms and checks requested of
 people. Filter by resource to follow a particular area;
 form and transaction filters include their attached issues, while **Workspace
 issues** shows standalone issues. Transactions are available only to people
-with Finance access, and requested forms and checks only to organization
-owners and admins. Events show the actor, time, resource, and recorded change
+with Finance access, requested forms and credit checks only to organization
+owners and admins, and background checks only to members of a group with
+Background checks access. Events show the actor, time, resource, and recorded change
 details. API-key actions also identify the key and REST/MCP channel.
 
 The shared `activity_events` model records events atomically with successful
@@ -1266,36 +1282,55 @@ redirect URI for OAuth institutions.
 
 ## Employee forms and screening
 
-Organization managers assign forms, background checks, and credit checks while
-inviting a member or later from Organization → People. Each requirement has a
-due date. People complete their own requests in My documents (`/me`), a page
-for the signed-in person in the active organization. It sorts their requests
-into To do, With the organization, and Done, flags overdue ones, and is where
-they upload forms, start their background check, and download what they sent.
-Organization → People is for managers: a member's own People page links to My
-documents instead of listing their requests. Members upload PDF, JPEG, or PNG
-forms (up to 10 MB) to private R2 storage; managers review and complete them.
-Only the member and organization managers can download a submitted form.
-Checkr results are visible only to managers, and not in a manager's own My
-documents. Deleted or replaced form files are queued for R2 cleanup.
+Organization managers assign forms and credit checks while inviting a member or
+later from Organization → People; managers who also have Background checks
+access assign background checks there too. Anyone in a group with Background
+checks access, such as HR, assigns them from **Records → Background checks**.
+Each requirement has a due date. People complete their own requests in My
+documents (`/me`), a page for the signed-in person in the active organization.
+It sorts their requests into To do, With the organization, and Done, flags
+overdue ones, and is where they upload forms, start their background check, and
+download what they sent. Organization → People is for managers: a member's own
+People page links to My documents instead of listing their requests. Members
+upload PDF, JPEG, or PNG forms (up to 10 MB) to private R2 storage; managers
+review and complete them. Only the member and organization managers can download
+a submitted form. Background check results are visible only to those with
+Background checks access, and credit check results only to owners and admins;
+neither shows in the person's own My documents. Deleted or replaced form files
+are queued for R2 cleanup.
 
 A manager's list labels each Checkr background check by stage: Not requested,
 Waiting for details (requested, waiting on the person), Submitting to Checkr,
 Report in progress, Report canceled, or Complete. Forms and checks tracked by
 hand keep their plain status.
 
+**Records → Background checks** (`/background-checks`) is the background check
+page, shown in the sidebar only to members of a group with Background checks
+access. It lists every background check with the person, due date, and stage,
+and **Request a check** adds one for a member (or, for owners and admins, a
+pending invitee) with a due date, then opens it. Only owners and admins see
+pending invitations or request a check of an invitee; once it exists, everyone
+with Background checks access handles it, including its Checkr request, and sees
+the invited address. Each check's page (`/background-checks/<request>`) is the
+request page described below, with the Checkr request, refresh, result, and
+history. Without that access the path explains that Background checks group
+membership is required.
+
 Each request's title opens its own page. In
 My documents (`/me/requests/<request>`) it shows the person what was asked,
 its status, due date, and work location, what happens next, and their
-controls (start the background check, upload, download). A manager's page
-(`/organization/requests/<request>`) adds who it's for, the Checkr stage,
+controls (start the background check, upload, download). The handler's page
+(`/organization/requests/<request>` for forms and credit checks,
+`/background-checks/<request>` for background checks) adds who it's for, the
+Checkr stage,
 report status and result, a next step for the current stage, the same
 controls as the People list, and the request's own history. When Checkr
 isn't configured, both pages say so: the manager runs the check outside
 Balebase and sets its status by hand, and the person sees that there is
 nothing for them to do.
 
-Background checks use Checkr's self-hosted flow. A manager requests a check
+Background checks use Checkr's self-hosted flow. A member with Background
+checks access requests a check
 with the person's US work state and optional city, and Balebase emails the
 person a link to their screening form in My documents
 (`/me/screening/<request>`); the link switches to that organization if another

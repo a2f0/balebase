@@ -51,20 +51,28 @@ function groupsOf(fixture: Fixture, organizationId: string) {
                JOIN user ON user.id = "teamMember"."userId"
                WHERE "teamMember"."teamId" = "team"."id") AS members
        FROM "team" WHERE "team"."organizationId" = ?
-       ORDER BY "team"."createdAt", "team"."id"`,
+       ORDER BY "team"."name"`,
     )
     .all(organizationId);
 }
 
-const financeGroup = {
-  builtIn: "finance",
-  capabilities: "finance",
-  members: email,
-  name: "Finance",
-};
+const startingGroups = [
+  {
+    builtIn: "finance",
+    capabilities: "finance",
+    members: email,
+    name: "Finance",
+  },
+  {
+    builtIn: "hr",
+    capabilities: "background_checks",
+    members: email,
+    name: "HR",
+  },
+];
 
 describe("organization creation", () => {
-  it("starts a new organization with only its recorded Finance group", async () => {
+  it("starts a new organization with only its recorded Finance and HR groups", async () => {
     const fixture = await createFixture();
     const cookie = await signedInCookie(fixture);
     const organizationId = await createOrganization(
@@ -75,15 +83,19 @@ describe("organization creation", () => {
 
     // Better Auth's default team (named after the organization, with no
     // access) is off: it granted nothing and was created with no history.
-    expect(groupsOf(fixture, organizationId)).toEqual([financeGroup]);
+    expect(groupsOf(fixture, organizationId)).toEqual(startingGroups);
     expect(
       fixture.database
         .query(
           `SELECT action, root_label AS label FROM activity_events
-           WHERE organization_id = ? AND root_type = 'organization_group'`,
+           WHERE organization_id = ? AND root_type = 'organization_group'
+           ORDER BY root_label`,
         )
         .all(organizationId),
-    ).toEqual([{ action: "organization.group_created", label: "Finance" }]);
+    ).toEqual([
+      { action: "organization.group_created", label: "Finance" },
+      { action: "organization.group_created", label: "HR" },
+    ]);
     expect(
       await (await get(fixture.auth, "/get-session", cookie)).json(),
     ).toMatchObject({
@@ -97,6 +109,6 @@ describe("organization creation", () => {
     const organizationId = await createOrganization(fixture, cookie, "Finance");
 
     // A default team named after the organization took the name first.
-    expect(groupsOf(fixture, organizationId)).toEqual([financeGroup]);
+    expect(groupsOf(fixture, organizationId)).toEqual(startingGroups);
   });
 });

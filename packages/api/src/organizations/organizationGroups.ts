@@ -5,6 +5,10 @@ import {
   organizationGroupsRoutes,
 } from "@balebase/validators/organizationGroups";
 import type { OrganizationMember } from "@balebase/validators/organizationSettings";
+import {
+  organizationCapabilities,
+  organizationCapabilityLabels,
+} from "@balebase/validators/rules";
 import { type Context, Hono } from "hono";
 import { createMiddleware } from "hono/factory";
 import type { ApiEnv } from "../auth/apiEnv";
@@ -33,7 +37,7 @@ const adminsFollowRoles =
 const builtInKept = "Built-in groups can't be deleted.";
 
 interface GroupRow {
-  built_in: "finance" | null;
+  built_in: "finance" | "hr" | null;
   created_at: string;
   id: string;
   name: string;
@@ -54,6 +58,28 @@ interface GroupInput {
   capabilities: OrganizationCapability[];
   name: string;
   userIds: string[];
+}
+
+/** A save of an existing group: what it grants, and which grants it decides. */
+interface GroupUpdate extends GroupInput {
+  managedCapabilities: OrganizationCapability[];
+}
+
+/**
+ * The capabilities a save decides, as `managedCapabilities` says: those it
+ * names (with any it grants), or, when it names none, every capability for an
+ * API key and Finance alone for an app built before Background checks.
+ */
+function managedCapabilities(
+  context: Context<ApiEnv>,
+  input: GroupInput & {
+    managedCapabilities?: OrganizationCapability[] | undefined;
+  },
+): OrganizationCapability[] {
+  const declared =
+    input.managedCapabilities ??
+    (context.get("apiKey") ? [...organizationCapabilities] : ["finance"]);
+  return [...new Set([...declared, ...input.capabilities])];
 }
 
 const organizationGroups = new Hono<ApiEnv>();
@@ -214,7 +240,11 @@ organizationGroups.patch("/:id", requireManager(), async (context) => {
       409,
     );
   }
-  if (!(await updateGroup(context, groupId, input))) {
+  const update = {
+    ...input,
+    managedCapabilities: managedCapabilities(context, input),
+  };
+  if (!(await updateGroup(context, groupId, update))) {
     return groupWriteRefused(context, groupId);
   }
   return respond(context, organizationGroupsRoutes.update, { id: groupId });
@@ -252,13 +282,15 @@ export function requireCapability(capability: OrganizationCapability) {
       capability,
     );
     if (!hasAccess) {
-      return context.json(
-        { error: `${capabilityLabel(capability)} group membership required.` },
-        403,
-      );
+      return context.json({ error: capabilityRequired(capability) }, 403);
     }
     return next();
   });
+}
+
+/** The refusal for someone whose groups don't grant `capability`. */
+export function capabilityRequired(capability: OrganizationCapability) {
+  return `${organizationCapabilityLabels[capability]} group membership required.`;
 }
 
 async function listUserCapabilities(
@@ -289,23 +321,42 @@ export async function userHasCapability(
   userId: string,
   capability: OrganizationCapability,
 ) {
+  const held = stillHasCapability(organizationId, userId, capability);
   return Boolean(
     await database
-      .prepare(
-        `SELECT 1
-         FROM organization_group_capability AS access
-         JOIN "team" ON "team"."id" = access.team_id
-         JOIN "teamMember" ON "teamMember"."teamId" = "team"."id"
-         WHERE access.organization_id = ? AND access.capability = ?
-           AND "team"."organizationId" = ? AND "teamMember"."userId" = ?
-           AND (access.capability <> 'finance' OR EXISTS (
-             SELECT 1 FROM organization WHERE id = access.organization_id
-               AND paid_features_enabled = 1))
-         LIMIT 1`,
-      )
-      .bind(organizationId, capability, organizationId, userId)
+      .prepare(`SELECT 1 WHERE ${held.sql}`)
+      .bind(...held.bindings)
       .first(),
   );
+}
+
+/**
+ * Holds while `userId` belongs to a group that grants `capability`, read
+ * inside the write's transaction: someone removed from the group after the
+ * request began cannot complete it. Finance also needs paid features.
+ */
+export function stillHasCapability(
+  organizationId: string,
+  userId: string,
+  capability: OrganizationCapability,
+) {
+  const paid =
+    capability === "finance"
+      ? `AND EXISTS (SELECT 1 FROM organization
+           WHERE id = access.organization_id AND paid_features_enabled = 1)`
+      : "";
+  return {
+    bindings: [organizationId, capability, organizationId, userId],
+    sql: `EXISTS (
+      SELECT 1
+      FROM organization_group_capability AS access
+      JOIN "team" ON "team"."id" = access.team_id
+      JOIN "teamMember" ON "teamMember"."teamId" = "team"."id"
+      WHERE access.organization_id = ? AND access.capability = ?
+        AND "team"."organizationId" = ? AND "teamMember"."userId" = ?
+        ${paid}
+    )`,
+  };
 }
 
 async function listGroups(database: D1Database, organizationId: string) {
@@ -524,7 +575,7 @@ async function createGroup(
 async function updateGroup(
   context: Context<ApiEnv>,
   groupId: string,
-  input: GroupInput,
+  input: GroupUpdate,
 ) {
   const write = groupWrite(context, groupId);
   const { database, event, guard, organizationId } = write;
@@ -544,18 +595,21 @@ async function updateGroup(
         organizationId,
         ...guard.bindings,
       ),
-    // Unchanged members and capabilities keep their rows.
+    // Unchanged members and capabilities keep their rows, as do capabilities
+    // the save doesn't decide.
     database
       .prepare(
         `DELETE FROM organization_group_capability
          WHERE organization_id = ? AND team_id = ?
            AND capability NOT IN (SELECT value FROM json_each(?))
+           AND capability IN (SELECT value FROM json_each(?))
            AND ${writable.sql}`,
       )
       .bind(
         organizationId,
         groupId,
         JSON.stringify(input.capabilities),
+        JSON.stringify(input.managedCapabilities),
         ...writable.bindings,
       ),
     database
@@ -658,10 +712,6 @@ function grantStatements(
         ),
     ),
   ];
-}
-
-function capabilityLabel(capability: OrganizationCapability) {
-  return capability[0]?.toUpperCase() + capability.slice(1);
 }
 
 export { organizationGroups };

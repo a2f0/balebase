@@ -52,6 +52,9 @@ explicit actor type (migration `0086_record_system_activity.sql`):
   A CHECK constraint keeps every user event tied to a user.
 - `system`: Balebase's own maintenance. `actor_source` is the maintenance job's
   ID (such as `purgeDiscardedFormTemplates`); readers show "Balebase maintenance".
+  Migrations that create records for people record them this way too:
+  `0108_hr_background_checks.sql` records each HR group it creates as
+  `organization.group_created` with `actor_source = 'createHrGroups'`.
   The signing workflow (`contractSigning`) is the one other system source: it
   records what a signing link did, and readers show "Balebase signing".
 - `provider`: a provider's change. `actor_source` is the provider (`stripe`,
@@ -172,10 +175,13 @@ Transaction, bank connection, and expense category activity requires Finance
 capability even when a caller supplies the filter directly, including emails
 linked to a transaction. Group events, invitation events (they name invited
 addresses), two-factor requirement changes, billing events, the organization's
-deletion and restoration, and requested forms and checks
+deletion and restoration, and requested forms and credit checks
 (`employee_requirement`) are visible only to organization owners and admins,
 as group details, pending invitations, member security settings, billing
-management, and employee records already are. Everyone in the organization
+management, and employee records already are. Background check events (an
+`employee_requirement` whose `details.kind` is `background_check`) are
+visible only to members of a group with the Background checks capability,
+whatever their role. Everyone in the organization
 sees people joining, leaving, being removed or changing role, API keys being
 created and revoked, and the organization's creation and renames. Root admins
 read the organization's own history (creation, renames, deletion and
@@ -188,9 +194,10 @@ Resource history routes authorize the resource before using `findActivity`.
 A contract template's history (`GET /api/contracts/templates/:id/activity`,
 MCP `list_contract_template_activity`) is on its page while it exists. A
 requested form or check's history (`GET /api/employee-forms/:id/activity`,
-MCP `list_employee_requirement_activity`) is on the manager's request page and
-readable only by organization owners and admins, never by the person it was
-requested from.
+MCP `list_employee_requirement_activity`) is on its request page and readable
+only by those who handle that kind (owners and admins for forms and credit
+checks, Background checks access for background checks), never by the person
+it was requested from.
 A bank connection's history (`GET /api/finance/connections/:id/activity`, MCP
 `list_finance_connection_activity`) stays readable after it is disconnected.
 Shared global template history only exposes published versions to organization
@@ -391,14 +398,17 @@ the PDF stay out. Deleting a template records `contract_template.deleted` with
 its current version and version count; these events outlive the template until
 the organization is purged.
 
-Requested forms and checks record assignment, due date and status changes
-(old and new values; a status set by hand is always a manager's), deletion
-(with the number of signed screening authorizations removed with it), each
-document upload (revision, and whether the person or a manager uploaded it),
-and background-check requests (work location, and the report a re-request
-supersedes). Manager writes re-check in the transaction that the actor is
-still an owner or admin. Details never hold filenames, screening results, or
-consent contents. The person's signed authorizations keep their own record
+Requested forms and checks record assignment, due date and status changes (old
+and new values; a status set by hand is always that of someone who handles the
+request: an owner or admin for a form or credit check, anyone with Background
+checks access for a background check), deletion (with the number of signed
+screening authorizations removed with it), each document upload (revision, and
+whether the person or a manager uploaded it), and background-check requests
+(work location, and the report a re-request supersedes). Writes re-check in the
+transaction that the actor still handles the kind: still an owner or admin for
+forms and credit checks, still in a group with Background checks access for
+background checks. Details never hold filenames, screening results, or consent
+contents. The person's signed authorizations keep their own record
 (`employee_screening_consents`).
 
 Background checks also record, in the same transaction as the change:
@@ -411,13 +421,13 @@ Background checks also record, in the same transaction as the change:
   or the hourly refresh adopts the report of a submission its person did not
   finish.
 - `employee_requirement.screening_updated` whenever a refresh changes the
-  screening's status, report status, or result: by the manager who pressed
+  screening's status, report status, or result: by the person who pressed
   **Refresh check** (with any API key), or by Checkr for its webhook
   (`checkr_event`, the webhook event's ID) and the hourly refresh (`job_run`).
   Details hold the old and new status and report status, `via`
   (`manual`, `webhook`, or `scheduled`), `resultChanged`, and `hasResult`, but
   never the result itself. A refresh that finds nothing new, a stale one, and
-  one by a manager who has since lost the role record nothing. Because
+  one by someone who has since lost access to the check record nothing. Because
   provider events are deduplicated per cause, a redelivered webhook that finds
   a newer change leaves it for the next refresh rather than applying it
   without its event.

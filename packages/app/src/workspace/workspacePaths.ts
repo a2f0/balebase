@@ -1,4 +1,5 @@
 import type { FinanceFilters } from "@balebase/api-client";
+import type { OrganizationCapability } from "@balebase/validators/organizationGroups";
 
 /** The page at `base`, or a page beneath it. */
 export function isWithin(pathname: string, base: string) {
@@ -76,6 +77,26 @@ export function projectFormForPath(pathname: string) {
     }
   };
   return { formId: decode(match[2]), projectId: decode(match[1]) };
+}
+
+/** The background check list, or one background check. */
+export function backgroundCheckPath(requirementId?: string) {
+  return requirementId
+    ? `/background-checks/${encodeURIComponent(requirementId)}`
+    : "/background-checks";
+}
+
+export function backgroundCheckIdForPath(pathname: string) {
+  return recordIdForPath(pathname, "/background-checks");
+}
+
+/** The capability a path's pages need, if they need one. */
+export function capabilityForPath(
+  pathname: string,
+): OrganizationCapability | undefined {
+  if (isWithin(pathname, "/finance")) return "finance";
+  if (isWithin(pathname, backgroundCheckPath())) return "background_checks";
+  return undefined;
 }
 
 /** The business list, or one business. */

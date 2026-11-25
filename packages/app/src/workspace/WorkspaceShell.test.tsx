@@ -7,6 +7,7 @@ function navigationGroups(
   finance: { canAccessFinance: boolean; opensUncategorized?: boolean } = {
     canAccessFinance: false,
   },
+  canAccessBackgroundChecks = false,
 ) {
   const markup = renderToStaticMarkup(
     <WorkspaceShell
@@ -15,6 +16,7 @@ function navigationGroups(
       activeOrganizationId={undefined}
       activePage="organization"
       activeSessionToken=""
+      canAccessBackgroundChecks={canAccessBackgroundChecks}
       canAccessFinance={finance.canAccessFinance}
       contentKey={undefined}
       onAccountChange={async () => undefined}
@@ -53,6 +55,19 @@ describe("workspace navigation", () => {
     expect(
       financeLink({ canAccessFinance: true, opensUncategorized: true }),
     ).toBe("/finance/expenses/category/uncategorized");
+  });
+
+  it("lists Background checks first in Records, only with Background checks access", () => {
+    const records = (canAccess: boolean) =>
+      navigationGroups("user", undefined, canAccess).find((group) =>
+        group?.includes(">Records</p>"),
+      ) ?? "";
+    expect(records(false)).not.toContain("Background checks");
+    const shown = records(true);
+    expect(shown).toContain('href="/background-checks"');
+    expect(shown.indexOf("Background checks")).toBeLessThan(
+      shown.indexOf("Businesses"),
+    );
   });
 
   it("shows Organization in Admin without showing Root Admin to a regular user", () => {

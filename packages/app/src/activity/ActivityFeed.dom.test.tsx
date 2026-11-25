@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import type { ActivityEvent } from "@balebase/validators/activity";
 import { act } from "react";
+import { BackgroundChecksAccessContext } from "../backgroundChecks/BackgroundChecksAccess";
 import { installDom } from "../testing/dom";
 import { IntersectionObserverFixture } from "../testing/intersectionObserver";
 import { Activity } from "./Activity";
@@ -366,6 +367,43 @@ describe("activity feed, mounted", () => {
     ({ container } = await mount(<Activity onNavigate={() => {}} />));
     await settle();
     expect(container.textContent).not.toContain("Requested forms and checks");
+  });
+
+  it("opens background check history on its own page, and lets Background checks access filter it", async () => {
+    const check = {
+      id: "b1",
+      label: "Background check · Pat",
+      type: "employee_requirement",
+    };
+    respond(async () =>
+      Response.json({
+        events: [
+          {
+            ...event(1, ""),
+            action: "employee_requirement.assigned",
+            details: {
+              dueDate: "2026-12-31",
+              kind: "background_check",
+              personName: "Pat",
+              title: "Background check",
+            },
+            root: check,
+            subject: { id: check.id, type: check.type },
+          },
+        ],
+        nextCursor: null,
+      }),
+    );
+    const navigations: string[] = [];
+    ({ container } = await mount(
+      <BackgroundChecksAccessContext value>
+        <Activity onNavigate={(path) => navigations.push(path)} />
+      </BackgroundChecksAccessContext>,
+    ));
+    await settle();
+    expect(container.textContent).toContain("Requested forms and checks");
+    await click("Open request: Background check · Pat");
+    expect(navigations).toEqual(["/background-checks/b1"]);
   });
 
   it("ignores a response from the previous resource filter", async () => {

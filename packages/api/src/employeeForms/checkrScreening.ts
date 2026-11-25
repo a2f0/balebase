@@ -1,4 +1,4 @@
-import { stillManages } from "../organizations/organizationMembers";
+import { stillHasCapability } from "../organizations/organizationGroups";
 import { paidFeaturesEnabled } from "../organizations/paidFeatureAccess";
 import { type ActivityActor, activityBatch } from "../shared/activity";
 import { trackedPut } from "../shared/storage";
@@ -28,8 +28,9 @@ export function isClosedReportStatus(status: string | null) {
 
 /**
  * Asks the person to complete a background check at a work location. The
- * request names the manager who made it; a re-request after a canceled report
- * keeps the superseded report's ID in that history.
+ * request names who made it, who must still have Background checks access; a
+ * re-request after a canceled report keeps the superseded report's ID in that
+ * history.
  */
 export async function requestCheckrScreening(
   database: D1Database,
@@ -40,7 +41,11 @@ export async function requestCheckrScreening(
   actor: ActivityActor,
 ) {
   const now = new Date().toISOString();
-  const manages = stillManages(organizationId, actor.userId);
+  const manages = stillHasCapability(
+    organizationId,
+    actor.userId,
+    "background_checks",
+  );
   const guard = {
     bindings: [requirementId, organizationId, ...manages.bindings],
     sql: `id = ? AND organization_id = ? AND kind = 'background_check'

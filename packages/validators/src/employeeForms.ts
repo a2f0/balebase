@@ -17,6 +17,15 @@ export type EmployeeRequirementKind = z.infer<
   typeof EmployeeRequirementKindSchema
 >;
 
+/**
+ * Background checks belong to members of a group with the Background checks
+ * capability, such as the built-in HR group, whatever their role; owners and
+ * admins handle every other request.
+ */
+export function isBackgroundCheck(kind: EmployeeRequirementKind) {
+  return kind === "background_check";
+}
+
 export const EmployeeRequirementStatusSchema = z.enum([
   "pending",
   "in_progress",
@@ -35,7 +44,7 @@ const EmployeeRequirementSchema = z.object({
   checkrReportStatus: z.string().nullable(),
   /** Requested and waiting for the person to submit their details. */
   checkrRequested: z.boolean(),
-  /** Sent to managers only. */
+  /** Sent only to those who handle the check, never to the person. */
   checkrResult: z.string().nullable(),
   checkrSubmitting: z.boolean(),
   checkrWorkLocation: z
@@ -389,7 +398,7 @@ export const employeeFormsRoutes = {
     path: "/api/employee-forms/:id",
     response: OkSchema,
   }),
-  /** Managers only: one request's history, newest first. */
+  /** For those who handle the request: its history, newest first. */
   activity: route({
     method: "GET",
     path: "/api/employee-forms/:id/activity",

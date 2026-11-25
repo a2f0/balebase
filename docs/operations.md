@@ -346,6 +346,28 @@ bun run deploy:verify   # check all production URLs
 `DEPLOY_TIER=staging` selects staging for `deploy:verify` and
 `deploy:email:verify`; `bun run deploy:staging:verify` is the shortcut.
 
+Apps built before migration `0108_hr_background_checks.sql` know only the
+Finance capability. Their group saves name no `managedCapabilities`, so the new
+API changes only Finance access and keeps a group's Background checks access.
+The API applies the migration just before publishing its Worker; in between, the
+previous Worker still creates organizations without an HR group and replaces
+every capability on a group save; it also lists the new built-in HR groups,
+whose kind its app doesn't know. Right after the deploy, before anyone turns
+Background checks off on purpose, this should list no organization:
+
+```sh
+bunx wrangler d1 execute <database> --remote --command \
+  "SELECT id FROM organization WHERE id NOT IN (
+     SELECT builtin.organization_id FROM organization_builtin_group AS builtin
+     JOIN organization_group_capability AS access
+       ON access.team_id = builtin.team_id
+      AND access.capability = 'background_checks'
+     WHERE builtin.kind = 'hr')"
+```
+
+For any it lists, an owner or admin turns on Background checks access for a
+group, such as HR, in Organization → Access.
+
 Website builds publish the shared screenshot capture
 ([screenshots](../CONTRIBUTING.md#screenshots)) and refuse one that is
 running, failed, or uncommitted; check the take-screenshots skill's `status`
