@@ -4,6 +4,7 @@ export type ThemePreference = "dark" | "light" | "system";
 type Theme = "dark" | "light";
 
 // index.html reads this key before first paint; keep the two in sync.
+// Sign-out clears it with the other display settings (./devicePreferences.ts).
 export const themeStorageKey = "balebase.theme";
 const darkSchemeQuery = "(prefers-color-scheme: dark)";
 
@@ -75,6 +76,11 @@ function updatePreference(preference: ThemePreference) {
 export function setThemePreference(preference: ThemePreference) {
   storeThemePreference(preference);
   updatePreference(preference);
+}
+
+/** Follows the stored preference again, as after sign-out clears it. */
+export function reloadThemePreference() {
+  updatePreference(readThemePreference());
 }
 
 /**

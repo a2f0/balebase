@@ -6,17 +6,17 @@ import {
 } from "./formTemplateView";
 
 describe("form template view", () => {
-  it("defaults to the grid when nothing usable is stored", () => {
-    expect(defaultFormTemplateView).toBe("grid");
-    expect(readFormTemplateView({ getItem: () => null })).toBe("grid");
-    expect(readFormTemplateView({ getItem: () => "table" })).toBe("grid");
+  it("defaults to the list when nothing usable is stored", () => {
+    expect(defaultFormTemplateView).toBe("list");
+    expect(readFormTemplateView({ getItem: () => null })).toBe("list");
+    expect(readFormTemplateView({ getItem: () => "table" })).toBe("list");
     expect(
       readFormTemplateView({
         getItem: () => {
           throw new Error("Storage is disabled.");
         },
       }),
-    ).toBe("grid");
+    ).toBe("list");
   });
 
   it("loads and stores the chosen view", () => {
@@ -27,11 +27,11 @@ describe("form template view", () => {
         values.set(key, value);
       },
     };
-    storeFormTemplateView("list", storage);
-    expect([...values.values()]).toEqual(["list"]);
-    expect(readFormTemplateView(storage)).toBe("list");
     storeFormTemplateView("grid", storage);
+    expect([...values.values()]).toEqual(["grid"]);
     expect(readFormTemplateView(storage)).toBe("grid");
+    storeFormTemplateView("list", storage);
+    expect(readFormTemplateView(storage)).toBe("list");
   });
 
   it("ignores storage that refuses writes", () => {
