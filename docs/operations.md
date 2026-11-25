@@ -444,8 +444,9 @@ them later with `bun run deploy:staging:verify`; it runs the production checks
 except the Cloudflare edge-error CORS rule, which only production has. Terraform
 asks for confirmation before applying the domains. The generated
 `wrangler.staging.jsonc` files are ignored; their D1 ID comes from staging
-Terraform output. The staging API does not run production's scheduled jobs.
-Configure the Stripe test-mode webhook at
+Terraform output. The staging API runs maintenance on the schedules saved in
+its own D1 database; pause them at **Root Admin → Jobs** to keep staging
+manual. Configure the Stripe test-mode webhook at
 `https://api-staging.balebase.com/api/billing/webhook` and put that endpoint's
 signing secret in `STRIPE_WEBHOOK_SECRET`.
 

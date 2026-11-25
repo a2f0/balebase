@@ -14,21 +14,29 @@ CREATE TABLE job_schedules (
   updated_by_email TEXT
 );
 
+-- One statement per job: D1 refuses a compound SELECT of more than five terms.
 INSERT INTO job_schedules (job_id, cron, enabled, updated_at)
-SELECT job_id, '17 * * * *', enabled, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-FROM (
-  SELECT 'purgeDeletedOrganizations' AS job_id, 1 AS enabled
-  UNION ALL SELECT 'purgeRequestedUsers', 1
-  UNION ALL SELECT 'purgeExpiredFreeFormRuns', 1
-  UNION ALL SELECT 'purgeDiscardedFormTemplates', 1
-  UNION ALL SELECT 'purgeTrashedEmails', 0
-  UNION ALL SELECT 'purgeDeletedObjects', 1
-  UNION ALL SELECT 'purgePendingFormIssueImages', 1
-  UNION ALL SELECT 'purgeStripeWebhookReceipts', 1
-  UNION ALL SELECT 'reconcileSubscriptionSeats', 1
-  UNION ALL SELECT 'maintainContracts', 1
-  UNION ALL SELECT 'refreshCheckrScreenings', 1
-);
+VALUES ('purgeDeletedOrganizations', '17 * * * *', 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+INSERT INTO job_schedules (job_id, cron, enabled, updated_at)
+VALUES ('purgeRequestedUsers', '17 * * * *', 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+INSERT INTO job_schedules (job_id, cron, enabled, updated_at)
+VALUES ('purgeExpiredFreeFormRuns', '17 * * * *', 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+INSERT INTO job_schedules (job_id, cron, enabled, updated_at)
+VALUES ('purgeDiscardedFormTemplates', '17 * * * *', 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+INSERT INTO job_schedules (job_id, cron, enabled, updated_at)
+VALUES ('purgeTrashedEmails', '17 * * * *', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+INSERT INTO job_schedules (job_id, cron, enabled, updated_at)
+VALUES ('purgeDeletedObjects', '17 * * * *', 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+INSERT INTO job_schedules (job_id, cron, enabled, updated_at)
+VALUES ('purgePendingFormIssueImages', '17 * * * *', 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+INSERT INTO job_schedules (job_id, cron, enabled, updated_at)
+VALUES ('purgeStripeWebhookReceipts', '17 * * * *', 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+INSERT INTO job_schedules (job_id, cron, enabled, updated_at)
+VALUES ('reconcileSubscriptionSeats', '17 * * * *', 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+INSERT INTO job_schedules (job_id, cron, enabled, updated_at)
+VALUES ('maintainContracts', '17 * * * *', 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+INSERT INTO job_schedules (job_id, cron, enabled, updated_at)
+VALUES ('refreshCheckrScreenings', '17 * * * *', 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
 
 -- Every schedule change with the admin's snapshot, written in the
 -- transaction that makes it. Kept after the admin's account is purged. The
