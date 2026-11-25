@@ -98,6 +98,36 @@ describe("workspace paths", () => {
     expect(movedWorkspacePath("/me/screening/check")).toBeUndefined();
   });
 
+  it("moves links from before Audits became Forms", () => {
+    expect(
+      [
+        "/audits",
+        "/audits/",
+        "/audits/runs/run%2F1",
+        "/audits/templates/us_residential_core_global",
+        "/root/global-audits",
+        "/root/global-audits/nfpa%2F70e",
+        "/projects/p%2F1/audits/local-1",
+      ].map(movedWorkspacePath),
+    ).toEqual([
+      "/forms",
+      "/forms/",
+      "/forms/runs/run%2F1",
+      "/forms/templates/us_residential_core_global",
+      "/root/global-templates",
+      "/root/global-templates/nfpa%2F70e",
+      "/projects/p%2F1/forms/local-1",
+    ]);
+    for (const current of [
+      "/forms/runs/run",
+      "/auditsx",
+      "/root/global-templates/t",
+      "/projects/audits",
+      "/projects/p/audits",
+    ])
+      expect(movedWorkspacePath(current)).toBeUndefined();
+  });
+
   it("round-trips business paths", () => {
     expect(businessPath()).toBe("/businesses");
     expect(businessPath("business/1")).toBe("/businesses/business%2F1");

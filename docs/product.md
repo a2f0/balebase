@@ -652,8 +652,8 @@ organization queues them in `deleted_object_cleanup` for the scheduled purge.
 
 ## Audit activity
 
-The workspace **Activity** page (`/activity`) brings together changes to forms,
-forms, issues, equipment, organization roles, API keys, transaction
+The workspace **Activity** page (`/activity`) brings together changes to form
+templates, forms, issues, equipment, organization roles, API keys, transaction
 annotations and categories, contracts, and the forms and checks requested of
 people. Filter by resource to follow a particular area;
 form and transaction filters include their attached issues, while **Workspace

@@ -9,7 +9,7 @@ import { useLoad } from "../shared/useLoad";
 import { projectPath } from "../workspace/workspacePaths";
 
 /**
- * Deleted projects, which keep their forms, members, and forms, and which
+ * Deleted projects, which keep their forms, members, and templates, and which
  * managers can restore. Shown only while there are some.
  */
 export function DeletedProjects({

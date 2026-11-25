@@ -578,7 +578,7 @@ function TemplateDetails({
             onChange={(event) =>
               update({ ...template, description: event.target.value })
             }
-            placeholder="What should an auditor know before starting?"
+            placeholder="What should someone know before filling this in?"
             rows={3}
             value={template.description}
           />

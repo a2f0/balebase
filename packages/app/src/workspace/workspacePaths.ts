@@ -338,15 +338,25 @@ export function globalFormTemplateIdForPath(pathname: string) {
   return recordIdForPath(pathname, globalTemplatesPath());
 }
 
+/** Forms was Audits until migration 0107 renamed it, with its global templates. */
+const renamedFormPaths: [RegExp, string][] = [
+  [/^\/audits(?=\/|$)/, "/forms"],
+  [/^\/root\/global-audits(?=\/|$)/, "/root/global-templates"],
+  [/^(\/projects\/[^/]+)\/audits(?=\/)/, "$1/forms"],
+];
+
 /**
  * Where an older link now lives. Background check emails sent before My
- * documents linked to a form under the person's People page.
+ * documents linked to a form under the person's People page, and Forms links
+ * from before the rename name Audits.
  */
 export function movedWorkspacePath(pathname: string) {
   const segment = /^\/organization\/people\/[^/]+\/screening\/([^/]+)\/?$/.exec(
     pathname,
   )?.[1];
-  return segment ? `/me/screening/${segment}` : undefined;
+  if (segment) return `/me/screening/${segment}`;
+  const renamed = renamedFormPaths.find(([from]) => from.test(pathname));
+  return renamed ? pathname.replace(...renamed) : undefined;
 }
 
 /** The token in a public `/sign/<token>` signing link, if the path is one. */

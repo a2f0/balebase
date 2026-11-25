@@ -115,7 +115,7 @@ export async function purgeRequestedUsers(
     try {
       // Recheck the request atomically: cancellation must win if committed first.
       // Preserve contract attribution whose foreign keys otherwise become null.
-      // Restrictive foreign keys protect the remaining financial/form history.
+      // Restrictive foreign keys protect the remaining financial, form, and audit history.
       const [, deleted] = await environment.DB.batch<{ id: string }>([
         purgeRecord(environment.DB, actor, now, userId, cutoff),
         environment.DB.prepare(

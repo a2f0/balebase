@@ -119,7 +119,10 @@ INSERT INTO objects_next (id, organization_id, object_key, filename, content_typ
 SELECT id, organization_id, object_key, filename, content_type, size, created_at, CASE kind WHEN 'audit_issue_image' THEN 'form_issue_image' ELSE kind END, deletion_pending, cleanup_token, cleanup_claimed_at, upload_token, upload_lease_expires_at, folder_id
 FROM objects;
 
--- Nothing references either table now, so dropping them deletes no other rows.
+-- Nothing references either table now, so dropping them deletes no other rows:
+-- form_issue_images is their only foreign-key child, and its rows are parked
+-- above. A child added before this runs would lose its rows to the implicit
+-- DELETE that DROP TABLE performs, so park it the same way.
 -- The legacy rename leaves other schema text naming `issues` and `objects`
 -- as it is, which is the name the rebuilt tables take.
 PRAGMA legacy_alter_table = ON;

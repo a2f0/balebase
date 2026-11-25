@@ -472,7 +472,7 @@ async function recordDeliveryFailure(
   });
 }
 
-/** A readable form line for the certificate. */
+/** A readable audit line for the certificate. */
 export function describeEvent(
   event: EventRow,
   recipients: Map<string, Pick<RecipientRow, "email" | "name">>,
