@@ -55,7 +55,7 @@ import type { OverviewHandlers } from "./financeOverviewHandlers";
 import { createRuleAction } from "./financeRuleAction";
 import {
   filterTransactions,
-  selectFinanceAccount,
+  toggleFinanceAccount,
 } from "./financeTransactions";
 import {
   reportLoginRepair,
@@ -516,14 +516,10 @@ function FinanceOverview({
       />
       <FinanceAccounts
         accounts={data?.accounts}
-        onSelect={(accountId, shiftKey) =>
+        onSelect={(accountId) =>
           onFiltersChange({
             ...filters,
-            accountIds: selectFinanceAccount(
-              filters.accountIds,
-              accountId,
-              shiftKey,
-            ),
+            accountIds: toggleFinanceAccount(filters.accountIds, accountId),
           })
         }
         selectedAccountIds={filters.accountIds}

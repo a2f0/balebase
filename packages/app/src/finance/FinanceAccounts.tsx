@@ -260,7 +260,7 @@ export function FinanceAccounts({
   selectedAccountIds,
 }: {
   accounts: FinanceAccount[] | undefined;
-  onSelect: (accountId: string, shiftKey: boolean) => void;
+  onSelect: (accountId: string) => void;
   selectedAccountIds: string[];
 }) {
   if (!accounts?.length) return null;
@@ -271,7 +271,7 @@ export function FinanceAccounts({
           {countLabel(accounts.length, "account")}
         </span>
       }
-      description="Select accounts to filter transactions. Shift-click to select more than one."
+      description="Select one or more accounts to filter transactions. Select an account again to remove it."
       title="Accounts"
     >
       <div className="gridAuto financeAccountGrid">
@@ -294,7 +294,7 @@ function AccountCard({
   selected,
 }: {
   account: FinanceAccount;
-  onSelect: (accountId: string, shiftKey: boolean) => void;
+  onSelect: (accountId: string) => void;
   selected: boolean;
 }) {
   const details = [
@@ -310,7 +310,7 @@ function AccountCard({
         "card cardInteractive financeAccount",
         selected && "cardSelected",
       )}
-      onClick={(event) => onSelect(account.id, event.shiftKey)}
+      onClick={() => onSelect(account.id)}
       type="button"
     >
       <span className="financeAccountLine">

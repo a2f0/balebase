@@ -2,8 +2,8 @@ import { describe, expect, it } from "bun:test";
 import type { FinanceTransaction } from "@balebase/validators/finance";
 import {
   searchTransactions,
-  selectFinanceAccount,
   sortTransactions,
+  toggleFinanceAccount,
 } from "./financeTransactions";
 
 const transaction = (
@@ -30,24 +30,19 @@ const transaction = (
 });
 
 describe("finance account selection", () => {
-  it("focuses one account on an ordinary click and clears a sole selection", () => {
-    expect(selectFinanceAccount([], "checking", false)).toEqual(["checking"]);
-    expect(
-      selectFinanceAccount(["checking", "savings"], "checking", false),
-    ).toEqual(["checking"]);
-    expect(selectFinanceAccount(["checking"], "checking", false)).toEqual([]);
-  });
-
-  it("adds and removes individual accounts with Shift without changing the others", () => {
-    expect(selectFinanceAccount([], "savings", true)).toEqual(["savings"]);
-    expect(selectFinanceAccount(["checking"], "savings", true)).toEqual([
+  it("adds an unselected account without changing the others", () => {
+    expect(toggleFinanceAccount([], "checking")).toEqual(["checking"]);
+    expect(toggleFinanceAccount(["checking"], "savings")).toEqual([
       "checking",
       "savings",
     ]);
+  });
+
+  it("removes a selected account without changing the others", () => {
     expect(
-      selectFinanceAccount(["checking", "savings", "card"], "savings", true),
+      toggleFinanceAccount(["checking", "savings", "card"], "savings"),
     ).toEqual(["checking", "card"]);
-    expect(selectFinanceAccount(["checking"], "checking", true)).toEqual([]);
+    expect(toggleFinanceAccount(["checking"], "checking")).toEqual([]);
   });
 });
 
