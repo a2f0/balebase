@@ -35,6 +35,18 @@ function unique<Value>(values: Value[]) {
 
 const OrganizationGroupInputSchema = z.object({
   capabilities: z.array(OrganizationCapabilitySchema).transform(unique),
+  name: requiredText(groupLimits.name),
+  /** Replaces the group's members; blanks and repeats are dropped. */
+  userIds: z
+    .array(z.string().trim())
+    .max(groupLimits.members)
+    .transform((userIds) => unique(userIds.filter(Boolean))),
+});
+export type OrganizationGroupInput = z.input<
+  typeof OrganizationGroupInputSchema
+>;
+
+const OrganizationGroupUpdateSchema = OrganizationGroupInputSchema.extend({
   /**
    * The capabilities this save decides; the group keeps its others. When it
    * is left out, an API key's save decides every capability, and a signed-in
@@ -45,15 +57,9 @@ const OrganizationGroupInputSchema = z.object({
     .array(OrganizationCapabilitySchema)
     .transform(unique)
     .optional(),
-  name: requiredText(groupLimits.name),
-  /** Replaces the group's members; blanks and repeats are dropped. */
-  userIds: z
-    .array(z.string().trim())
-    .max(groupLimits.members)
-    .transform((userIds) => unique(userIds.filter(Boolean))),
 });
-export type OrganizationGroupInput = z.input<
-  typeof OrganizationGroupInputSchema
+export type OrganizationGroupUpdate = z.input<
+  typeof OrganizationGroupUpdateSchema
 >;
 
 const GroupIdSchema = z.object({ id: z.string() });
@@ -87,7 +93,7 @@ export const organizationGroupsRoutes = {
   update: route({
     method: "PATCH",
     path: "/api/organization-groups/:id",
-    body: OrganizationGroupInputSchema,
+    body: OrganizationGroupUpdateSchema,
     response: GroupIdSchema,
   }),
   delete: route({
