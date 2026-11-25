@@ -2,7 +2,7 @@ export const defaultSidebarWidth = 240;
 export const maximumSidebarWidth = 400;
 export const minimumSidebarWidth = 200;
 
-const sidebarWidthStorageKey = "balebase.sidebar-width";
+export const sidebarWidthStorageKey = "balebase.sidebar-width";
 const keyboardResizeStep = 16;
 
 interface StorageReader {

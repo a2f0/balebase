@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from "bun:test";
+import { afterEach, beforeAll, describe, expect, it } from "bun:test";
 import { productName } from "@balebase/ui/brand";
 import { DialogHost } from "@balebase/ui/react";
 import type {
@@ -10,8 +10,21 @@ import { DeviceContext, type DeviceState } from "../offline/offlineContext";
 import type { OfflineWorkspace } from "../offline/offlineStore";
 import { installDom } from "../testing/dom";
 
-const { click, fill, mount, queryButton, respond, settle } = installDom({
+const {
+  click,
+  fill,
+  mount,
+  queryButton,
+  respond,
+  settle,
+  window: dom,
+} = installDom({
   url: "http://localhost:5173/projects/project-1",
+});
+
+// The template layout a test picks is stored; the next test starts afresh.
+afterEach(() => {
+  dom.localStorage.clear();
 });
 let Projects: typeof import("./Projects").Projects;
 
@@ -394,18 +407,18 @@ describe("project detail", () => {
     const container = await render();
     expect(collectionOf(container, "NFPA 70E")).toBe("Global templates");
     expect(collectionOf(container, "Site walk")).toBe("Organization templates");
-    const card = toggle(container, "Site walk")?.closest(".formTemplateCard");
-    expect(card?.textContent).toContain("Site walk checklist");
-    expect(card?.textContent).toContain("Published");
-    expect(card?.textContent).toContain("1 item");
-    expect(card?.textContent).toContain("v3");
-    for (const label of ["Edit", "Customize", "Start form"])
-      expect(queryButton(label, card as HTMLElement)).toBeFalsy();
-
-    const setup = toggle(container, "Site walk")?.closest('[role="tabpanel"]');
-    await click(queryButton("List", setup as HTMLElement));
     const row = toggle(container, "Site walk")?.closest(".formTemplateRow");
     expect(row?.textContent).toContain("Site walk checklist");
+    expect(row?.textContent).toContain("Published");
+    expect(row?.textContent).toContain("1 item");
+    expect(row?.textContent).toContain("v3");
+    for (const label of ["Edit", "Customize", "Start form"])
+      expect(queryButton(label, row as HTMLElement)).toBeFalsy();
+
+    const setup = toggle(container, "Site walk")?.closest('[role="tabpanel"]');
+    await click(queryButton("Grid", setup as HTMLElement));
+    const card = toggle(container, "Site walk")?.closest(".formTemplateCard");
+    expect(card?.textContent).toContain("Site walk checklist");
     expect(collectionOf(container, "NFPA 70E")).toBe("Global templates");
   });
 

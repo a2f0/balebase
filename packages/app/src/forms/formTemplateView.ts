@@ -1,8 +1,9 @@
 export type FormTemplateView = "grid" | "list";
 
-export const defaultFormTemplateView: FormTemplateView = "grid";
+/** Every template list opens as a list until the person picks the grid. */
+export const defaultFormTemplateView: FormTemplateView = "list";
 
-const formTemplateViewStorageKey = "balebase.form-template-view";
+export const formTemplateViewStorageKey = "balebase.form-template-view";
 
 interface StorageReader {
   getItem(key: string): string | null;
@@ -18,7 +19,9 @@ export function readFormTemplateView(
   try {
     const availableStorage = storage ?? window.localStorage;
     const storedView = availableStorage.getItem(formTemplateViewStorageKey);
-    return storedView === "list" ? "list" : defaultFormTemplateView;
+    return storedView === "grid" || storedView === "list"
+      ? storedView
+      : defaultFormTemplateView;
   } catch {
     return defaultFormTemplateView;
   }

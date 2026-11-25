@@ -77,6 +77,11 @@ export function setThemePreference(preference: ThemePreference) {
   updatePreference(preference);
 }
 
+/** Follows the stored preference again, as after sign-out clears it. */
+export function reloadThemePreference() {
+  updatePreference(readThemePreference());
+}
+
 /**
  * Keeps <html data-theme> current as the system scheme changes and as other
  * tabs change the preference. Returns a function that stops listening.

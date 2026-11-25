@@ -114,18 +114,9 @@ const templates = [
 ];
 
 describe("form template layout, mounted", () => {
-  it("starts on the grid of cards", async () => {
+  it("starts on rows that keep each template's details and actions", async () => {
     stubApi(templates);
     const view = await mountPage();
-    expect(view.pressed()).toEqual(["Grid"]);
-    expect(view.cards()).toBe(2);
-    expect(view.rowText()).toEqual([]);
-  });
-
-  it("switches to rows that keep each template's details and actions", async () => {
-    stubApi(templates);
-    const view = await mountPage();
-    await click(view.layoutButton("List"));
 
     expect(view.pressed()).toEqual(["List"]);
     expect(view.cards()).toBe(0);
@@ -153,6 +144,16 @@ describe("form template layout, mounted", () => {
     }
   });
 
+  it("switches to the grid of cards", async () => {
+    stubApi(templates);
+    const view = await mountPage();
+    await click(view.layoutButton("Grid"));
+
+    expect(view.pressed()).toEqual(["Grid"]);
+    expect(view.cards()).toBe(2);
+    expect(view.rowText()).toEqual([]);
+  });
+
   it("leaves global template management to Global templates", async () => {
     stubApi(templates);
     const view = await mountPage();
@@ -165,15 +166,15 @@ describe("form template layout, mounted", () => {
   it("remembers the chosen layout on the next visit", async () => {
     stubApi(templates);
     const first = await mountPage();
-    await click(first.layoutButton("List"));
+    await click(first.layoutButton("Grid"));
     await first.unmount();
 
     const second = await mountPage();
-    expect(second.pressed()).toEqual(["List"]);
-    expect(second.rowText()).toHaveLength(2);
-
-    await click(second.layoutButton("Grid"));
+    expect(second.pressed()).toEqual(["Grid"]);
     expect(second.cards()).toBe(2);
+
+    await click(second.layoutButton("List"));
+    expect(second.rowText()).toHaveLength(2);
   });
 });
 
@@ -186,12 +187,12 @@ describe("a template's menu, mounted", () => {
   for (const [opening, open] of [
     [
       "its menu button",
-      async (card: Element) =>
-        click(card.querySelector<HTMLElement>('[aria-haspopup="menu"]')),
+      async (row: Element) =>
+        click(row.querySelector<HTMLElement>('[aria-haspopup="menu"]')),
     ],
     [
-      "a right-click on its card",
-      async (card: Element) => {
+      "a right-click on its row",
+      async (row: Element) => {
         const event = new dom.MouseEvent("contextmenu", {
           bubbles: true,
           button: 2,
@@ -199,7 +200,7 @@ describe("a template's menu, mounted", () => {
           clientX: 100,
           clientY: 100,
         });
-        await act(async () => card.dispatchEvent(event as never));
+        await act(async () => row.dispatchEvent(event as never));
       },
     ],
   ] as const) {
@@ -211,8 +212,8 @@ describe("a template's menu, mounted", () => {
       );
       await settle();
       const [global, organization] =
-        container.querySelectorAll(".formTemplateCard");
-      if (!global || !organization) throw new Error("Missing cards.");
+        container.querySelectorAll(".formTemplateRow");
+      if (!global || !organization) throw new Error("Missing rows.");
       await open(global);
       expect(menuItems()).toEqual(["Assign projects", "Customize"]);
       await click(

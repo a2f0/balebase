@@ -3,6 +3,7 @@ import { clearUserTransactions } from "../finance/transactionCache";
 import { lockOfflineWorkspace } from "../offline/offlineStore";
 import { authClient } from "../shared/authClient";
 import { throwIfRefused } from "../shared/errors";
+import { clearDevicePreferences } from "./devicePreferences";
 
 export interface AccountSession {
   token: string;
@@ -95,6 +96,8 @@ export function useAccountSessions(
     }
     // Invalidate preparations started while revocation was still in flight.
     lockOfflineWorkspace();
+    // Display settings belong to whoever signed out, not to the next person.
+    clearDevicePreferences();
     // Saved bank transactions can be read again online; drop them.
     if (userId) await clearUserTransactions(userId).catch(() => undefined);
     await refetchSession();

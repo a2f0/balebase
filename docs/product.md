@@ -128,6 +128,12 @@ returned with the session). It applies to the overview and Categories' counts
 alike and combines with both switches; the period can still be changed on the
 page, and **Clear filters** returns to all time. Like the theme and default
 organization, these are personal choices and record no activity.
+The theme, the sidebar's width, Categories' **Hide categories with no
+transactions** switch, and the grid or list layout of template lists (a list
+unless the person picks the grid) are kept in the browser instead. Signing
+out clears them, so the next person on the device starts from the defaults;
+offline work, saved bank transactions, and pending Plaid repair reports
+follow their own sign-out rules.
 
 Root admins use `/root/jobs` to run platform maintenance and inspect maintenance
 and bank sync history. Every run uses the shared background queue and D1 run

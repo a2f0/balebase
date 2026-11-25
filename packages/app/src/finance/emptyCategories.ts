@@ -1,6 +1,7 @@
 import type { ExpenseCategory } from "@balebase/validators/finance";
 
-const hideEmptyCategoriesStorageKey = "balebase.finance-hide-empty-categories";
+export const hideEmptyCategoriesStorageKey =
+  "balebase.finance-hide-empty-categories";
 
 interface StorageReader {
   getItem(key: string): string | null;
