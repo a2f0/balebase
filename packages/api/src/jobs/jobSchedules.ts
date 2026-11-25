@@ -8,11 +8,7 @@ import {
   nextCronRun,
   parseCron,
 } from "@balebase/validators/cron";
-import {
-  cursorPage,
-  decodeCursor,
-  encodeCursor,
-} from "../shared/cursorPagination";
+import { cursorPage } from "../shared/cursorPagination";
 import type { Bindings } from "../types";
 import type { JobRow } from "./jobRuns";
 import {
@@ -33,7 +29,7 @@ interface JobScheduleRow {
 }
 
 interface JobScheduleChangeRow {
-  id: string;
+  id: number;
   job_id: string;
   changed_at: string;
   previous_cron: string | null;
@@ -152,6 +148,12 @@ export async function runDueMaintenance(env: Bindings, scheduledTime: number) {
  * stored role is no longer `admin`. Saving the schedule it already has
  * records nothing.
  */
+/**
+ * What saving a schedule did: `refused` when the requester's stored role is no
+ * longer admin, `unchanged` when the job already had it, and `saved` otherwise.
+ */
+export type JobScheduleSave = "refused" | "saved" | "unchanged";
+
 export async function saveJobSchedule(
   database: D1Database,
   input: {
@@ -160,25 +162,24 @@ export async function saveJobSchedule(
     enabled: boolean;
     jobId: MaintenanceJobId;
   },
-) {
+): Promise<JobScheduleSave> {
   const now = new Date().toISOString();
   const enabled = Number(input.enabled);
-  const [actor] = await database.batch([
+  const [actor, change] = await database.batch([
     database
       .prepare(`SELECT actor.id FROM user AS actor WHERE ${requesterGuard}`)
       .bind(input.actorUserId),
     database
       .prepare(`INSERT INTO job_schedule_changes
-        (id, job_id, changed_at, previous_cron, previous_enabled, cron, enabled,
+        (job_id, changed_at, previous_cron, previous_enabled, cron, enabled,
          actor_user_id, actor_name, actor_email)
-        SELECT ?, ?, ?, current.cron, current.enabled, ?, ?,
+        SELECT ?, ?, current.cron, current.enabled, ?, ?,
           actor.id, actor.name, actor.email
         FROM user AS actor
         LEFT JOIN job_schedules AS current ON current.job_id = ?
         WHERE ${requesterGuard}
           AND (current.job_id IS NULL OR current.cron <> ? OR current.enabled <> ?)`)
       .bind(
-        crypto.randomUUID(),
         input.jobId,
         now,
         input.cron,
@@ -202,7 +203,9 @@ export async function saveJobSchedule(
           OR job_schedules.enabled <> excluded.enabled`)
       .bind(input.jobId, input.cron, enabled, now, input.actorUserId),
   ]);
-  return Boolean(actor?.results.length);
+  if (!actor?.results.length) return "refused";
+  // The change row and the schedule are written under the same condition.
+  return (change?.meta.changes ?? 0) > 0 ? "saved" : "unchanged";
 }
 
 /** A job's schedule changes, newest first. Null for a bad cursor. */
@@ -211,19 +214,18 @@ export async function listJobScheduleChanges(
   jobId: string,
   cursor: string | undefined,
 ) {
-  const boundary = cursor === undefined ? null : decodeCursor(cursor, 500);
-  if (cursor !== undefined && !boundary) return null;
+  const before = cursor === undefined ? null : Number(cursor);
+  if (before !== null && !(Number.isSafeInteger(before) && before > 0))
+    return null;
   const { results } = await database
     .prepare(
       `SELECT * FROM job_schedule_changes WHERE job_id = ?
-       ${boundary ? "AND (changed_at, id) < (?, ?)" : ""}
-       ORDER BY changed_at DESC, id DESC LIMIT ?`,
+       ${before === null ? "" : "AND id < ?"}
+       ORDER BY id DESC LIMIT ?`,
     )
-    .bind(jobId, ...(boundary ?? []), changePageSize + 1)
+    .bind(jobId, ...(before === null ? [] : [before]), changePageSize + 1)
     .all<JobScheduleChangeRow>();
-  const page = cursorPage(results, changePageSize, (row) =>
-    encodeCursor(row.changed_at, row.id),
-  );
+  const page = cursorPage(results, changePageSize, (row) => String(row.id));
   return {
     changes: page.items.map(
       (row): JobScheduleChange => ({
@@ -235,7 +237,7 @@ export async function listJobScheduleChanges(
         changedAt: row.changed_at,
         cron: row.cron,
         enabled: Boolean(row.enabled),
-        id: row.id,
+        id: String(row.id),
         jobId: row.job_id,
         previousCron: row.previous_cron,
         previousEnabled:

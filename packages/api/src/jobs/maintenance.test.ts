@@ -152,7 +152,10 @@ it("keeps hourly scheduling idempotent and gates cleanup on retention even when 
   // The seeded schedules run at 17 past each hour; a trigger's seconds do not matter.
   const minute = Date.UTC(2026, 10, 25, 10, 17);
   await runDueMaintenance(f.bindings, minute + 2_000);
+  const sent = f.messages.length;
+  // A repeated trigger event queues and sends nothing more.
   await runDueMaintenance(f.bindings, minute);
+  expect(f.messages).toHaveLength(sent);
   expect(
     f.database.query("SELECT count(*) AS count FROM job_runs").get(),
   ).toEqual({ count: 10 });

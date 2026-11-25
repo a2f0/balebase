@@ -1,6 +1,7 @@
-import { expect, it } from "bun:test";
+import { expect, it, spyOn } from "bun:test";
 import { fixture, origin } from "../testing/maintenanceFixture";
 import { runDueMaintenance } from "./jobSchedules";
+import { maintenanceJobs } from "./maintenance";
 
 type Fixture = ReturnType<typeof fixture>;
 
@@ -24,7 +25,7 @@ const changes = (f: Fixture) =>
     .query(
       `SELECT job_id, previous_cron, previous_enabled, cron, enabled,
               actor_user_id, actor_name, actor_email
-       FROM job_schedule_changes ORDER BY changed_at, rowid`,
+       FROM job_schedule_changes ORDER BY id`,
     )
     .all();
 
@@ -66,6 +67,44 @@ it("lists the seeded schedules with when each next runs", async () => {
   expect(jobs.find(({ id }) => id === "syncFinanceConnection")).toMatchObject({
     schedule: null,
   });
+});
+
+it("seeds a schedule for every maintenance job, paused only for the request-only ones", () => {
+  const f = fixture();
+  // Jobs that run only when an admin starts them until one schedules them.
+  const requestOnly = ["purgeTrashedEmails"];
+  const seeded = new Map(
+    (
+      f.database
+        .query("SELECT job_id, cron, enabled FROM job_schedules")
+        .all() as {
+        job_id: string;
+        cron: string;
+        enabled: number;
+      }[]
+    ).map((row) => [row.job_id, row]),
+  );
+  for (const { id } of maintenanceJobs)
+    expect({ id, ...seeded.get(id) }).toEqual({
+      id,
+      job_id: id,
+      cron: "17 * * * *",
+      enabled: requestOnly.includes(id) ? 0 : 1,
+    });
+  expect(seeded.size).toBe(maintenanceJobs.length);
+});
+
+it("leaves a waiting run's delivery to recovery when a frequent schedule finds it again", async () => {
+  const f = fixture();
+  f.database.exec(`UPDATE job_schedules SET enabled = CASE
+    WHEN job_id = 'purgeRequestedUsers' THEN 1 ELSE 0 END, cron = '* * * * *'`);
+  const minute = Date.UTC(2026, 10, 25, 10, 17);
+  await runDueMaintenance(f.bindings, minute);
+  expect(f.messages).toEqual([`scheduled:purgeRequestedUsers:${minute}`]);
+  // The run is still waiting a minute later: no second run and no resend.
+  await runDueMaintenance(f.bindings, minute + 60_000);
+  expect(f.messages).toHaveLength(1);
+  expect(queuedJobs(f)).toEqual(["purgeRequestedUsers"]);
 });
 
 it("queues only the enabled jobs whose schedule matches the trigger's minute", async () => {
@@ -202,6 +241,60 @@ it("validates and saves a schedule, recording who changed it and from what", asy
     nextCursor: null,
   });
   expect((await f.request(`${path}/changes?cursor=bad`)).status).toBe(400);
+});
+
+it("logs only a save that changed the schedule", async () => {
+  const f = fixture();
+  f.insertActor();
+  const path = "/jobs/purgeRequestedUsers/schedule";
+  const log = spyOn(console, "log").mockImplementation(() => undefined);
+  try {
+    expect((await f.request(path, put("17 * * * *"))).status).toBe(200);
+    expect(log).not.toHaveBeenCalled();
+    expect((await f.request(path, put("0 3 * * *"))).status).toBe(200);
+    expect(log).toHaveBeenCalledWith({
+      event: "job_schedule_saved",
+      jobId: "purgeRequestedUsers",
+      cron: "0 3 * * *",
+      enabled: true,
+    });
+  } finally {
+    log.mockRestore();
+  }
+  expect(changes(f)).toHaveLength(1);
+});
+
+it("pages through schedule changes newest first, in the order they were made", async () => {
+  const f = fixture();
+  const insert = f.database.query(`INSERT INTO job_schedule_changes
+    (job_id, changed_at, previous_cron, previous_enabled, cron, enabled,
+     actor_user_id, actor_name, actor_email)
+    VALUES (?, ?, '17 * * * *', 1, ?, 1,
+      'actor', 'Admin Actor', 'actor@example.com')`);
+  // Every change shares one timestamp, as saves within a millisecond would.
+  const changedAt = "2026-11-25T10:00:00.000Z";
+  for (let minute = 0; minute < 55; minute++) {
+    insert.run("purgeRequestedUsers", changedAt, `${minute} * * * *`);
+    if (minute === 20) insert.run("purgeTrashedEmails", changedAt, "0 0 * * *");
+  }
+  const path = "/jobs/purgeRequestedUsers/schedule/changes";
+  type Page = { changes: { cron: string }[]; nextCursor: string | null };
+  const minutes = (page: Page) =>
+    page.changes.map(({ cron }) => Number(cron.split(" ")[0]));
+  const first = (await (await f.request(path)).json()) as Page;
+  expect(minutes(first)).toEqual(
+    Array.from({ length: 50 }, (_, index) => 54 - index),
+  );
+  expect(first.nextCursor).toEqual(expect.any(String));
+  const second = (await (
+    await f.request(
+      `${path}?cursor=${encodeURIComponent(first.nextCursor ?? "")}`,
+    )
+  ).json()) as Page;
+  expect(minutes(second)).toEqual([4, 3, 2, 1, 0]);
+  expect(second.nextCursor).toBeNull();
+  for (const cursor of ["0", "-1", "1.5", "x"])
+    expect((await f.request(`${path}?cursor=${cursor}`)).status).toBe(400);
 });
 
 it("creates a schedule for a job that had none", async () => {

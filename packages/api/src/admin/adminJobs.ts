@@ -175,17 +175,18 @@ adminJobs.put("/:jobId/schedule", async (context) => {
     enabled: input.enabled,
     jobId,
   });
-  if (!saved)
+  if (saved === "refused")
     return context.json(
       { error: "Only root admins can change job schedules." },
       403,
     );
-  console.log({
-    event: "job_schedule_saved",
-    jobId,
-    cron,
-    enabled: input.enabled,
-  });
+  if (saved === "saved")
+    console.log({
+      event: "job_schedule_saved",
+      jobId,
+      cron,
+      enabled: input.enabled,
+    });
   return respond(context, adminJobsRoutes.schedule, {
     job: await jobDefinition(context.env.DB, jobId),
   });

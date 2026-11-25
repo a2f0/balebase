@@ -278,7 +278,12 @@ export async function enqueueMaintenance(
   if (source.trigger === "manual" && !results[0]?.results.length) return null;
   const job = results.at(-1)?.results[0] as JobRow | undefined;
   if (!job) throw new Error("Maintenance job could not be saved.");
-  if (job.status === "queued") await dispatchJob(env, job.id);
+  // A scheduled trigger that only found the active run leaves its delivery to
+  // the five-minute recovery, so a frequent schedule does not resend it each
+  // minute while it waits.
+  const inserted =
+    source.trigger === "manual" || (results[0]?.meta.changes ?? 0) > 0;
+  if (job.status === "queued" && inserted) await dispatchJob(env, job.id);
   return job;
 }
 

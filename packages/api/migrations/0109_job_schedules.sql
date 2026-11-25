@@ -31,9 +31,10 @@ FROM (
 );
 
 -- Every schedule change with the admin's snapshot, written in the
--- transaction that makes it. Kept after the admin's account is purged.
+-- transaction that makes it. Kept after the admin's account is purged. The
+-- increasing ID orders changes made within the same millisecond.
 CREATE TABLE job_schedule_changes (
-  id TEXT PRIMARY KEY NOT NULL,
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
   job_id TEXT NOT NULL,
   changed_at TEXT NOT NULL,
   -- Null when the job had no schedule row before.
@@ -46,7 +47,7 @@ CREATE TABLE job_schedule_changes (
   actor_email TEXT NOT NULL
 );
 CREATE INDEX job_schedule_changes_history
-  ON job_schedule_changes(job_id, changed_at, id);
+  ON job_schedule_changes(job_id, id);
 
 -- A dry run reports what a maintenance job would change and changes
 -- nothing. It never joins, or is joined by, an active real run of the job.
