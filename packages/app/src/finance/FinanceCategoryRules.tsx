@@ -1,3 +1,4 @@
+import { refused } from "@balebase/client-sdk";
 import {
   Banner,
   Button,
@@ -31,7 +32,6 @@ import { useLoad } from "../shared/useLoad";
 import { rulesChanged } from "./financeRuleAction";
 import type { RunChange } from "./financeSave";
 import { RuleMatchTypeField, ruleMatchTypeLabels } from "./RuleMatchTypeField";
-import { refused } from "./transactionCache";
 
 /**
  * Categorization rules match displayed payee names to an expense category

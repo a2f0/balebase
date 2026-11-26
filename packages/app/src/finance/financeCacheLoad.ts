@@ -1,18 +1,18 @@
-import type {
-  FinanceData,
-  FinanceTransactionChanges,
-} from "@balebase/validators/finance";
-import { newestFirst } from "./financeTransactions";
 import {
   type CacheScope,
   type FinanceSummary,
   OrganizationChanged,
-  pullTransactions,
   refused,
   SignedOut,
   type TransactionStore,
-  withTimeout,
-} from "./transactionCache";
+  withPageTimeout,
+} from "@balebase/client-sdk";
+import type {
+  FinanceData,
+  FinanceTransactionChanges,
+} from "@balebase/validators/finance";
+import { balebase } from "../balebase";
+import { newestFirst } from "./financeTransactions";
 
 /** Raised once when a store gives up on IndexedDB for memory. */
 class StoreFellBack extends Error {
@@ -117,7 +117,7 @@ async function loadOnce(
   const requests = [
     // Checked on arrival, so a stalled feed cannot delay the mismatch; and
     // bounded, so a stalled summary cannot keep the load from ending.
-    withTimeout(fetchSummary()).then((data) => {
+    withPageTimeout(fetchSummary()).then((data) => {
       if (
         scope &&
         (data.organizationId !== scope.organizationId ||
@@ -127,7 +127,7 @@ async function loadOnce(
       return data;
     }),
     pull
-      ? pullTransactions(
+      ? balebase().financeCache.pull(
           cacheScope,
           store,
           changes,

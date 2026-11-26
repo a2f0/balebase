@@ -1,27 +1,17 @@
-import {
-  catchUpSavedTransactions,
-  clearFormerOrganizations,
-  clearUserTransactions,
-  indexedDbTransactionStore,
-  pullTransactions,
-} from "../src/finance/transactionCache";
+import type { FinanceCache, TransactionStore } from "@balebase/client-sdk";
+import { balebase } from "../src/balebase";
 
 declare global {
   interface Window {
     transactionCacheTest?: {
-      catchUpSavedTransactions: typeof catchUpSavedTransactions;
-      clearFormerOrganizations: typeof clearFormerOrganizations;
-      clearUserTransactions: typeof clearUserTransactions;
-      pullTransactions: typeof pullTransactions;
-      store: ReturnType<typeof indexedDbTransactionStore>;
+      finance: FinanceCache;
+      store: TransactionStore;
     };
   }
 }
 
+const { financeCache } = balebase();
 window.transactionCacheTest = {
-  catchUpSavedTransactions,
-  clearFormerOrganizations,
-  clearUserTransactions,
-  pullTransactions,
-  store: indexedDbTransactionStore(),
+  finance: financeCache,
+  store: financeCache.indexedDbStore(),
 };

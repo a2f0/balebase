@@ -1,5 +1,5 @@
+import { refused } from "@balebase/client-sdk";
 import { useAction } from "../shared/useAction";
-import { refused } from "./transactionCache";
 
 /** Runs a change; resolves a success message, or throws its failure. */
 export type RunChange = (change: () => Promise<string>) => Promise<boolean>;

@@ -1,3 +1,4 @@
+import type { CacheScope } from "@balebase/client-sdk";
 import type { ReactNode } from "react";
 import { AccountSettings } from "../account/AccountSettings";
 import { Activity } from "../activity/Activity";
@@ -15,7 +16,6 @@ import { FinanceConnectionPage } from "../finance/FinanceConnectionPage";
 import { FinanceSection } from "../finance/FinanceSection";
 import { FinanceTransactionPage } from "../finance/FinanceTransactionPage";
 import { financePeriodOf } from "../finance/financePeriod";
-import type { CacheScope } from "../finance/transactionCache";
 import { Forms } from "../forms/Forms";
 import { Inbox } from "../inbox/Inbox";
 import { Issues } from "../issues/Issues";

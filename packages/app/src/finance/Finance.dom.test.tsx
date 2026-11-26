@@ -6,6 +6,7 @@ import type {
 } from "@balebase/validators/finance";
 import type { FinancePeriod } from "@balebase/validators/rules";
 import { act } from "react";
+import { balebase } from "../balebase";
 import { apiUrl } from "../shared/config";
 import { holdTimers, installDom } from "../testing/dom";
 import { IntersectionObserverFixture } from "../testing/intersectionObserver";
@@ -13,7 +14,6 @@ import { transactionIssuePath } from "../workspace/workspacePaths";
 import { Finance } from "./Finance";
 import { FinanceSection } from "./FinanceSection";
 import { syncPollMs } from "./financeConnectionActions";
-import { clearScopeTransactions } from "./transactionCache";
 
 const {
   mount,
@@ -1409,7 +1409,7 @@ describe("Finance filters", () => {
 
       await view.render(section("/finance/transactions/Coffee", "record"));
       // Access ended while the record showed, and its page cleared the copy.
-      await act(async () => clearScopeTransactions(scope));
+      await act(async () => balebase().financeCache.clearScope(scope));
       await view.render(section("/finance", "overview"));
       expect(button("By payee").getAttribute("aria-pressed")).toBe("false");
     } finally {

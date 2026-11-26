@@ -26,6 +26,16 @@ describe("API requests", () => {
     expect(sent.map(({ url }) => url)).toEqual(["https://api.test/api/me"]);
   });
 
+  it("drops trailing slashes from the API origin, which keys saved data", async () => {
+    const { fetch, sent } = recordRequests(() => Response.json({ user: null }));
+    const balebase = new Balebase({ apiBaseUrl: "https://api.test//", fetch });
+    await balebase.api.session.me();
+    expect(sent.map(({ url }) => url)).toEqual(["https://api.test/api/me"]);
+    expect(
+      balebase.offline.scopeKey({ organizationId: "org", userId: "user" }),
+    ).toBe(JSON.stringify(["https://api.test", "user", "org"]));
+  });
+
   it("looks the global fetch up per request when given no transport", async () => {
     const balebase = new Balebase({ apiBaseUrl: "https://api.test" });
     const { fetch, sent } = recordRequests();

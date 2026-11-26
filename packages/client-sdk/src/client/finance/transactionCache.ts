@@ -1,31 +1,19 @@
-import { ApiError } from "@balebase/client-sdk";
 import type {
-  FinanceData,
   FinanceTransaction,
   FinanceTransactionChanges,
 } from "@balebase/validators/finance";
-import { apiUrl } from "../shared/config";
-import { randomId } from "../shared/randomId";
-import { savedSummary } from "./savedSummary";
-
-/** Whose transactions a device keeps: one person in one organization. */
-export interface CacheScope {
-  organizationId: string;
-  userId: string;
-}
-
-export type FinanceSummary = Omit<FinanceData, "nextCursor" | "transactions">;
-
-/** What this device keeps for a scope. */
-interface CachedFinance {
-  /** The feed cursor the transactions are as of; null before any page. */
-  cursor: string | null;
-  /** When a pull last caught up with the server; none before the first. */
-  completedAt: string | null;
-  /** Connections, accounts, and categories as last read online. */
-  summary: FinanceSummary | null;
-  transactions: FinanceTransaction[];
-}
+import {
+  type CacheScope,
+  type Cleared,
+  type FinanceSummary,
+  OrganizationChanged,
+  refused,
+  SignedOut,
+  type TransactionStore,
+  withPageTimeout,
+} from "../../data/finance/financeCache";
+import { savedSummary } from "../../data/finance/savedSummary";
+import { randomId } from "../../data/shared/randomId";
 
 interface CacheState {
   completedAt: string | null;
@@ -34,87 +22,28 @@ interface CacheState {
   summary: FinanceSummary | null;
 }
 
-/**
- * Where a pull stands: the kept cursor, and the epoch, which signing out
- * (for the person) or a refusal (for the scope) advances so nothing
- * requested before it is kept after.
- */
-interface Position {
-  cursor: string | null;
-  epoch: string;
-}
-
-/** Raised for a response from another organization than the scope's. */
-export class OrganizationChanged extends Error {
-  constructor() {
-    super("The signed-in account or organization changed. Reload Finance.");
-  }
-}
-
-/**
- * A refusal (signed out, no Finance access, a sign-out overtaking a pull)
- * rather than an unreachable server: nothing saved or shown may outlast it.
- */
-export function refused(cause: unknown) {
-  return (
-    cause instanceof SignedOut ||
-    (cause instanceof ApiError &&
-      (cause.status === 401 || cause.status === 403))
-  );
-}
-
-/** Raised for a write that arrives after its saved copy was cleared. */
-export class SignedOut extends Error {
-  constructor() {
-    super("Saved transactions were cleared. Reload Finance.");
-  }
-}
-
-/** Where a device keeps transactions: IndexedDB, or memory without it. */
-export interface TransactionStore {
-  read(scope: CacheScope): Promise<CachedFinance>;
-  /** Where a pull starts; `saved` once any page (even an empty one) was. */
-  position(scope: CacheScope): Promise<Position & { saved: boolean }>;
-  /**
-   * Applies one feed page, with its cursor, in one write, if the kept cursor
-   * is still `from`'s. False when another pull (another tab) moved it first;
-   * `SignedOut` when the person signed out since `from` was read.
-   */
-  apply(
-    scope: CacheScope,
-    from: Position,
-    page: FinanceTransactionChanges,
-    now: string,
-  ): Promise<boolean>;
-  /** Keeps the summary, unless the copy was cleared since `epoch`. */
-  saveSummary(
-    scope: CacheScope,
-    summary: FinanceSummary,
-    epoch: string,
-  ): Promise<void>;
-  /** Starts the copy over for a server that is behind it. */
-  restart(scope: CacheScope, from: Position): Promise<void>;
-  /**
-   * Drops the copy after a refusal, ending pulls still running, and tells
-   * other tabs unless `announce` is false (they told this one).
-   */
-  clear(scope: CacheScope, announce?: boolean): Promise<void>;
-}
-
+// Devices keep transactions under these names and key shapes, and tabs of
+// other releases announce clearings on this channel; changing them strands
+// saved copies or leaves another tab showing what was cleared.
 const databaseName = "balebase-finance";
 
-function scopeKey(scope: CacheScope) {
-  return JSON.stringify([apiUrl, scope.userId, scope.organizationId]);
+function scopeKey(apiBaseUrl: string, scope: CacheScope) {
+  return JSON.stringify([apiBaseUrl, scope.userId, scope.organizationId]);
 }
 
 /** The state key holding a person's epoch, beside their scopes' keys. */
-function epochKey(userId: string) {
-  return JSON.stringify([apiUrl, userId]);
+function epochKey(apiBaseUrl: string, userId: string) {
+  return JSON.stringify([apiBaseUrl, userId]);
 }
 
 /** The state key holding a scope's epoch. */
-function scopeEpochKey(scope: CacheScope) {
-  return JSON.stringify([apiUrl, scope.userId, scope.organizationId, "epoch"]);
+function scopeEpochKey(apiBaseUrl: string, scope: CacheScope) {
+  return JSON.stringify([
+    apiBaseUrl,
+    scope.userId,
+    scope.organizationId,
+    "epoch",
+  ]);
 }
 
 function emptyState(scope: string): CacheState {
@@ -134,19 +63,19 @@ function nextState(
 }
 
 /** A store that lasts as long as the page, for browsers without IndexedDB. */
-export function memoryTransactionStore(): TransactionStore {
+export function memoryTransactionStore(apiBaseUrl: string): TransactionStore {
   const scopes = new Map<
     string,
     { rows: Map<string, FinanceTransaction>; state: CacheState }
   >();
   const epochs = new Map<string, number>();
   const epochOf = (scope: CacheScope) =>
-    String(epochs.get(scopeKey(scope)) ?? 0);
+    String(epochs.get(scopeKey(apiBaseUrl, scope)) ?? 0);
   const check = (scope: CacheScope, epoch: string) => {
     if (epoch !== epochOf(scope)) throw new SignedOut();
   };
   const entry = (scope: CacheScope) => {
-    const key = scopeKey(scope);
+    const key = scopeKey(apiBaseUrl, scope);
     let found = scopes.get(key);
     if (!found) {
       found = { rows: new Map(), state: emptyState(key) };
@@ -184,13 +113,13 @@ export function memoryTransactionStore(): TransactionStore {
     },
     async restart(scope, from) {
       check(scope, from.epoch);
-      scopes.delete(scopeKey(scope));
+      scopes.delete(scopeKey(apiBaseUrl, scope));
     },
     async clear(scope) {
-      scopes.delete(scopeKey(scope));
-      epochs.set(scopeKey(scope), Number(epochOf(scope)) + 1);
+      scopes.delete(scopeKey(apiBaseUrl, scope));
+      epochs.set(scopeKey(apiBaseUrl, scope), Number(epochOf(scope)) + 1);
       // Only this tab kept the copy, but what it hides may still show it.
-      tellThisTab(scope);
+      tellThisTab(apiBaseUrl, scope);
     },
   };
 }
@@ -273,20 +202,26 @@ function readEpochRecord(store: IDBObjectStore, key: string) {
 }
 
 /** The person's epoch with the scope's: either one advancing ends a pull. */
-async function readEpoch(store: IDBObjectStore, scope: CacheScope) {
+async function readEpoch(
+  apiBaseUrl: string,
+  store: IDBObjectStore,
+  scope: CacheScope,
+) {
   const [person, own] = await Promise.all([
-    readEpochRecord(store, epochKey(scope.userId)),
-    readEpochRecord(store, scopeEpochKey(scope)),
+    readEpochRecord(store, epochKey(apiBaseUrl, scope.userId)),
+    readEpochRecord(store, scopeEpochKey(apiBaseUrl, scope)),
   ]);
   return `${person}:${own}`;
 }
 
 async function checkEpoch(
+  apiBaseUrl: string,
   store: IDBObjectStore,
   scope: CacheScope,
   epoch: string,
 ) {
-  if ((await readEpoch(store, scope)) !== epoch) throw new SignedOut();
+  if ((await readEpoch(apiBaseUrl, store, scope)) !== epoch)
+    throw new SignedOut();
 }
 
 function deleteScope(store: IDBObjectStore, key: string) {
@@ -297,10 +232,12 @@ function deleteScope(store: IDBObjectStore, key: string) {
   );
 }
 
-export function indexedDbTransactionStore(): TransactionStore {
+export function indexedDbTransactionStore(
+  apiBaseUrl: string,
+): TransactionStore {
   return {
     read(scope) {
-      const key = scopeKey(scope);
+      const key = scopeKey(apiBaseUrl, scope);
       return inTransaction("readonly", async (stores) => {
         const [state, rows] = await Promise.all([
           readState(stores.state, key),
@@ -323,8 +260,8 @@ export function indexedDbTransactionStore(): TransactionStore {
     position(scope) {
       return inTransaction("readwrite", async (stores) => {
         const [state, epoch] = await Promise.all([
-          readState(stores.state, scopeKey(scope)),
-          readEpoch(stores.state, scope),
+          readState(stores.state, scopeKey(apiBaseUrl, scope)),
+          readEpoch(apiBaseUrl, stores.state, scope),
         ]);
         // Registers the scope before anything is requested for it, so
         // clearing a former organization finds (and ends) a pull still
@@ -338,9 +275,9 @@ export function indexedDbTransactionStore(): TransactionStore {
       });
     },
     apply(scope, from, page, now) {
-      const key = scopeKey(scope);
+      const key = scopeKey(apiBaseUrl, scope);
       return inTransaction("readwrite", async (stores) => {
-        await checkEpoch(stores.state, scope, from.epoch);
+        await checkEpoch(apiBaseUrl, stores.state, scope, from.epoch);
         const state = await readState(stores.state, key);
         if (state.cursor !== from.cursor) return false;
         for (const transaction of page.transactions)
@@ -355,22 +292,23 @@ export function indexedDbTransactionStore(): TransactionStore {
       });
     },
     saveSummary(scope, summary, epoch) {
-      const key = scopeKey(scope);
+      const key = scopeKey(apiBaseUrl, scope);
       return inTransaction("readwrite", async (stores) => {
-        await checkEpoch(stores.state, scope, epoch);
+        await checkEpoch(apiBaseUrl, stores.state, scope, epoch);
         const state = await readState(stores.state, key);
         stores.state.put({ ...state, summary });
       });
     },
     restart(scope, from) {
-      const key = scopeKey(scope);
+      const key = scopeKey(apiBaseUrl, scope);
       return inTransaction("readwrite", async (stores) => {
-        await checkEpoch(stores.state, scope, from.epoch);
+        await checkEpoch(apiBaseUrl, stores.state, scope, from.epoch);
         stores.state.delete(key);
         await deleteScope(stores.transactions, key);
       });
     },
-    clear: clearScopeTransactions,
+    clear: (scope, announce) =>
+      clearScopeTransactions(apiBaseUrl, scope, announce),
   };
 }
 
@@ -379,22 +317,23 @@ export function indexedDbTransactionStore(): TransactionStore {
  * its epoch so pulls still running (in any tab) keep nothing they receive.
  */
 export async function clearScopeTransactions(
+  apiBaseUrl: string,
   scope: CacheScope,
   announce = true,
 ) {
   if (announce)
-    announceCleared({
+    announceCleared(apiBaseUrl, {
       organizationId: scope.organizationId,
       userId: scope.userId,
     });
   if (typeof indexedDB === "undefined") return;
-  const key = scopeKey(scope);
+  const key = scopeKey(apiBaseUrl, scope);
   await inTransaction("readwrite", async (stores) => {
     stores.state.delete(key);
     await deleteScope(stores.transactions, key);
     stores.state.put({
       epoch: randomId(),
-      scope: scopeEpochKey(scope),
+      scope: scopeEpochKey(apiBaseUrl, scope),
     });
   });
 }
@@ -404,10 +343,11 @@ export async function clearScopeTransactions(
  * longer in, as after leaving or being removed from one.
  */
 export async function clearFormerOrganizations(
+  apiBaseUrl: string,
   userId: string,
   organizationIds: string[],
 ) {
-  announceCleared({ except: organizationIds, userId });
+  announceCleared(apiBaseUrl, { except: organizationIds, userId });
   if (typeof indexedDB === "undefined") return;
   const current = new Set(organizationIds);
   await inTransaction("readwrite", async (stores) => {
@@ -415,7 +355,7 @@ export async function clearFormerOrganizations(
     for (const key of keys) {
       const [api, owner, organizationId, kind] = JSON.parse(key) as unknown[];
       if (
-        api !== apiUrl ||
+        api !== apiBaseUrl ||
         owner !== userId ||
         typeof organizationId !== "string" ||
         kind !== undefined ||
@@ -426,7 +366,7 @@ export async function clearFormerOrganizations(
       await deleteScope(stores.transactions, key);
       stores.state.put({
         epoch: randomId(),
-        scope: scopeEpochKey({ organizationId, userId }),
+        scope: scopeEpochKey(apiBaseUrl, { organizationId, userId }),
       });
     }
   });
@@ -437,73 +377,87 @@ export async function clearFormerOrganizations(
  * on signing out, and advances their epoch so pulls still running (in any
  * tab) keep none of the pages they receive. Other accounts keep theirs.
  */
-export async function clearUserTransactions(userId: string) {
-  announceCleared({ userId });
+export async function clearUserTransactions(
+  apiBaseUrl: string,
+  userId: string,
+) {
+  announceCleared(apiBaseUrl, { userId });
   if (typeof indexedDB === "undefined") return;
   await inTransaction("readwrite", async (stores) => {
     const keys = (await request(stores.state.getAllKeys())) as string[];
     for (const key of keys) {
       const [api, owner, organizationId] = JSON.parse(key) as unknown[];
-      if (api !== apiUrl || owner !== userId || organizationId === undefined)
+      if (
+        api !== apiBaseUrl ||
+        owner !== userId ||
+        organizationId === undefined
+      )
         continue;
       stores.state.delete(key);
       await deleteScope(stores.transactions, key);
     }
-    stores.state.put({ epoch: randomId(), scope: epochKey(userId) });
+    stores.state.put({
+      epoch: randomId(),
+      scope: epochKey(apiBaseUrl, userId),
+    });
   });
-}
-
-/** A clearing other tabs hear of: one scope, or a person's, but `except`. */
-export interface Cleared {
-  except?: string[] | undefined;
-  organizationId?: string | undefined;
-  userId: string;
 }
 
 const clearedChannel = "balebase-finance-cleared";
 // Tabs ignore their own announcements: they handle those where they happen.
 const thisTab = randomId();
-/** This tab's listeners for clearings in any tab; see `onCleared`. */
-const clearedHere = new Set<(cleared: Cleared) => void>();
+/**
+ * This tab's listeners, per API, for clearings in any tab; see `onCleared`.
+ * They belong to the tab, so every cache for one API there shares them.
+ */
+const clearedHere = new Map<string, Set<(cleared: Cleared) => void>>();
+
+function listenersFor(apiBaseUrl: string) {
+  let listeners = clearedHere.get(apiBaseUrl);
+  if (!listeners) {
+    listeners = new Set();
+    clearedHere.set(apiBaseUrl, listeners);
+  }
+  return listeners;
+}
 
 /**
  * Tells other tabs a saved copy was cleared (access ended, a sign-out), so
  * they stop showing the transactions they read before, and this tab too.
  */
-function announceCleared(cleared: Cleared) {
-  tellThisTab(cleared);
+function announceCleared(apiBaseUrl: string, cleared: Cleared) {
+  tellThisTab(apiBaseUrl, cleared);
   if (typeof BroadcastChannel === "undefined") return;
   const channel = new BroadcastChannel(clearedChannel);
-  channel.postMessage({ ...cleared, apiUrl, source: thisTab });
+  // Tabs, other releases' included, read the API from `apiUrl`.
+  channel.postMessage({ ...cleared, apiUrl: apiBaseUrl, source: thisTab });
   channel.close();
 }
 
 /** Tells this tab's `onCleared` listeners of a clearing here. */
-function tellThisTab({ except, organizationId, userId }: Cleared) {
-  for (const listener of [...clearedHere])
+function tellThisTab(
+  apiBaseUrl: string,
+  { except, organizationId, userId }: Cleared,
+) {
+  for (const listener of [...listenersFor(apiBaseUrl)])
     listener({ except, organizationId, userId });
-}
-
-/** Whether a clearing announced elsewhere covers `scope`. */
-export function clears(cleared: Cleared, scope: CacheScope) {
-  if (cleared.userId !== scope.userId) return false;
-  if (cleared.organizationId !== undefined)
-    return cleared.organizationId === scope.organizationId;
-  return !cleared.except?.includes(scope.organizationId);
 }
 
 /**
  * Calls `listener` when another tab clears saved transactions; returns how
  * to stop listening.
  */
-export function onClearedElsewhere(listener: (cleared: Cleared) => void) {
+export function onClearedElsewhere(
+  apiBaseUrl: string,
+  listener: (cleared: Cleared) => void,
+) {
   if (typeof BroadcastChannel === "undefined") return () => undefined;
   const channel = new BroadcastChannel(clearedChannel);
   channel.onmessage = (event: MessageEvent) => {
     const message = event.data as
       | (Cleared & { apiUrl?: string; source?: string })
       | null;
-    if (message?.apiUrl === apiUrl && message.source !== thisTab)
+    if (message?.apiUrl === apiBaseUrl && message.source !== thisTab)
       listener(message);
   };
   return () => channel.close();
@@ -514,11 +468,15 @@ export function onClearedElsewhere(listener: (cleared: Cleared) => void) {
  * transactions; returns how to stop listening. For what this tab keeps but
  * does not show, which no clearing can reach where it happens.
  */
-export function onCleared(listener: (cleared: Cleared) => void) {
-  clearedHere.add(listener);
-  const stopElsewhere = onClearedElsewhere(listener);
+export function onCleared(
+  apiBaseUrl: string,
+  listener: (cleared: Cleared) => void,
+) {
+  const listeners = listenersFor(apiBaseUrl);
+  listeners.add(listener);
+  const stopElsewhere = onClearedElsewhere(apiBaseUrl, listener);
   return () => {
-    clearedHere.delete(listener);
+    listeners.delete(listener);
     stopElsewhere();
   };
 }
@@ -541,6 +499,7 @@ const pulls = new WeakMap<TransactionStore, Map<string, Lane>>();
  * in `apply` keeps two pulls from overwriting each other.
  */
 export function pullTransactions(
+  apiBaseUrl: string,
   scope: CacheScope,
   store: TransactionStore,
   fetchPage: (cursor: string | null) => Promise<FinanceTransactionChanges>,
@@ -553,17 +512,18 @@ export function pullTransactions(
   const epoch = store.position(scope).then((position) => position.epoch);
   // A caller joining a queued pull leaves its own epoch unread.
   epoch.catch(() => undefined);
-  return schedule(scope, store, () =>
+  return schedule(apiBaseUrl, scope, store, () =>
     pullPages(scope, store, fetchPage, onProgress, anyOrganization, epoch),
   );
 }
 
 function schedule(
+  apiBaseUrl: string,
   scope: CacheScope,
   store: TransactionStore,
   run: () => Promise<void>,
 ): Promise<void> {
-  const key = scopeKey(scope);
+  const key = scopeKey(apiBaseUrl, scope);
   let lanes = pulls.get(store);
   if (!lanes) {
     lanes = new Map();
@@ -576,7 +536,7 @@ function schedule(
   if (lane) {
     lane.next ??= lane.current
       .catch(() => undefined)
-      .then(() => schedule(scope, store, run));
+      .then(() => schedule(apiBaseUrl, scope, store, run));
     return lane.next;
   }
   const running = lanes;
@@ -600,7 +560,7 @@ async function pullPages(
   const epoch = await pinned;
   for (;;) {
     const from = { cursor: (await store.position(scope)).cursor, epoch };
-    const page = await withTimeout(fetchPage(from.cursor));
+    const page = await withPageTimeout(fetchPage(from.cursor));
     // The session's account or organization changed under this pull (as
     // another tab switching accounts).
     if (
@@ -630,7 +590,7 @@ async function pullPages(
 export async function clearedOnRefusal<T>(
   scope: CacheScope | undefined,
   work: Promise<T>,
-  clear: (scope: CacheScope) => Promise<void> = clearScopeTransactions,
+  clear: (scope: CacheScope) => Promise<void>,
 ): Promise<T> {
   try {
     return await work;
@@ -649,16 +609,17 @@ export async function clearedOnRefusal<T>(
  * happens without a saved copy; failures wait for the next load.
  */
 export async function catchUpSavedTransactions(
+  apiBaseUrl: string,
   scope: CacheScope | undefined,
   fetchPage: (cursor: string | null) => Promise<FinanceTransactionChanges>,
   store: TransactionStore | undefined = typeof indexedDB === "undefined"
     ? undefined
-    : indexedDbTransactionStore(),
+    : indexedDbTransactionStore(apiBaseUrl),
 ) {
   if (!scope || !store) return;
   try {
     if (!(await store.position(scope)).saved) return;
-    await pullTransactions(scope, store, fetchPage);
+    await pullTransactions(apiBaseUrl, scope, store, fetchPage);
   } catch (cause) {
     // Access ended: keep nothing, and tell the page so it shows nothing.
     // Otherwise the next load catches up.
@@ -670,33 +631,6 @@ export async function catchUpSavedTransactions(
       throw cause;
     }
   }
-}
-
-/**
- * How long a feed page may take: a request that stalls must not hold the
- * pull (and the lock other tabs wait on) after its page is no longer
- * wanted. The next load resumes from the last saved page.
- */
-const pageTimeoutMs = 60_000;
-
-/** `work`, or a timeout error once it takes longer than a feed page may. */
-export function withTimeout<T>(work: Promise<T>): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(
-      () => reject(new Error("Downloading transactions timed out. Try again.")),
-      pageTimeoutMs,
-    );
-    work.then(
-      (value) => {
-        clearTimeout(timer);
-        resolve(value);
-      },
-      (cause: unknown) => {
-        clearTimeout(timer);
-        reject(cause);
-      },
-    );
-  });
 }
 
 function withLock<T>(name: string, work: () => Promise<T>): Promise<T> {

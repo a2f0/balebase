@@ -1,4 +1,12 @@
-import { errorMessage, type FinanceFilters } from "@balebase/client-sdk";
+import {
+  type CacheScope,
+  clears,
+  errorMessage,
+  type FinanceFilters,
+  OrganizationChanged,
+  refused,
+  SignedOut,
+} from "@balebase/client-sdk";
 import type { FinanceData } from "@balebase/validators/finance";
 import type { FinancePeriod } from "@balebase/validators/rules";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -11,16 +19,6 @@ import {
 } from "./financeCacheLoad";
 import { syncPending, syncPollMs } from "./financeConnectionActions";
 import { financePeriodYear } from "./financePeriod";
-import {
-  type CacheScope,
-  clears,
-  indexedDbTransactionStore,
-  memoryTransactionStore,
-  OrganizationChanged,
-  onClearedElsewhere,
-  refused,
-  SignedOut,
-} from "./transactionCache";
 
 type CategoryRoute = Pick<FinanceFilters, "categorySlug" | "uncategorized">;
 
@@ -201,7 +199,7 @@ function useClearedElsewhere(
   latest.current = onCleared;
   useEffect(() => {
     if (!scope) return;
-    return onClearedElsewhere((cleared) => {
+    return balebase().financeCache.onClearedElsewhere((cleared) => {
       if (clears(cleared, scope)) latest.current();
     });
   }, [scope]);
@@ -251,13 +249,14 @@ function useTransactionStore(scope: CacheScope | undefined) {
   const userId = scope?.userId;
   const organizationId = scope?.organizationId;
   return useMemo(() => {
+    const { financeCache } = balebase();
     const persistent =
       userId && organizationId && typeof indexedDB !== "undefined";
     return {
       scope: userId && organizationId ? { organizationId, userId } : undefined,
       value: persistent
-        ? fallBack(indexedDbTransactionStore(), memoryTransactionStore())
-        : memoryTransactionStore(),
+        ? fallBack(financeCache.indexedDbStore(), financeCache.memoryStore())
+        : financeCache.memoryStore(),
     };
   }, [organizationId, userId]);
 }

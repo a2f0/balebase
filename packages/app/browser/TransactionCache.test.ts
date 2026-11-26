@@ -220,7 +220,7 @@ it("keeps transactions in IndexedDB a page at a time, across reloads and interru
     const requested = await target.evaluate(
       async (who, next) => {
         const asked: (string | null)[] = [];
-        await window.transactionCacheTest?.pullTransactions(
+        await window.transactionCacheTest?.finance.pull(
           who,
           window.transactionCacheTest.store,
           async (cursor) => {
@@ -255,7 +255,7 @@ it("keeps transactions in IndexedDB a page at a time, across reloads and interru
             data,
             "t4",
           );
-        await window.transactionCacheTest?.clearUserTransactions("person");
+        await window.transactionCacheTest?.finance.clearUser("person");
       },
       others,
       page("9", false, [row("z")]),
@@ -276,12 +276,12 @@ it("keeps transactions in IndexedDB a page at a time, across reloads and interru
         if (!cache) throw new Error("No fixture");
         const answer = Promise.withResolvers<FinanceTransactionChanges>();
         const asked = Promise.withResolvers<void>();
-        const pull = cache.pullTransactions(who, cache.store, () => {
+        const pull = cache.finance.pull(who, cache.store, () => {
           asked.resolve();
           return answer.promise;
         });
         await asked.promise;
-        await cache.clearUserTransactions("person");
+        await cache.finance.clearUser("person");
         answer.resolve(data);
         return pull.then(
           () => "kept",
@@ -301,8 +301,8 @@ it("keeps transactions in IndexedDB a page at a time, across reloads and interru
         if (!cache) throw new Error("No fixture");
         let clearing: Promise<void> | undefined;
         const asked: (string | null)[] = [];
-        const reply = await cache
-          .pullTransactions(
+        const reply = await cache.finance
+          .pull(
             who,
             cache.store,
             async (cursor) => {
@@ -314,7 +314,7 @@ it("keeps transactions in IndexedDB a page at a time, across reloads and interru
             // Signs out once the first page is saved, before the next is
             // asked for.
             () => {
-              clearing ??= cache.clearUserTransactions("person");
+              clearing ??= cache.finance.clearUser("person");
             },
           )
           .then(
@@ -346,7 +346,7 @@ it("keeps transactions in IndexedDB a page at a time, across reloads and interru
         const { epoch } = await cache.store.position(who);
         const answer = Promise.withResolvers<FinanceTransactionChanges>();
         const asked = Promise.withResolvers<void>();
-        const pull = cache.pullTransactions(who, cache.store, () => {
+        const pull = cache.finance.pull(who, cache.store, () => {
           asked.resolve();
           return answer.promise;
         });
@@ -397,7 +397,7 @@ it("keeps transactions in IndexedDB a page at a time, across reloads and interru
           const from = await cache.store.position(which);
           await cache.store.apply(which, from, data, "t5");
         }
-        await cache.clearFormerOrganizations("person", ["kept-org"]);
+        await cache.finance.clearFormerOrganizations("person", ["kept-org"]);
       },
       memberships,
       page("7", false, [row("member")]),
@@ -415,12 +415,12 @@ it("keeps transactions in IndexedDB a page at a time, across reloads and interru
         if (!cache) throw new Error("No fixture");
         const answer = Promise.withResolvers<FinanceTransactionChanges>();
         const asked = Promise.withResolvers<void>();
-        const pull = cache.pullTransactions(who, cache.store, () => {
+        const pull = cache.finance.pull(who, cache.store, () => {
           asked.resolve();
           return answer.promise;
         });
         await asked.promise;
-        await cache.clearFormerOrganizations("person", ["kept-org"]);
+        await cache.finance.clearFormerOrganizations("person", ["kept-org"]);
         answer.resolve(data);
         return pull.then(
           () => "kept",
@@ -440,7 +440,7 @@ it("keeps transactions in IndexedDB a page at a time, across reloads and interru
         if (!cache) throw new Error("No fixture");
         const asked: (string | null)[] = [];
         for (const which of scopes)
-          await cache.catchUpSavedTransactions(
+          await cache.finance.catchUp(
             which,
             async (cursor) => {
               asked.push(cursor);

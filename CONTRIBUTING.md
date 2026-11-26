@@ -24,7 +24,7 @@ Every workspace lives under `packages/`, and infrastructure lives in
 | API routes, authorization, persistence (Hono on Workers, with D1 and R2), in a folder per feature | `packages/api/src` |
 | Request and response schemas for every route | `packages/validators/src` |
 | Typed client for those routes | `packages/api-client/src` |
-| Client runtime without React (the API, its version, connectivity, offline work) that hosts build on | [`packages/client-sdk`](packages/client-sdk/README.md) |
+| Client runtime without React (the API, its version, connectivity, offline work, saved transactions) that hosts build on | [`packages/client-sdk`](packages/client-sdk/README.md) |
 | Database schema | `packages/api/migrations` |
 | Built-in form templates and their seed migrations | `packages/api/templateLibrary`, [residential template library](docs/residential-template-library.md) |
 | Application screens, in one folder per feature, and the host interface each shell fills in | `packages/app/src` |
@@ -190,7 +190,8 @@ it.
   upgrade resolves the error.
 - Reach work done on the device through `balebase().offline`; its storage,
   sync queue, and form state machine live in the SDK, and `offline/` holds
-  only the hooks and screens over them.
+  only the hooks and screens over them. Reach saved Finance transactions
+  through `balebase().financeCache` the same way.
 - Add a workspace section with a route in `workspace/workspaceRoutes.tsx` and
   a page and sidebar item in `workspace/WorkspaceShell.tsx`.
 - Build paths with the `workspace/workspacePaths.ts` helpers, match a section

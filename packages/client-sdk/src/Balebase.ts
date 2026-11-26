@@ -1,5 +1,6 @@
 import { ApiClient } from "@balebase/api-client";
 import type { BalebaseOptions } from "./BalebaseOptions";
+import { FinanceCache } from "./client/finance";
 import { Offline } from "./client/offline";
 import { OfflineStore } from "./client/offline/offlineStore";
 import { type ApiFetch, createApiFetch } from "./client/runtime/apiFetch";
@@ -22,6 +23,8 @@ export class Balebase {
    * and records the API version.
    */
   readonly fetch: ApiFetch;
+  /** The transactions this device keeps for Finance. */
+  readonly financeCache: FinanceCache;
   /** The device's connectivity. */
   readonly network: Network;
   /** Forms and issues done on this device, and the queue that syncs them. */
@@ -33,8 +36,10 @@ export class Balebase {
       fetch: options.fetch,
       nativeOrigin: options.nativeOrigin,
     });
-    const apiBaseUrl = options.apiBaseUrl ?? "";
+    // One spelling, since saved data on the device is keyed by it.
+    const apiBaseUrl = (options.apiBaseUrl ?? "").replace(/\/+$/, "");
     this.api = new ApiClient({ baseUrl: apiBaseUrl, fetch: this.fetch });
+    this.financeCache = new FinanceCache(apiBaseUrl);
     this.network = new Network(options.network);
     this.offline = new Offline({
       api: this.api,
