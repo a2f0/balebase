@@ -154,6 +154,58 @@ it("keeps saved job output visible while retrying a failed poll", async () => {
   expect(container.textContent).toContain('"progress": 2');
 });
 
+it("clears a run's logs while another page of them opens", async () => {
+  const done: JobRun = { ...queued, status: "succeeded", attempts: 1 };
+  const log = (id: number, message: string) => ({
+    id,
+    occurredAt: queued.createdAt,
+    level: "info",
+    message,
+    details: {},
+  });
+  const pages: (string | null)[] = [];
+  let finishEarlier: ((response: Response) => void) | undefined;
+  respond(async (url) => {
+    if (url.pathname.endsWith("/runs/run-1")) {
+      const before = url.searchParams.get("before");
+      pages.push(before);
+      if (before === "cursor-1")
+        return new Promise<Response>((resolve) => {
+          finishEarlier = resolve;
+        });
+      return Response.json({
+        run: done,
+        logs: [log(2, "Newest log.")],
+        nextBefore: "cursor-1",
+      });
+    }
+    if (url.pathname.endsWith("/runs"))
+      return Response.json({ runs: [done], nextCursor: null });
+    return Response.json({ jobs: definitions });
+  });
+  await render();
+  await act(async () => button("View run").click());
+  expect(container.textContent).toContain("Newest log.");
+  await act(async () => button("Earlier logs").click());
+  // The latest logs belong to another page, so they go while it loads.
+  expect(container.textContent).toContain("Loading job output…");
+  expect(container.textContent).not.toContain("Newest log.");
+  await act(async () =>
+    finishEarlier?.(
+      Response.json({
+        run: done,
+        logs: [log(1, "Older log.")],
+        nextBefore: null,
+      }),
+    ),
+  );
+  expect(container.textContent).toContain("Older log.");
+  await act(async () => button("Latest logs").click());
+  expect(container.textContent).toContain("Newest log.");
+  expect(container.textContent).not.toContain("Older log.");
+  expect(pages).toEqual([null, "cursor-1", null]);
+});
+
 async function render(pathname = "/root/jobs") {
   const view = await mount(
     <>
