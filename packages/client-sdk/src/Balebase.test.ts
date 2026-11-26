@@ -144,6 +144,43 @@ describe("API requests", () => {
     }
   });
 
+  it("keeps the key on a redirect within the API's origin, wherever it leads", async () => {
+    // Pins the runtime's fetch, as the docs describe: redirects are the
+    // transport's to follow, and a same-origin one keeps Authorization.
+    const api = Bun.serve({
+      fetch: (request) =>
+        new URL(request.url).pathname === "/api/objects/1"
+          ? Response.redirect("/api/auth/get-session", 302)
+          : Response.json({
+              authorization: request.headers.get("Authorization"),
+            }),
+      port: 0,
+    });
+    try {
+      const balebase = new Balebase({
+        apiBaseUrl: api.url.origin,
+        apiKey: "tlk_test_key",
+      });
+      const response = await balebase.fetch(`${api.url}api/objects/1`);
+      expect(new URL(response.url).pathname).toBe("/api/auth/get-session");
+      expect(await response.json()).toEqual({
+        authorization: "Bearer tlk_test_key",
+      });
+    } finally {
+      api.stop();
+    }
+  });
+
+  it("refuses a key for an API base whose path cannot be decoded", () => {
+    // The key could never be shown to go under such a base.
+    expect(
+      () => new Balebase({ apiBaseUrl: "https://api.test/%E0", apiKey: "k" }),
+    ).toThrow("apiBaseUrl's path has a malformed percent-escape");
+    expect(
+      () => new Balebase({ apiBaseUrl: "https://api.test/%E0" }),
+    ).not.toThrow();
+  });
+
   it("sends a key read with a trailing newline without it", async () => {
     const { fetch, sent } = recordRequests(() => Response.json({ user: null }));
     await new Balebase({

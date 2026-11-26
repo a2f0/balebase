@@ -37,6 +37,14 @@ interface ApiFetchOptions {
 export function createApiFetch(options: ApiFetchOptions): ApiFetch {
   const send = options.fetch ?? ((input, init) => fetch(input, init));
   const { apiKey, nativeOrigin } = options;
+  // The base as a decoding proxy reads it, once; without one, no path
+  // could be shown to be under it, and the key would never go.
+  const proxiedBase =
+    apiKey === undefined ? "" : normalized(apiKey.path)?.replace(/\/$/, "");
+  if (proxiedBase === undefined)
+    throw new Error(
+      "apiBaseUrl's path has a malformed percent-escape, so apiKey could never be sent: fix the path, or leave apiKey unset.",
+    );
   return async (input, init) => {
     if (apiKey !== undefined || nativeOrigin !== undefined) {
       const headers = new Headers(
@@ -46,7 +54,7 @@ export function createApiFetch(options: ApiFetchOptions): ApiFetch {
       if (
         apiKey !== undefined &&
         !headers.has("Authorization") &&
-        receivesKey(input, apiKey)
+        receivesKey(input, apiKey, proxiedBase)
       )
         headers.set("Authorization", `Bearer ${apiKey.value}`);
       // Request strips the forbidden Origin header before Capacitor forwards
@@ -79,17 +87,18 @@ export const authRoutes = "/api/auth";
  * mistakes; the API, which refuses keys on routes they may not reach, is
  * the boundary.
  */
-function receivesKey(input: RequestInfo | URL, key: ApiKeyScope) {
+function receivesKey(
+  input: RequestInfo | URL,
+  key: ApiKeyScope,
+  proxiedBase: string,
+) {
   const url = urlOf(input);
   if (url?.origin !== key.origin) return false;
   // The API decodes the path once before routing, so `/api/%61uth` is
   // Better Auth's too.
   const sent = routeUnder(url.pathname, key.path);
   const routed = sent === undefined ? undefined : decodeOnce(sent);
-  const proxied = routeUnder(
-    normalized(url.pathname),
-    normalized(key.path)?.replace(/\/$/, ""),
-  );
+  const proxied = routeUnder(normalized(url.pathname), proxiedBase);
   return (
     routed !== undefined &&
     proxied !== undefined &&
@@ -99,8 +108,8 @@ function receivesKey(input: RequestInfo | URL, key: ApiKeyScope) {
 }
 
 /** What follows `base` in `path`, or undefined when `path` is not under it. */
-function routeUnder(path: string | undefined, base: string | undefined) {
-  if (path === undefined || base === undefined) return undefined;
+function routeUnder(path: string | undefined, base: string) {
+  if (path === undefined) return undefined;
   if (path !== base && !path.startsWith(`${base}/`)) return undefined;
   return path.slice(base.length);
 }
