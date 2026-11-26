@@ -400,8 +400,9 @@ as to `screens.ts`.
   with a suppression. Packages depend in one direction: `validators`, `ui`,
   and `diagnostics` import no other workspace; `api-client` builds on
   `validators`; `client-sdk` on `api-client`; `app` on those; the shells
-  (`app-web`, `app-capacitor`) on `app`, `client-sdk`, and the leaf packages;
-  and `api` and `website` on the leaf packages only.
+  (`app-web`, `app-capacitor`) on `app` and the leaf packages, with
+  `app-capacitor` also on `client-sdk` for the host contract it fills in; and
+  `api` and `website` on the leaf packages only.
 - Beyond its recommended set, Biome turns on bug-catching rules from
   `biome.jsonc`, among them floating promises, non-exhaustive `switch`
   statements, focused or skipped tests, and assignments nothing reads.
