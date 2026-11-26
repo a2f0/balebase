@@ -20,11 +20,11 @@ export interface BalebaseOptions {
    * `apiBaseUrl` (its origin and any proxy path). The SDK never sends it to
    * another host or path, or to Better Auth's session-only routes at the
    * base's `/api/auth`, as the API or a proxy that decodes paths reads them
-   * (the API refuses keys there too). A redirect is the transport's to
-   * follow, though: `fetch` keeps the header on one within the API's origin,
-   * wherever it leads, and drops it on one to another origin.
-   * It needs an https `apiBaseUrl` (or http to this machine); a page not
-   * served over http(s), such as a file:// page, must set one. The key's
+   * (where the API ignores or refuses a key anyway). A redirect is the
+   * transport's to follow, though: `fetch` keeps the header on one within
+   * the API's origin, wherever it leads, and drops it on one to another
+   * origin. It needs an https `apiBaseUrl` (or http to this machine); a page
+   * not served over http(s), such as a file:// page, must set one. The key's
    * access and the routes API keys may reach still apply. It is a secret:
    * never put one in a page or an app others can open.
    */

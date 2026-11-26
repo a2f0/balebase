@@ -84,8 +84,8 @@ export const authRoutes = "/api/auth";
  * resolved), which the API decodes once before routing, and the path as a
  * decoding proxy may pass it on (see `normalized`). Neither may leave the
  * base or be one of Better Auth's routes. This keeps the key from obvious
- * mistakes; the API, which refuses keys on routes they may not reach, is
- * the boundary.
+ * mistakes; the API, which grants a key only the routes it may reach
+ * (Better Auth ignores one), is the boundary.
  */
 function receivesKey(
   input: RequestInfo | URL,
