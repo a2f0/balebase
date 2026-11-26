@@ -1,48 +1,62 @@
-import { type ApiClient, errorMessage } from "@balebase/client-sdk";
+import { errorMessage } from "@balebase/client-sdk";
 import { Banner, Button, LoadingState, Toast } from "@balebase/ui/react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useReducer, useRef, useState } from "react";
 import { balebase } from "../balebase";
-
-type Detail = Awaited<ReturnType<ApiClient["adminJobs"]["detail"]>>;
+import {
+  initialRunDetail,
+  type RunDetail,
+  runDetailTransition,
+} from "./runDetailState";
 
 /** How long a queued or running job waits between reads of its output. */
 export const runPollMs = 5_000;
 
+/**
+ * A run's details at `before` (empty for the latest logs), read again every
+ * `runPollMs` while the latest page shows the run queued or running. The
+ * states and their transitions are in `runDetailState.ts`.
+ */
 function useRunDetail(runId: string, before: string) {
-  const [detail, setDetail] = useState<Detail>();
-  const [error, setError] = useState<string>();
+  const [state, dispatch] = useReducer(runDetailTransition, initialRunDetail);
   const [attempt, setAttempt] = useState(0);
-  const previous = useRef({ runId, before });
+  // Tags every request: only the current one can finish the details, so a
+  // read for a page the admin left, or one a retry replaced, changes nothing.
+  const requests = useRef(0);
+  const shown = useRef({ runId, before });
   // biome-ignore lint/correctness/useExhaustiveDependencies: A retry restarts the request even when its run and cursor are unchanged.
   useEffect(() => {
-    if (previous.current.runId !== runId || previous.current.before !== before)
-      setDetail(undefined);
-    previous.current = { runId, before };
+    const request = ++requests.current;
+    const opened =
+      shown.current.runId !== runId || shown.current.before !== before;
+    shown.current = { runId, before };
+    dispatch({ type: opened ? "opened" : "retried", request });
     // Leaving the run or its page ends the read in flight, which can take up
     // to the endpoint's 30-second timeout, and drops anything it returns.
     const leaving = new AbortController();
     const { signal } = leaving;
     const api = balebase().api.withSignal(signal);
+    // Whether this request's latest read showed the run still in progress.
     let polling = false;
     let timer: ReturnType<typeof setTimeout>;
-    setError(undefined);
     function load() {
       return api.adminJobs
         .detail(runId, before || undefined)
-        .then((result) => {
+        .then((detail) => {
           if (signal.aborted) return;
           polling =
-            result.run.status === "queued" || result.run.status === "running";
-          setDetail(result);
-          setError(undefined);
+            detail.run.status === "queued" || detail.run.status === "running";
+          dispatch({ type: "read", request, detail });
         })
         .catch((cause: unknown) => {
           if (signal.aborted) return;
-          setError(
-            cause instanceof Error && cause.name === "TimeoutError"
-              ? "Loading job output took too long. Try again."
-              : errorMessage(cause, "Could not load job output."),
-          );
+          dispatch({
+            type: "readFailed",
+            request,
+            error:
+              cause instanceof Error && cause.name === "TimeoutError"
+                ? "Loading job output took too long. Try again."
+                : errorMessage(cause, "Could not load job output."),
+          });
         })
         .finally(() => {
           if (!signal.aborted && !before && polling)
@@ -55,7 +69,11 @@ function useRunDetail(runId: string, before: string) {
       clearTimeout(timer);
     };
   }, [runId, before, attempt]);
-  return { detail, error, retry: () => setAttempt((value) => value + 1) };
+  return {
+    detail: state.status === "loaded" ? state.detail : undefined,
+    error: state.status === "loading" ? undefined : state.error,
+    retry: () => setAttempt((value) => value + 1),
+  };
 }
 
 export function AdminJobRun({ runId }: { runId: string }) {
@@ -154,7 +172,7 @@ export function AdminJobRun({ runId }: { runId: string }) {
   );
 }
 
-function requester(run: Detail["run"]) {
+function requester(run: RunDetail["run"]) {
   if (run.requestedByName)
     return `${run.requestedByName} (${run.requestedByEmail ?? "no email"})`;
   // Runs requested before names were saved keep only the account ID.
