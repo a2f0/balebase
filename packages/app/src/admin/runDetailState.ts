@@ -1,5 +1,8 @@
 import type { ApiClient } from "@balebase/client-sdk";
 
+/** A job run, a page of its logs, and the cursor to the page before it. */
+export type RunDetail = Awaited<ReturnType<ApiClient["adminJobs"]["detail"]>>;
+
 /**
  * The state of one job run's details (`useRunDetail` in `AdminJobRun.tsx`):
  * its output and a page of its logs, read again while the run is queued or
@@ -18,8 +21,6 @@ import type { ApiClient } from "@balebase/client-sdk";
  * A read or failure finishes only the current request, so one from a run or
  * page the admin has left, or from a request a retry replaced, is ignored.
  */
-export type RunDetail = Awaited<ReturnType<ApiClient["adminJobs"]["detail"]>>;
-
 export type RunDetailState =
   /** Reading a run's page, with nothing of it to show yet. */
   | { status: "loading"; request: number }

@@ -8,7 +8,27 @@ import {
   runDetailTransition,
 } from "./runDetailState";
 
-const job = { runId: "run-1", status: "running" } as JobRun;
+const job: JobRun = {
+  runId: "run-1",
+  jobId: "purgeRequestedUsers",
+  status: "running",
+  source: "manual",
+  dryRun: false,
+  requestedBy: "actor",
+  requestedByName: "Admin Actor",
+  requestedByEmail: "actor@example.com",
+  organizationId: null,
+  connectionId: null,
+  attempts: 1,
+  createdAt: "2026-10-26T12:00:00.000Z",
+  startedAt: "2026-10-26T12:00:01.000Z",
+  finishedAt: null,
+  availableAt: "2026-10-26T12:00:00.000Z",
+  durationMs: null,
+  error: null,
+  errorCode: null,
+  output: null,
+};
 const detail: RunDetail = { run: job, logs: [], nextBefore: null };
 const later: RunDetail = { ...detail, run: { ...job, status: "succeeded" } };
 
@@ -66,20 +86,33 @@ describe("runDetailTransition", () => {
       { type: "readFailed", request: 1, error: "Offline." },
       { status: "loaded", request: 1, detail, error: "Offline." },
     ],
-    [
-      "ignores a read for another request",
-      { status: "loading", request: 2 },
-      { type: "read", request: 1, detail },
-      { status: "loading", request: 2 },
-    ],
-    [
-      "ignores a failure for another request",
-      { status: "loaded", request: 2, detail },
-      { type: "readFailed", request: 1, error: "Offline." },
-      { status: "loaded", request: 2, detail },
-    ],
   ])("%s", (_name, state, event, next) => {
     expect(runDetailTransition(state, event)).toEqual(next);
+  });
+
+  it.each<[string, RunDetailState, RunDetailEvent]>([
+    [
+      "a read for another request",
+      { status: "loading", request: 2 },
+      { type: "read", request: 1, detail },
+    ],
+    [
+      "a failure for another request while loading",
+      { status: "loading", request: 2 },
+      { type: "readFailed", request: 1, error: "Offline." },
+    ],
+    [
+      "a failure for another request once loaded",
+      { status: "loaded", request: 2, detail },
+      { type: "readFailed", request: 1, error: "Offline." },
+    ],
+    [
+      "a read for another request after a failure",
+      { status: "failed", request: 2, error: "Offline." },
+      { type: "read", request: 1, detail },
+    ],
+  ])("ignores %s", (_name, state, event) => {
+    expect(runDetailTransition(state, event)).toBe(state);
   });
 
   it("starts reading with nothing shown", () => {
@@ -110,9 +143,7 @@ describe("runDetailTransition", () => {
 
   it("rejects an event it does not know", () => {
     expect(() =>
-      runDetailTransition(initialRunDetail, {
-        type: "unknown",
-      } as unknown as RunDetailEvent),
+      runDetailTransition(initialRunDetail, { type: "unknown" } as never),
     ).toThrow("Unhandled run detail event");
   });
 });
