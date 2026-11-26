@@ -33,7 +33,7 @@ Every field of `BalebaseOptions` is optional in a browser.
 
 | Option | Use |
 | --- | --- |
-| `apiBaseUrl` | The API origin, without `/api`; trailing slashes are dropped, since saved data is keyed by it. Required outside a browser |
+| `apiBaseUrl` | The API origin, without `/api`, a query, or credentials; trailing slashes are dropped, since saved data is keyed by it, and a proxy's path is kept. Required outside a browser |
 | `apiKey` | An organization API key, sent as `Authorization: Bearer` with every request to the API's origin, never another host's, except those the `auth` client makes (Better Auth's routes are session-only). Needs an https `apiBaseUrl`, or http to this machine; for scripts and servers, never a page |
 | `fetch` | The transport; defaults to the global `fetch`, looked up per request |
 | `nativeOrigin` | A native shell's WebView origin, sent as `X-Balebase-Native-Origin` |

@@ -97,32 +97,48 @@ describe("API requests", () => {
     }
   });
 
-  it("refuses an API origin that is not an http(s) origin", () => {
+  it("refuses an API base that route paths cannot follow", () => {
     for (const apiBaseUrl of [
       "api.balebase.com",
       "/api",
       "localhost:8787",
       "ftp://api.test",
-      "https://api.test/api",
       "https://api.test?tier=staging",
+      "https://api.test#top",
       "https://user:secret@api.test",
     ]) {
       expect(() => new Balebase({ apiBaseUrl })).toThrow(
-        "apiBaseUrl must be an http(s) origin",
+        "apiBaseUrl must be an http(s) URL with no query or credentials",
       );
     }
-    expect(
-      new Balebase({ apiBaseUrl: "http://localhost:8787/" }).offline.scopeKey({
-        organizationId: "org",
-        userId: "user",
-      }),
-    ).toBe(JSON.stringify(["http://localhost:8787", "user", "org"]));
   });
 
-  it("sends an API key over https or to this machine only", () => {
+  it("keeps an API base's path and spelling, which key saved data", async () => {
+    // Releases may name the API this way (native release validation does).
+    const { fetch, sent } = recordRequests(() => Response.json({ user: null }));
+    const balebase = new Balebase({
+      apiBaseUrl: "https://API.balebase.com./v1/",
+      apiKey: "tlk_test_key",
+      fetch,
+    });
+    await balebase.api.session.me();
+    expect(sent[0]?.url).toBe("https://api.balebase.com./v1/api/me");
+    expect(sent[0]?.headers.get("Authorization")).toBe("Bearer tlk_test_key");
+    expect(
+      balebase.offline.scopeKey({ organizationId: "org", userId: "user" }),
+    ).toBe(JSON.stringify(["https://API.balebase.com./v1", "user", "org"]));
+  });
+
+  it("sends an API key over https or to this machine only", async () => {
     expect(
       () => new Balebase({ apiBaseUrl: "http://api.test", apiKey: "tlk_k" }),
     ).toThrow("apiKey needs an https apiBaseUrl");
+    // A page served over http is the API's origin without apiBaseUrl.
+    await onPage("http://app.test", async () => {
+      expect(() => new Balebase({ apiKey: "tlk_k" })).toThrow(
+        "apiKey needs an https apiBaseUrl",
+      );
+    });
     for (const local of [
       "http://localhost:8787",
       "http://127.0.0.1:8787",

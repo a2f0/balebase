@@ -45,15 +45,18 @@ export class Balebase {
         "Set apiBaseUrl: outside a browser there is no page origin to send API requests to.",
       );
     }
-    if (apiBaseUrl && !isWebOrigin(apiBaseUrl)) {
+    if (apiBaseUrl && !isApiBase(apiBaseUrl)) {
       throw new Error(
-        `apiBaseUrl must be an http(s) origin, such as https://api.balebase.com, with no path, not "${apiBaseUrl}".`,
+        `apiBaseUrl must be an http(s) URL with no query or credentials, such as https://api.balebase.com, not "${apiBaseUrl}".`,
       );
     }
     const { apiKey } = options;
     if (apiKey !== undefined && !apiKey.trim())
       throw new Error("apiKey is blank: pass an API key, or leave it unset.");
-    if (apiKey !== undefined && !sendsSecretsSafely(apiBaseUrl))
+    if (
+      apiKey !== undefined &&
+      !sendsSecretsSafely(apiBaseUrl || location.origin)
+    )
       throw new Error(
         "apiKey needs an https apiBaseUrl: over http the key would cross the network unencrypted.",
       );
@@ -102,26 +105,28 @@ export class Balebase {
 }
 
 /**
- * Whether `url` is an http(s) origin with nothing after it. "localhost:8787"
- * parses too, with "localhost:" as its scheme, so the scheme is checked.
+ * Whether route paths can be appended to `url`: an http(s) URL with no
+ * credentials, query, or fragment. A path, as behind a proxy, is kept, and
+ * so is the spelling, which keys saved data. "localhost:8787" parses too,
+ * with "localhost:" as its scheme, so the scheme is checked.
  */
-function isWebOrigin(url: string) {
+function isApiBase(url: string) {
   try {
-    const parsed = new URL(url);
-    return /^https?:$/.test(parsed.protocol) && parsed.origin === url;
+    const { hash, password, protocol, search, username } = new URL(url);
+    return (
+      /^https?:$/.test(protocol) && !username && !password && !search && !hash
+    );
   } catch {
     return false;
   }
 }
 
 /**
- * Whether a secret sent to `apiBaseUrl` stays encrypted or on this machine:
- * https, or http to a loopback address, as a local API is. Without one the
- * page's origin is the API's, and pages are not given keys.
+ * Whether a secret sent to `base` stays encrypted or on this machine: https,
+ * or http to a loopback address, as a local API is.
  */
-function sendsSecretsSafely(apiBaseUrl: string) {
-  if (!apiBaseUrl) return true;
-  const { hostname, protocol } = new URL(apiBaseUrl);
+function sendsSecretsSafely(base: string) {
+  const { hostname, protocol } = new URL(base);
   return (
     protocol === "https:" ||
     ["localhost", "127.0.0.1", "[::1]"].includes(hostname)

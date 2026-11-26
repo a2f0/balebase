@@ -8,9 +8,10 @@ import type { NetworkStatusSource } from "./client/runtime/network";
 export interface BalebaseOptions {
   /**
    * The API origin, such as `https://api.balebase.com`, without a trailing
-   * slash or `/api`. Defaults to the page's own origin. Outside a browser,
-   * where there is no page and relative URLs cannot be fetched, it is
-   * required: `new Balebase` throws without it.
+   * slash or `/api`, a query, or credentials; a path in front of the API's
+   * own, as behind a proxy, is kept. Defaults to the page's own origin.
+   * Outside a browser, where there is no page and relative URLs cannot be
+   * fetched, it is required: `new Balebase` throws without it.
    */
   apiBaseUrl?: string | undefined;
   /**
