@@ -47,12 +47,16 @@ export class Balebase {
     }
     if (apiBaseUrl && !isWebOrigin(apiBaseUrl)) {
       throw new Error(
-        `apiBaseUrl must be an absolute http(s) URL, such as https://api.balebase.com, not "${apiBaseUrl}".`,
+        `apiBaseUrl must be an http(s) origin, such as https://api.balebase.com, with no path, not "${apiBaseUrl}".`,
       );
     }
     const { apiKey } = options;
     if (apiKey !== undefined && !apiKey.trim())
       throw new Error("apiKey is blank: pass an API key, or leave it unset.");
+    if (apiKey !== undefined && !sendsSecretsSafely(apiBaseUrl))
+      throw new Error(
+        "apiKey needs an https apiBaseUrl: over http the key would cross the network unencrypted.",
+      );
     const transport = {
       apiVersion: this.apiVersion,
       fetch: options.fetch,
@@ -98,13 +102,28 @@ export class Balebase {
 }
 
 /**
- * Whether `url` is an absolute http(s) URL. "localhost:8787" parses too, with
- * "localhost:" as its scheme, so the scheme is checked.
+ * Whether `url` is an http(s) origin with nothing after it. "localhost:8787"
+ * parses too, with "localhost:" as its scheme, so the scheme is checked.
  */
 function isWebOrigin(url: string) {
   try {
-    return /^https?:$/.test(new URL(url).protocol);
+    const parsed = new URL(url);
+    return /^https?:$/.test(parsed.protocol) && parsed.origin === url;
   } catch {
     return false;
   }
+}
+
+/**
+ * Whether a secret sent to `apiBaseUrl` stays encrypted or on this machine:
+ * https, or http to a loopback address, as a local API is. Without one the
+ * page's origin is the API's, and pages are not given keys.
+ */
+function sendsSecretsSafely(apiBaseUrl: string) {
+  if (!apiBaseUrl) return true;
+  const { hostname, protocol } = new URL(apiBaseUrl);
+  return (
+    protocol === "https:" ||
+    ["localhost", "127.0.0.1", "[::1]"].includes(hostname)
+  );
 }

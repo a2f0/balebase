@@ -14,11 +14,13 @@ export interface BalebaseOptions {
    */
   apiBaseUrl?: string | undefined;
   /**
-   * An organization API key, sent as a bearer token with every request to
-   * the API's origin (never another host's, nor Better Auth's session-only
-   * routes), for scripts and servers that have no browser session. The key's access and the routes API keys may
-   * reach still apply. It is a secret: never put one in a page or an app
-   * others can open.
+   * An organization API key, for scripts and servers that have no browser
+   * session. It is sent as a bearer token with every request to the API's
+   * origin, never another host's, except the requests the `auth` client
+   * makes, since Better Auth's routes are session-only. It needs an https
+   * `apiBaseUrl` (or http to this machine). The key's access and the routes
+   * API keys may reach still apply. It is a secret: never put one in a page
+   * or an app others can open.
    */
   apiKey?: string | undefined;
   /**

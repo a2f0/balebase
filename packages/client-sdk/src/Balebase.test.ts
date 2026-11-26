@@ -97,16 +97,40 @@ describe("API requests", () => {
     }
   });
 
-  it("refuses an API origin that is not an absolute URL", () => {
+  it("refuses an API origin that is not an http(s) origin", () => {
     for (const apiBaseUrl of [
       "api.balebase.com",
       "/api",
       "localhost:8787",
       "ftp://api.test",
+      "https://api.test/api",
+      "https://api.test?tier=staging",
+      "https://user:secret@api.test",
     ]) {
       expect(() => new Balebase({ apiBaseUrl })).toThrow(
-        "apiBaseUrl must be an absolute http(s) URL",
+        "apiBaseUrl must be an http(s) origin",
       );
+    }
+    expect(
+      new Balebase({ apiBaseUrl: "http://localhost:8787/" }).offline.scopeKey({
+        organizationId: "org",
+        userId: "user",
+      }),
+    ).toBe(JSON.stringify(["http://localhost:8787", "user", "org"]));
+  });
+
+  it("sends an API key over https or to this machine only", () => {
+    expect(
+      () => new Balebase({ apiBaseUrl: "http://api.test", apiKey: "tlk_k" }),
+    ).toThrow("apiKey needs an https apiBaseUrl");
+    for (const local of [
+      "http://localhost:8787",
+      "http://127.0.0.1:8787",
+      "http://[::1]:8787",
+    ]) {
+      expect(
+        () => new Balebase({ apiBaseUrl: local, apiKey: "tlk_k" }),
+      ).not.toThrow();
     }
   });
 
