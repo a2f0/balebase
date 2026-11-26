@@ -5,6 +5,7 @@ import {
   OrganizationChanged,
   refused,
   SignedOut,
+  summaryTimeoutMessage,
   type TransactionStore,
   withPageTimeout,
 } from "@balebase/client-sdk";
@@ -119,10 +120,7 @@ async function loadOnce(
   const requests = [
     // Checked on arrival, so a stalled feed cannot delay the mismatch; and
     // bounded, so a stalled summary cannot keep the load from ending.
-    withPageTimeout(
-      fetchSummary(),
-      "Loading finances timed out. Try again.",
-    ).then((data) => {
+    withPageTimeout(fetchSummary(), summaryTimeoutMessage).then((data) => {
       if (
         scope &&
         (data.organizationId !== scope.organizationId ||
