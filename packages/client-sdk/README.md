@@ -67,10 +67,8 @@ localStorage pointer, and the lock names are what devices already hold work
 under; changing them strands it.
 
 Offline work needs a browser or WebView: IndexedDB, localStorage, and Web
-Locks. Make one `Balebase` per tab. An instance keeps its own lock epoch and
-change subscribers, so a second one in the same tab would neither see the
-first's locks while storage fails nor tell its subscribers of the first's
-changes.
+Locks. Instances for one API in a tab share its locks and change subscribers,
+as they share the device's storage.
 
 [Using the client SDK](../../docs/client-sdk.md) covers cookies, CORS, native
 hosts, and use outside a browser.

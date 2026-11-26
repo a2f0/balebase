@@ -27,6 +27,27 @@ function database() {
 }
 
 /**
+ * What every store for one API in this tab shares, as they share the
+ * device's storage: how often the tab locked, and who hears of changes. A
+ * second SDK, as when a host changes, neither unlocks what the first locked
+ * nor leaves the first's subscribers deaf.
+ */
+interface TabState {
+  locks: number;
+  listeners: Set<() => void>;
+}
+const tabs = new Map<string, TabState>();
+
+function tabState(pointer: string) {
+  let state = tabs.get(pointer);
+  if (!state) {
+    state = { locks: 0, listeners: new Set() };
+    tabs.set(pointer, state);
+  }
+  return state;
+}
+
+/**
  * The device's offline workspaces in IndexedDB, one per person and
  * organization, and which one is active: a pointer in localStorage that
  * signing out or switching accounts clears, hiding downloaded data without
@@ -35,24 +56,37 @@ function database() {
 export class OfflineStore {
   readonly #apiBaseUrl: string;
   readonly #activeKey: string;
-  readonly #listeners = new Set<() => void>();
-  #localAccessEpoch = 0;
+  readonly #tab: TabState;
 
   constructor(apiBaseUrl: string) {
     this.#apiBaseUrl = apiBaseUrl;
     this.#activeKey = `balebase:offline:${apiBaseUrl}`;
+    this.#tab = tabState(this.#activeKey);
   }
 
-  /** Calls `listener` after each change made here; returns an unsubscribe. */
+  /**
+   * Calls `listener` after each change made in this tab, by any store for
+   * this API; returns an unsubscribe.
+   */
   subscribe(listener: () => void) {
-    this.#listeners.add(listener);
+    this.#tab.listeners.add(listener);
     return () => {
-      this.#listeners.delete(listener);
+      this.#tab.listeners.delete(listener);
     };
   }
 
+  /**
+   * Tells every listener, reporting rather than raising what one throws:
+   * the change is made by then, and a save or sign-out must not look failed.
+   */
   #notify() {
-    for (const listener of this.#listeners) listener();
+    for (const listener of [...this.#tab.listeners]) {
+      try {
+        listener();
+      } catch (cause) {
+        reportError(cause);
+      }
+    }
   }
 
   scopeKey(scope: OfflineScope) {
@@ -180,7 +214,7 @@ export class OfflineStore {
     } catch {
       /* Storage failures are reported when saving. */
     }
-    return JSON.stringify([sharedEpoch, this.#localAccessEpoch]);
+    return JSON.stringify([sharedEpoch, this.#tab.locks]);
   }
 
   activate(key: string, epoch = this.accessEpoch()) {
@@ -215,7 +249,7 @@ export class OfflineStore {
 
   /** Hides downloaded data on sign-out/account changes without deleting unsynced work. */
   lock() {
-    this.#localAccessEpoch += 1;
+    this.#tab.locks += 1;
     try {
       localStorage.removeItem(this.#activeKey);
       localStorage.setItem(`${this.#activeKey}:epoch`, crypto.randomUUID());

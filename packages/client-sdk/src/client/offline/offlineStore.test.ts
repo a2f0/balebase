@@ -6,6 +6,8 @@ const pointer = `balebase:offline:${api}`;
 const original = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
 let items: Map<string, string>;
 let failing: boolean;
+// Stores for one API share this tab's subscribers; each test drops its own.
+const unsubscribes: (() => void)[] = [];
 
 function useStorage() {
   const fail = () => {
@@ -38,6 +40,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  for (const unsubscribe of unsubscribes.splice(0)) unsubscribe();
   if (original) Object.defineProperty(globalThis, "localStorage", original);
   else Reflect.deleteProperty(globalThis, "localStorage");
 });
@@ -45,9 +48,11 @@ afterEach(() => {
 function watched() {
   const store = new OfflineStore(api);
   const changes = { count: 0 };
-  store.subscribe(() => {
-    changes.count += 1;
-  });
+  unsubscribes.push(
+    store.subscribe(() => {
+      changes.count += 1;
+    }),
+  );
   return { changes, store };
 }
 
@@ -131,6 +136,46 @@ describe("offline store", () => {
     store.lock();
     expect(store.accessEpoch()).not.toBe(epoch);
     expect(changes.count).toBe(1);
+  });
+
+  it("shares this tab's locks and notices between stores for one API", () => {
+    const { changes, store: first } = watched();
+    const epoch = first.accessEpoch();
+    failing = true;
+    // A second SDK, as after a host change, sees the first one's lock.
+    const second = new OfflineStore(api);
+    second.lock();
+    expect(first.accessEpoch()).not.toBe(epoch);
+    expect(new OfflineStore(api).accessEpoch()).toBe(second.accessEpoch());
+    expect(changes.count).toBe(1);
+    // Another API's stores keep their own.
+    const other = new OfflineStore("https://other.test");
+    const otherEpoch = other.accessEpoch();
+    second.lock();
+    expect(other.accessEpoch()).toBe(otherEpoch);
+  });
+
+  it("reports a subscriber's error without failing the lock", () => {
+    const reported: unknown[] = [];
+    const report = globalThis.reportError;
+    globalThis.reportError = (cause) => reported.push(cause);
+    try {
+      const store = new OfflineStore(api);
+      const broken = new Error("listener broke");
+      unsubscribes.push(
+        store.subscribe(() => {
+          throw broken;
+        }),
+      );
+      const { changes } = watched();
+      items.set(pointer, "key");
+      expect(() => store.lock()).not.toThrow();
+      expect(store.activeKey()).toBeNull();
+      expect(changes.count).toBe(1);
+      expect(reported).toEqual([broken]);
+    } finally {
+      globalThis.reportError = report;
+    }
   });
 
   it("stops telling a subscriber once it unsubscribes", () => {
