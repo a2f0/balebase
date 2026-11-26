@@ -8,7 +8,7 @@ import {
 } from "@balebase/ui/react";
 import { QRCodeSVG } from "qrcode.react";
 import { type FormEvent, useState } from "react";
-import { authClient } from "../shared/authClient";
+import { balebase } from "../balebase";
 import { throwIfRefused } from "../shared/errors";
 import { saveFile } from "../shared/saveFile";
 import { useAction } from "../shared/useAction";
@@ -584,7 +584,7 @@ function MaintenanceCard({
 }
 
 async function enableTotp(password: string): Promise<TotpSetup> {
-  const result = await authClient.twoFactor.enable({
+  const result = await balebase().auth.twoFactor.enable({
     method: "totp",
     password,
   });
@@ -599,11 +599,11 @@ async function enableTotp(password: string): Promise<TotpSetup> {
 }
 
 async function verifyTotp(code: string) {
-  const result = await authClient.twoFactor.verifyTotp({
+  const result = await balebase().auth.twoFactor.verifyTotp({
     code: code.replace(/\D/g, ""),
   });
   throwIfRefused(result.error, "Could not verify that code.");
-  const revoked = await authClient.revokeOtherSessions();
+  const revoked = await balebase().auth.revokeOtherSessions();
   throwIfRefused(
     revoked.error,
     "MFA is enabled, but other sessions could not be signed out.",
@@ -611,13 +611,15 @@ async function verifyTotp(code: string) {
 }
 
 async function generateRecoveryCodes(password: string) {
-  const result = await authClient.twoFactor.generateBackupCodes({ password });
+  const result = await balebase().auth.twoFactor.generateBackupCodes({
+    password,
+  });
   throwIfRefused(result.error, "Could not generate new recovery codes.");
   return result.data?.backupCodes ?? [];
 }
 
 async function disableTotp(password: string) {
-  const result = await authClient.twoFactor.disable({ password });
+  const result = await balebase().auth.twoFactor.disable({ password });
   throwIfRefused(result.error, "Could not disable MFA.");
 }
 

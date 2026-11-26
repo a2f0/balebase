@@ -5,7 +5,6 @@ import {
   resolveActiveOrganizationId,
   type WorkspaceOrganization,
 } from "../organizations/organizationState";
-import { authClient } from "../shared/authClient";
 
 export interface OrganizationSession {
   session: { activeOrganizationId?: string | null | undefined };
@@ -57,7 +56,7 @@ export function useWorkspaceOrganizations(
       session?.user.defaultOrganizationId ??
       undefined);
   const createOrganization = async (name: string) => {
-    const result = await authClient.organization.create({
+    const result = await balebase().auth.organization.create({
       name,
       slug: createOrganizationSlug(name, crypto.randomUUID()),
     });
@@ -71,7 +70,9 @@ export function useWorkspaceOrganizations(
   };
   const switchOrganization = async (organizationId: string) => {
     balebase().offline.lock();
-    const result = await authClient.organization.setActive({ organizationId });
+    const result = await balebase().auth.organization.setActive({
+      organizationId,
+    });
     if (result.error) {
       throw new Error(
         result.error.message ?? "Could not switch organizations.",

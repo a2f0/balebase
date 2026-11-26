@@ -8,7 +8,6 @@ import {
   RequirementAssignmentError,
   type RequirementDraft,
 } from "../employeeForms/employeeOnboarding";
-import { authClient } from "../shared/authClient";
 import { useAction } from "../shared/useAction";
 import {
   assignableOrganizationRoles,
@@ -286,7 +285,7 @@ async function sendInvitationWithRequirements({
     assign: (invitationId, drafts) =>
       balebase().api.employeeForms.create({ invitationId }, drafts),
     invite: async () => {
-      const result = await authClient.organization.inviteMember({
+      const result = await balebase().auth.organization.inviteMember({
         email,
         organizationId,
         role,

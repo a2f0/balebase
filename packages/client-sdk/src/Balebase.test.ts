@@ -70,6 +70,41 @@ describe("API requests", () => {
   });
 });
 
+describe("auth", () => {
+  it("sends auth calls through the SDK's fetch to the API origin", async () => {
+    const { fetch, sent } = recordRequests(() =>
+      Response.json(null, { headers: { "API-Version": "9.9.9" } }),
+    );
+    const balebase = new Balebase({
+      apiBaseUrl: "https://api.test/",
+      fetch,
+      nativeOrigin: "https://localhost",
+    });
+    expect(balebase.auth).toBe(balebase.auth);
+    await balebase.auth.getSession();
+    expect(sent.map(({ url }) => url)).toEqual([
+      "https://api.test/api/auth/get-session",
+    ]);
+    expect(sent[0]?.headers.get("X-Balebase-Native-Origin")).toBe(
+      "https://localhost",
+    );
+    expect(balebase.apiVersion.current).toBe("9.9.9");
+  });
+
+  it("sends auth calls to the page's origin, like typed calls, without one", async () => {
+    const sent: string[] = [];
+    const balebase = new Balebase({
+      fetch: async (input) => {
+        sent.push(input instanceof Request ? input.url : String(input));
+        return Response.json(null);
+      },
+    });
+    await balebase.api.session.me();
+    await balebase.auth.getSession();
+    expect(sent).toEqual(["/api/me", "/api/auth/get-session"]);
+  });
+});
+
 describe("API version", () => {
   it("keeps the version the latest response named, whatever its status", async () => {
     let headers: HeadersInit = { "API-Version": "41" };

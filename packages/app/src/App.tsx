@@ -19,6 +19,7 @@ import { AuthPage } from "./auth/AuthPage";
 import type { AuthenticationAction } from "./auth/authActions";
 import { useSessionRefetch } from "./auth/useSessionRefetch";
 import { BackgroundChecksAccessContext } from "./backgroundChecks/BackgroundChecksAccess";
+import { balebase } from "./balebase";
 import { SigningPage } from "./contracts/SigningPage";
 import { useRevokedFinanceCleanup } from "./finance/useRevokedFinanceCleanup";
 import { Library } from "./library/Library";
@@ -33,8 +34,8 @@ import {
 } from "./organizations/organizationState";
 import { PaidFeaturesContext } from "./organizations/PaidFeatures";
 import { useOrganizationAccess } from "./organizations/useOrganizationAccess";
-import { authClient } from "./shared/authClient";
 import { authCallbackUrl } from "./shared/config";
+import { useSession } from "./shared/useSession";
 import { capabilityGate } from "./workspace/capabilityGate";
 import {
   guardWorkspaceChange,
@@ -55,7 +56,7 @@ import {
 import { workspaceRoute } from "./workspace/workspaceRoutes";
 
 export function App() {
-  const { data: session, error, isPending, refetch } = authClient.useSession();
+  const { data: session, error, isPending, refetch } = useSession();
   const sessionRefetch = useSessionRefetch(session, isPending, error, refetch);
   const [pathname, setPathname] = useState(initialPathname);
   const isAddAccountPage = pathname === "/add-account";
@@ -205,7 +206,7 @@ function AuthenticationRoute({
               )
             : undefined;
         if (invitationId) {
-          const result = await authClient.organization.acceptInvitation({
+          const result = await balebase().auth.organization.acceptInvitation({
             invitationId,
           });
           if (result.error) {
@@ -226,7 +227,7 @@ function AuthenticationRoute({
         sessionPresent && addingAccount
           ? async () => {
               if (!activeSessionToken) return;
-              const result = await authClient.multiSession.setActive({
+              const result = await balebase().auth.multiSession.setActive({
                 sessionToken: activeSessionToken,
               });
               if (result.error) {
@@ -433,7 +434,7 @@ function NoOrganization() {
 }
 
 async function resendVerification(email: string) {
-  const result = await authClient.sendVerificationEmail({
+  const result = await balebase().auth.sendVerificationEmail({
     callbackURL: authCallbackUrl("/?verified=true"),
     email,
   });
@@ -492,7 +493,7 @@ function FeatureAccessDenied({
 /** Whether this browser still has a session; false when that is unknown. */
 async function sessionSurvives() {
   try {
-    const { data } = await authClient.getSession();
+    const { data } = await balebase().auth.getSession();
     return Boolean(data);
   } catch {
     // Unreachable: the refetch that follows reports it as a session error.

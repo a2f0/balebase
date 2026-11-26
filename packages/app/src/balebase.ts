@@ -22,8 +22,9 @@ export function offlineShellWait(
  * `configureHost` set, so the two never disagree. Until a shell configures
  * one, as in tests, it is a browser's. `renderApp` configures the host once;
  * only tests change it again, which starts a new SDK with no recorded API
- * version. Offline locks and change subscribers belong to the tab, so they
- * carry over.
+ * version and a new auth client with no session yet (the old one keeps
+ * watching the session until the page goes). Offline locks and the tab's
+ * change and clearing subscribers carry over.
  */
 export function balebase() {
   const host = appHost();

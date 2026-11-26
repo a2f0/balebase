@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
 import { balebase } from "../balebase";
-import { authClient } from "../shared/authClient";
 import { throwIfRefused } from "../shared/errors";
 import { clearDevicePreferences } from "./devicePreferences";
 
@@ -41,7 +40,7 @@ export function useAccountSessions(
   const [listed, setListed] = useState<AccountSession[]>([]);
   const [loadError, setLoadError] = useState<string>();
   const load = useCallback(async () => {
-    const result = await authClient.multiSession.listDeviceSessions();
+    const result = await balebase().auth.multiSession.listDeviceSessions();
     if (result.error) {
       const message = result.error.message ?? "Could not load your accounts.";
       setLoadError(message);
@@ -73,7 +72,7 @@ export function useAccountSessions(
   async function switchAccount(token: string) {
     if (token === sessionToken) return;
     balebase().offline.lock();
-    const result = await authClient.multiSession.setActive({
+    const result = await balebase().auth.multiSession.setActive({
       sessionToken: token,
     });
     throwIfRefused(result.error, "Could not switch accounts.");
@@ -84,11 +83,11 @@ export function useAccountSessions(
   async function signOutActiveAccount() {
     if (!sessionToken) return;
     balebase().offline.lock();
-    const result = await authClient.multiSession.revoke({
+    const result = await balebase().auth.multiSession.revoke({
       sessionToken,
     });
     if (isInvalidMultiSessionToken(result.error)) {
-      const fallback = await authClient.signOut();
+      const fallback = await balebase().auth.signOut();
       throwIfRefused(fallback.error, "Could not sign out.");
     } else {
       throwIfRefused(result.error, "Could not sign out.");

@@ -1,6 +1,6 @@
 import { Button, Card, Icon, LoadingState, Toast } from "@balebase/ui/react";
 import { useCallback, useState } from "react";
-import { authClient } from "../shared/authClient";
+import { balebase } from "../balebase";
 import { throwIfRefused } from "../shared/errors";
 import { formatDateTime } from "../shared/labels";
 import { useAction } from "../shared/useAction";
@@ -30,7 +30,7 @@ export function OrganizationInvitation({
     useCallback(async () => {
       if (!invitationId)
         throw new Error("This invitation link is missing its ID.");
-      const { data, error } = await authClient.organization.getInvitation({
+      const { data, error } = await balebase().auth.organization.getInvitation({
         query: { id: invitationId },
       });
       throwIfRefused(error, "This invitation is invalid or expired.");
@@ -47,7 +47,7 @@ export function OrganizationInvitation({
   async function accept() {
     if (!invitationId) return;
     await acceptance.run(async () => {
-      const { error } = await authClient.organization.acceptInvitation({
+      const { error } = await balebase().auth.organization.acceptInvitation({
         invitationId,
       });
       throwIfRefused(error, "Could not accept this invitation.");

@@ -59,7 +59,7 @@
     },
     "packages/app": {
       "name": "@balebase/app",
-      "version": "0.1.173",
+      "version": "0.1.174",
       "dependencies": {
         "@balebase/client-sdk": "workspace:*",
         "@balebase/ui": "workspace:*",
@@ -133,6 +133,7 @@
       "dependencies": {
         "@balebase/api-client": "workspace:*",
         "@balebase/validators": "workspace:*",
+        "better-auth": "1.7.2",
       },
       "devDependencies": {
         "@types/bun": "1.4.4",

@@ -16,7 +16,6 @@ import { balebase } from "../balebase";
 import { OrganizationBilling } from "../billing/OrganizationBilling";
 import { OrganizationRequirementPage } from "../employeeForms/OrganizationRequirementPage";
 import { AppLink } from "../shared/AppLink";
-import { authClient } from "../shared/authClient";
 import { throwIfRefused } from "../shared/errors";
 import { useAction } from "../shared/useAction";
 import {
@@ -358,7 +357,7 @@ function useOrganizationGeneralActions(
     const saved = await perform(
       "save",
       async () => {
-        const { error } = await authClient.organization.update({
+        const { error } = await balebase().auth.organization.update({
           data: { name: nextName },
           organizationId: organization.id,
         });
@@ -373,7 +372,7 @@ function useOrganizationGeneralActions(
     if (!canLeave) return;
     if (!(await confirmLeave(organization.name))) return;
     await perform("leave", async () => {
-      const { error } = await authClient.organization.leave({
+      const { error } = await balebase().auth.organization.leave({
         organizationId: organization.id,
       });
       throwIfRefused(error, "Could not leave this organization.");

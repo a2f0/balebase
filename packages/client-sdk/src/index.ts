@@ -6,6 +6,7 @@ export type {
 export { ApiError } from "@balebase/api-client";
 export { Balebase } from "./Balebase";
 export type { BalebaseOptions } from "./BalebaseOptions";
+export type { BalebaseAuthClient } from "./client/auth/authClient";
 export type { FinanceCache } from "./client/finance";
 export type { Offline } from "./client/offline";
 export type { ApiFetch } from "./client/runtime/apiFetch";
