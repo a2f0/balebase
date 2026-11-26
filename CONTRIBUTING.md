@@ -24,7 +24,7 @@ Every workspace lives under `packages/`, and infrastructure lives in
 | API routes, authorization, persistence (Hono on Workers, with D1 and R2), in a folder per feature | `packages/api/src` |
 | Request and response schemas for every route | `packages/validators/src` |
 | Typed client for those routes | `packages/api-client/src` |
-| Client runtime without React (the API, its version, connectivity, offline work, saved transactions) that hosts build on | [`packages/client-sdk`](packages/client-sdk/README.md) |
+| Client runtime without React (the API, auth, its version, connectivity, offline work, saved transactions) that hosts build on | [`packages/client-sdk`](packages/client-sdk/README.md) |
 | Database schema | `packages/api/migrations` |
 | Built-in form templates and their seed migrations | `packages/api/templateLibrary`, [residential template library](docs/residential-template-library.md) |
 | Application screens, in one folder per feature, and the host interface each shell fills in | `packages/app/src` |

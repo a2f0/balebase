@@ -35,10 +35,15 @@ Every field of `BalebaseOptions` is optional.
 | --- | --- |
 | `api` | The `ApiClient` from `@balebase/api-client`: one typed method per route |
 | `apiVersion` | The version the latest API response named, with `subscribe` |
+| `auth` | The Better Auth client (`better-auth/client`) with the API's plugins: sign-in, sessions, two-factor, organizations. Made on first use; its requests go through `fetch` |
 | `fetch` | `fetch` for API URLs outside the typed routes, such as files; marks native requests and records the version like every typed call |
 | `financeCache` | The transactions this device keeps for Finance; see below |
 | `network` | Whether the device has a network, with `subscribe` |
 | `offline` | Forms and issues done on this device and the queue that syncs them; see below |
+
+React hosts read the session with Better Auth's `useStore` from
+`better-auth/react` over `balebase.auth.useSession`, the store the React
+client would wrap.
 
 The package also exports `ApiError` and the `ApiClient`, `FinanceFilters`, and
 `IssueFilters` types, so hosts need not import `@balebase/api-client`;

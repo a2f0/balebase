@@ -2,7 +2,6 @@ import { confirmDialog } from "@balebase/ui/react";
 import type { OrganizationMember } from "@balebase/validators/organizationSettings";
 import { useCallback } from "react";
 import { balebase } from "../balebase";
-import { authClient } from "../shared/authClient";
 import { throwIfRefused } from "../shared/errors";
 import { useAction } from "../shared/useAction";
 import { useLoad } from "../shared/useLoad";
@@ -45,7 +44,7 @@ export function organizationPeopleActions(
 ) {
   async function cancelInvitation(invitationId: string) {
     await state.run(async () => {
-      const { error } = await authClient.organization.cancelInvitation({
+      const { error } = await balebase().auth.organization.cancelInvitation({
         invitationId,
       });
       throwIfRefused(error, "Could not revoke this invitation.");
@@ -59,7 +58,7 @@ export function organizationPeopleActions(
   ) {
     if (organizationRoleValue(member.role) === role) return;
     await state.run(async () => {
-      const { error } = await authClient.organization.updateMemberRole({
+      const { error } = await balebase().auth.organization.updateMemberRole({
         memberId: member.id,
         organizationId: organization.id,
         role,
@@ -104,7 +103,7 @@ export async function removeOrganizationMember(
 ) {
   if (!(await confirmMemberRemoval(member, organization))) return false;
   return state.run(async () => {
-    const { error } = await authClient.organization.removeMember({
+    const { error } = await balebase().auth.organization.removeMember({
       memberIdOrEmail: member.id,
       organizationId: organization.id,
     });

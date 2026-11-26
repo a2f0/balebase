@@ -32,12 +32,12 @@ const {
   window: dom,
 } = installDom({ url: `http://localhost:5173${resetLink}` });
 let App: typeof import("./App").App;
-let authClient: typeof import("./shared/authClient").authClient;
+let balebase: typeof import("./balebase").balebase;
 let container: HTMLElement;
 
 beforeAll(async () => {
   ({ App } = await import("./App"));
-  ({ authClient } = await import("./shared/authClient"));
+  ({ balebase } = await import("./balebase"));
 });
 
 const people = {
@@ -117,7 +117,7 @@ async function settle() {
 async function open(path: string) {
   window.history.replaceState(null, "", path);
   // The session store outlives a mount; fetch this browser's session afresh.
-  authClient.$store.notify("$sessionSignal");
+  balebase().auth.$store.notify("$sessionSignal");
   ({ container } = await mount(<App />));
   await settle();
 }

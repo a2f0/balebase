@@ -1,6 +1,6 @@
 import { Button, cx, Field, Toast } from "@balebase/ui/react";
 import { type FormEvent, useState } from "react";
-import { authClient } from "../shared/authClient";
+import { balebase } from "../balebase";
 import { throwIfRefused } from "../shared/errors";
 import { useAction } from "../shared/useAction";
 import { AuthHeading, AuthLayout } from "./AuthLayout";
@@ -25,11 +25,11 @@ export function TwoFactorChallenge({
     event.preventDefault();
     await run(async () => {
       const result = backupCode
-        ? await authClient.twoFactor.verifyBackupCode({
+        ? await balebase().auth.twoFactor.verifyBackupCode({
             code: code.trim(),
             trustDevice,
           })
-        : await authClient.twoFactor.verifyTotp({
+        : await balebase().auth.twoFactor.verifyTotp({
             code: code.replace(/\D/g, ""),
             trustDevice,
           });

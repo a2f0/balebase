@@ -1,5 +1,5 @@
+import { balebase } from "../balebase";
 import { nativeHost } from "../host";
-import { authClient } from "../shared/authClient";
 import { authCallbackUrl } from "../shared/config";
 import { throwIfRefused } from "../shared/errors";
 import type { AuthMode } from "./AuthFields";
@@ -47,7 +47,7 @@ export async function performAuthAction(
   }
 
   if (mode === "sign-in") {
-    const result = await authClient.signIn.email(
+    const result = await balebase().auth.signIn.email(
       passwordSignInInput(input.email, input.password),
     );
     throwIfRefused(result.error, "Authentication failed.");
@@ -62,7 +62,7 @@ export async function performAuthAction(
   }
 
   if (mode === "sign-up") {
-    const result = await authClient.signUp.email({
+    const result = await balebase().auth.signUp.email({
       callbackURL: authCallbackUrl("/?verified=true"),
       email: input.email,
       fetchOptions: deferredSessionRefresh,
@@ -71,7 +71,7 @@ export async function performAuthAction(
       termsAccepted: true,
     });
     throwIfRefused(result.error, "Authentication failed.");
-    const signInResult = await authClient.signIn.email(
+    const signInResult = await balebase().auth.signIn.email(
       passwordSignInInput(input.email, input.password),
     );
     throwIfRefused(signInResult.error, "Authentication failed.");
@@ -84,7 +84,7 @@ export async function performAuthAction(
   }
 
   if (mode === "forgot") {
-    const result = await authClient.requestPasswordReset({
+    const result = await balebase().auth.requestPasswordReset({
       email: input.email,
       redirectTo: authCallbackUrl("/reset-password"),
     });
@@ -96,7 +96,7 @@ export async function performAuthAction(
     throw new Error("This reset link is missing its token.");
   }
 
-  const result = await authClient.resetPassword({
+  const result = await balebase().auth.resetPassword({
     newPassword: input.password,
     token: input.resetToken,
   });

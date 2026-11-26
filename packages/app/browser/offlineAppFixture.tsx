@@ -1,7 +1,8 @@
 import { DialogHost } from "@balebase/ui/react";
 import { createRoot } from "react-dom/client";
 import { App } from "../src/App";
-import { authClient } from "../src/shared/authClient";
+import { balebase } from "../src/balebase";
+import { useSession } from "../src/shared/useSession";
 import "./offlineFixture";
 
 const testApi = {
@@ -16,7 +17,7 @@ const testApi = {
         </>,
       );
   },
-  refreshSession: () => authClient.$store.notify("$sessionSignal"),
+  refreshSession: () => balebase().auth.$store.notify("$sessionSignal"),
 };
 declare global {
   interface Window {
@@ -26,7 +27,7 @@ declare global {
 window.offlineAppTest = testApi;
 
 function SessionState() {
-  const { data, isPending, error } = authClient.useSession();
+  const { data, isPending, error } = useSession();
   return (
     <output id="session-state">
       {isPending

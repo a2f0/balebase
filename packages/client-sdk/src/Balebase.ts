@@ -1,5 +1,9 @@
 import { ApiClient } from "@balebase/api-client";
 import type { BalebaseOptions } from "./BalebaseOptions";
+import {
+  type BalebaseAuthClient,
+  createBalebaseAuthClient,
+} from "./client/auth/authClient";
 import { FinanceCache } from "./client/finance";
 import { Offline } from "./client/offline";
 import { OfflineStore } from "./client/offline/offlineStore";
@@ -29,6 +33,8 @@ export class Balebase {
   readonly network: Network;
   /** Forms and issues done on this device, and the queue that syncs them. */
   readonly offline: Offline;
+  readonly #apiBaseUrl: string;
+  #auth: BalebaseAuthClient | undefined;
 
   constructor(options: BalebaseOptions = {}) {
     this.fetch = createApiFetch({
@@ -38,6 +44,7 @@ export class Balebase {
     });
     // One spelling, since saved data on the device is keyed by it.
     const apiBaseUrl = (options.apiBaseUrl ?? "").replace(/\/+$/, "");
+    this.#apiBaseUrl = apiBaseUrl;
     this.api = new ApiClient({ baseUrl: apiBaseUrl, fetch: this.fetch });
     this.financeCache = new FinanceCache(apiBaseUrl);
     this.network = new Network(options.network);
@@ -47,5 +54,15 @@ export class Balebase {
       store: new OfflineStore(apiBaseUrl),
       waitForOfflineShell: options.waitForOfflineShell,
     });
+  }
+
+  /**
+   * The Better Auth client: sign-in, sessions, two-factor, and
+   * organizations. Made on first use, since it starts watching the session
+   * (focus, other tabs) as soon as it exists.
+   */
+  get auth(): BalebaseAuthClient {
+    this.#auth ??= createBalebaseAuthClient(this.#apiBaseUrl, this.fetch);
+    return this.#auth;
   }
 }

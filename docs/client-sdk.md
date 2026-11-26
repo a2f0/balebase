@@ -6,7 +6,7 @@ below:
 | Package | Owns |
 | --- | --- |
 | `@balebase/api-client` | `ApiClient`: one typed method per route, from the contract in `@balebase/validators`, and `ApiError` |
-| `@balebase/client-sdk` | `Balebase`: the client runtime without React. It holds the `ApiClient`, the API version, device connectivity, offline work, and saved Finance transactions, and adapts the host's platform services into them |
+| `@balebase/client-sdk` | `Balebase`: the client runtime without React. It holds the `ApiClient`, the Better Auth client, the API version, device connectivity, offline work, and saved Finance transactions, and adapts the host's platform services into them |
 
 Both export TypeScript source from `src/index.ts`; consumers need a
 TypeScript-aware bundler or runtime and the workspace dependencies installed.
@@ -69,7 +69,9 @@ values, not proof of the settings currently deployed to a live Worker.
 
 Inside `packages/app`, use the app's one SDK, `balebase()` from
 `src/balebase.ts`, rather than making another: `balebase().api` for routes,
-`balebase().fetch` for API files outside them, `balebase().network` for
+`balebase().auth` for sign-in, sessions, and organizations (and
+`useSession` from `shared/useSession.ts` for the session in a component),
+`balebase().fetch` for API files outside the routes, `balebase().network` for
 connectivity, `balebase().offline` for work done on the device,
 `balebase().financeCache` for the transactions it keeps, and
 `balebase().apiVersion` for the version the API last reported. It is made
