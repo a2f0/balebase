@@ -1,11 +1,11 @@
+import type { OfflineWorkspace } from "@balebase/client-sdk";
 import { Button, Card, Field } from "@balebase/ui/react";
 import { issueImageTypes } from "@balebase/validators/issueRules";
 import { useEffect, useState } from "react";
+import { balebase } from "../balebase";
 import { IssueForm } from "../issues/IssueForm";
 import { useUnsavedChanges } from "../workspace/unsavedChanges";
 import { issuePath } from "../workspace/workspacePaths";
-import { type OfflineWorkspace, offlineImage } from "./offlineStore";
-import { createOfflineIssue } from "./offlineWork";
 
 export function OfflineIssueCreator({
   workspace,
@@ -42,7 +42,12 @@ export function OfflineIssueCreator({
         onSave={async (input) => {
           setSaving(true);
           try {
-            await createOfflineIssue(workspace.key, input, files, target);
+            await balebase().offline.createIssue(
+              workspace.key,
+              input,
+              files,
+              target,
+            );
             onSaved();
           } finally {
             setSaving(false);
@@ -111,7 +116,8 @@ function OfflineImage({
   useEffect(() => {
     let active = true;
     let objectUrl: string | undefined;
-    void offlineImage(workspaceKey, id)
+    void balebase()
+      .offline.image(workspaceKey, id)
       .then((blob) => {
         if (active) {
           objectUrl = URL.createObjectURL(blob);

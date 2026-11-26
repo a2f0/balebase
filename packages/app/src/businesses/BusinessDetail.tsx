@@ -1,3 +1,4 @@
+import { errorMessage } from "@balebase/client-sdk";
 import {
   Button,
   Card,
@@ -19,7 +20,6 @@ import {
 } from "react";
 import { ActivityFeed } from "../activity/ActivityFeed";
 import { balebase } from "../balebase";
-import { errorMessage } from "../shared/errors";
 import { formatCalendarDate } from "../shared/labels";
 import { useFocusWhenFolded } from "../shared/useFocusWhenFolded";
 import { useLoad } from "../shared/useLoad";

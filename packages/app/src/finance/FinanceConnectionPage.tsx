@@ -1,3 +1,4 @@
+import { errorMessage } from "@balebase/client-sdk";
 import {
   Badge,
   Banner,
@@ -26,7 +27,6 @@ import {
 import { ActivityFeed } from "../activity/ActivityFeed";
 import { balebase } from "../balebase";
 import { AppLink } from "../shared/AppLink";
-import { errorMessage } from "../shared/errors";
 import { countLabel, formatDateTime, formatLabel } from "../shared/labels";
 import { useAction } from "../shared/useAction";
 import { financeAccountPath } from "../workspace/workspacePaths";

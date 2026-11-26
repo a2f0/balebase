@@ -1,9 +1,9 @@
+import { errorMessage } from "@balebase/client-sdk";
 import { confirmDialog, promptDialog } from "@balebase/ui/react";
 import type { JobDefinition, JobRun } from "@balebase/validators/adminJobs";
 import { cronProblem, describeCron } from "@balebase/validators/cron";
 import { useState } from "react";
 import { balebase } from "../balebase";
-import { errorMessage } from "../shared/errors";
 import { useAction } from "../shared/useAction";
 
 /**

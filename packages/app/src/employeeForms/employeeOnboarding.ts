@@ -1,9 +1,10 @@
+import { errorMessage } from "@balebase/client-sdk";
 import type {
   EmployeeRequirementInput,
   EmployeeRequirementKind,
   EmployeeRequirementStatus,
 } from "@balebase/validators/employeeForms";
-import { errorMessage, UpgradeRequiredError } from "../shared/errors";
+import { UpgradeRequiredError } from "../shared/errors";
 
 /** A request being drafted, with an ID that keys it until it is sent. */
 export interface RequirementDraft extends EmployeeRequirementInput {

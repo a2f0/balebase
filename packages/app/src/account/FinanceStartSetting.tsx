@@ -1,9 +1,9 @@
+import { errorMessage } from "@balebase/client-sdk";
 import { Card, Field, Select, Toast } from "@balebase/ui/react";
 import { type FinancePeriod, financePeriods } from "@balebase/validators/rules";
 import { useEffect, useReducer, useRef } from "react";
 import { balebase } from "../balebase";
 import { financePeriodLabels, financePeriodOf } from "../finance/financePeriod";
-import { errorMessage } from "../shared/errors";
 import {
   financeStartTransition,
   initialFinanceStart,

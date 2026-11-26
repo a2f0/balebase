@@ -6,7 +6,7 @@ below:
 | Package | Owns |
 | --- | --- |
 | `@balebase/api-client` | `ApiClient`: one typed method per route, from the contract in `@balebase/validators`, and `ApiError` |
-| `@balebase/client-sdk` | `Balebase`: the client runtime without React. It holds the `ApiClient`, the API version, and device connectivity, and adapts the host's platform services into them |
+| `@balebase/client-sdk` | `Balebase`: the client runtime without React. It holds the `ApiClient`, the API version, device connectivity, and offline work, and adapts the host's platform services into them |
 
 Both export TypeScript source from `src/index.ts`; consumers need a
 TypeScript-aware bundler or runtime and the workspace dependencies installed.
@@ -70,10 +70,13 @@ values, not proof of the settings currently deployed to a live Worker.
 Inside `packages/app`, use the app's one SDK, `balebase()` from
 `src/balebase.ts`, rather than making another: `balebase().api` for routes,
 `balebase().fetch` for API files outside them, `balebase().network` for
-connectivity, and `balebase().apiVersion` for the version the API last
-reported. It is made from the host `configureHost` set, which `renderApp`
-does before the first render, and is made again if the host changes; until a
-shell configures one, as in tests, it is a browser's.
+connectivity, `balebase().offline` for work done on the device, and
+`balebase().apiVersion` for the version the API last reported. It is made
+from the host `configureHost` set, which `renderApp` does before the first
+render, and is made again if the host changes; until a shell configures one,
+as in tests, it is a browser's. In a production browser build it passes
+`waitForOfflineShell`, so no offline work is stored before the service worker
+that reopens the app is active.
 
 The native shell supplies its host in `packages/app-capacitor/src/host.ts`
 and enables `CapacitorHttp` in `capacitor.config.ts`. The host's

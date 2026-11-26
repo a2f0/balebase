@@ -3,7 +3,11 @@ import type {
   OfflineOperation,
 } from "@balebase/validators/offline";
 import { progressFor } from "../forms/formProgress";
-import { type OfflineForm, type OfflineJob, pendingJob } from "./offlineStore";
+import {
+  type OfflineForm,
+  type OfflineJob,
+  pendingJob,
+} from "./offlineWorkspace";
 
 type FormWrite = Extract<
   OfflineOperation,

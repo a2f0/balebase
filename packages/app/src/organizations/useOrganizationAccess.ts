@@ -1,8 +1,7 @@
-import { ApiError } from "@balebase/client-sdk";
+import { ApiError, errorMessage } from "@balebase/client-sdk";
 import type { OrganizationCapability } from "@balebase/validators/organizationGroups";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { balebase } from "../balebase";
-import { errorMessage } from "../shared/errors";
 import {
   type OrganizationSeatRequirement,
   type OrganizationTwoFactorRequirement,

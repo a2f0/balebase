@@ -1,5 +1,6 @@
 import { Balebase } from "@balebase/client-sdk";
 import { type AppHost, appHost } from "./host";
+import { waitForOfflineShell } from "./offline/offlineShell";
 import { apiUrl } from "./shared/config";
 
 let built: { host: AppHost; sdk: Balebase } | undefined;
@@ -19,6 +20,12 @@ export function balebase() {
         apiBaseUrl: apiUrl,
         nativeOrigin: host.native?.origin,
         network: host.network,
+        // A native shell always reopens; a web build does once its service
+        // worker controls it, which development builds never register.
+        waitForOfflineShell:
+          !host.native && import.meta.env.PROD
+            ? waitForOfflineShell
+            : undefined,
       }),
     };
   }

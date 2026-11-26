@@ -1,7 +1,7 @@
+import { errorMessage } from "@balebase/client-sdk";
 import type { FormDetail } from "@balebase/validators/forms";
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { balebase } from "../balebase";
-import { errorMessage } from "../shared/errors";
 import {
   type FormRunFetch,
   type FormRunFetchEvent,

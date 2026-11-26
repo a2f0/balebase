@@ -1,8 +1,8 @@
 import type { ApiClient } from "@balebase/client-sdk";
+import { errorMessage } from "@balebase/client-sdk";
 import type { JobRun } from "@balebase/validators/adminJobs";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { balebase } from "../balebase";
-import { errorMessage } from "../shared/errors";
 
 type History = Awaited<ReturnType<ApiClient["adminJobs"]["runs"]>>;
 type Query = Parameters<ApiClient["adminJobs"]["runs"]>[0];

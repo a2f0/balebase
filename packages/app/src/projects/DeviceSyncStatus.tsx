@@ -1,7 +1,7 @@
+import { errorMessage } from "@balebase/client-sdk";
 import { Banner, Button } from "@balebase/ui/react";
+import { balebase } from "../balebase";
 import { useDevice } from "../offline/offlineContext";
-import { retryOfflineWork } from "../offline/offlineWork";
-import { errorMessage } from "../shared/errors";
 import { countLabel } from "../shared/labels";
 
 /**
@@ -35,9 +35,11 @@ export function DeviceSyncStatus() {
         waiting.length > 0 && (
           <Button
             onClick={() =>
-              void retryOfflineWork(workspace.key).catch((cause: unknown) =>
-                console.warn(errorMessage(cause, "Could not retry sync.")),
-              )
+              void balebase()
+                .offline.retry(workspace.key)
+                .catch((cause: unknown) =>
+                  console.warn(errorMessage(cause, "Could not retry sync.")),
+                )
             }
             size="sm"
           >

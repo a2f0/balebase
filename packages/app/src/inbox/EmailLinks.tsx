@@ -1,3 +1,4 @@
+import { errorMessage } from "@balebase/client-sdk";
 import {
   Button,
   cx,
@@ -19,7 +20,6 @@ import {
 } from "../equipment/equipmentLabels";
 import { formatMoney } from "../finance/financeFormat";
 import { AppLink } from "../shared/AppLink";
-import { errorMessage } from "../shared/errors";
 import { useLoad } from "../shared/useLoad";
 import { equipmentPath, libraryPath } from "../workspace/workspacePaths";
 import {

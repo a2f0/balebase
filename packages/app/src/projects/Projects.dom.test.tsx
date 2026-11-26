@@ -1,4 +1,5 @@
 import { afterEach, beforeAll, describe, expect, it } from "bun:test";
+import type { OfflineWorkspace } from "@balebase/client-sdk";
 import { productName } from "@balebase/ui/brand";
 import { DialogHost } from "@balebase/ui/react";
 import type {
@@ -7,7 +8,6 @@ import type {
   ProjectTemplate,
 } from "@balebase/validators/projects";
 import { DeviceContext, type DeviceState } from "../offline/offlineContext";
-import type { OfflineWorkspace } from "../offline/offlineStore";
 import { installDom } from "../testing/dom";
 
 const {

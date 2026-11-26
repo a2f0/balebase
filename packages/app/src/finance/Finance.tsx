@@ -1,3 +1,4 @@
+import { errorMessage } from "@balebase/client-sdk";
 import { productName } from "@balebase/ui/brand";
 import {
   Banner,
@@ -26,7 +27,6 @@ import {
 import { balebase } from "../balebase";
 import { AppLink } from "../shared/AppLink";
 import { websiteUrl } from "../shared/config";
-import { errorMessage } from "../shared/errors";
 import { formatDateTime } from "../shared/labels";
 import { useAction } from "../shared/useAction";
 import {

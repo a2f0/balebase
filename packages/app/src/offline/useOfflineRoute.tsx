@@ -1,3 +1,4 @@
+import type { OfflineIdentity, OfflineWorkspace } from "@balebase/client-sdk";
 import { useEffect, useMemo, useRef } from "react";
 import { balebase } from "../balebase";
 import { DeviceProjects } from "../projects/DeviceProjects";
@@ -8,16 +9,6 @@ import {
   signingTokenForPath,
 } from "../workspace/workspacePaths";
 import type { DeviceState } from "./offlineContext";
-import { pullOfflineForms, pullOfflineWorkspace } from "./offlinePull";
-import {
-  activeOfflineKey,
-  lockOfflineWorkspace,
-  lockOtherOfflineWorkspace,
-  type OfflineIdentity,
-  type OfflineWorkspace,
-  offlineAccessEpoch,
-  offlineScopeKey,
-} from "./offlineStore";
 import { useOfflineWorkspace } from "./useOfflineWorkspace";
 
 interface OfflineSession {
@@ -72,9 +63,9 @@ export function useOfflineRoute(
   useEffect(() => {
     // An expired cookie pauses API access, not local editing. Explicit sign-out
     // locks in accountSessions; changing identities also locks cached work here.
-    if (pathname === "/add-account") lockOfflineWorkspace();
+    if (pathname === "/add-account") balebase().offline.lock();
     else if (session)
-      lockOtherOfflineWorkspace(session.user.id, confirmedOrganizationId);
+      balebase().offline.lockOther(session.user.id, confirmedOrganizationId);
   }, [session, confirmedOrganizationId, pathname]);
   const excluded =
     ["/add-account", "/reset-password"].includes(pathname) ||
@@ -127,7 +118,7 @@ function matchingWorkspace(
   user: OfflineSession["user"] | undefined,
   organizationId: string | undefined,
 ) {
-  if (!saved || saved.key !== activeOfflineKey()) return undefined;
+  if (!saved || saved.key !== balebase().offline.activeKey()) return undefined;
   if (
     user &&
     (saved.scope.userId !== user.id ||
@@ -150,18 +141,19 @@ function useDeviceSync(identity: OfflineIdentity | undefined, online: boolean) {
     undefined,
   );
   useEffect(() => {
-    const key = identity && offlineScopeKey(identity.scope);
+    const key = identity && balebase().offline.scopeKey(identity.scope);
     if (attempt.current?.key !== key)
       attempt.current = key
-        ? { epoch: offlineAccessEpoch(), key, running: false }
+        ? { epoch: balebase().offline.accessEpoch(), key, running: false }
         : undefined;
     const current = attempt.current;
     if (!identity || !online || !current) return;
     const pull = () => {
       if (current.running || !balebase().network.online) return;
       current.running = true;
-      pullOfflineWorkspace(identity, current.epoch)
-        .then(() => pullOfflineForms(identity, current.epoch))
+      balebase()
+        .offline.pull(identity, current.epoch)
+        .then(() => balebase().offline.pullForms(identity, current.epoch))
         .catch((cause: unknown) =>
           console.warn("Could not sync projects to this device.", cause),
         )

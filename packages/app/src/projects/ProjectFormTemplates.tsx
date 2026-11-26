@@ -1,4 +1,10 @@
 import {
+  formWrites,
+  type OfflineForm,
+  type OfflineWorkspace,
+  unsyncedAnswers,
+} from "@balebase/client-sdk";
+import {
   Badge,
   type BadgeTone,
   Button,
@@ -9,6 +15,7 @@ import {
 } from "@balebase/ui/react";
 import type { FormTemplate } from "@balebase/validators/forms";
 import { useState } from "react";
+import { balebase } from "../balebase";
 import {
   readFormTemplateView,
   storeFormTemplateView,
@@ -18,9 +25,6 @@ import {
   TemplateViewSwitcher,
 } from "../forms/TemplateCollections";
 import { useDevice } from "../offline/offlineContext";
-import { formWrites, unsyncedAnswers } from "../offline/offlineFormState";
-import type { OfflineForm, OfflineWorkspace } from "../offline/offlineStore";
-import { startOfflineForm } from "../offline/offlineWork";
 import { countLabel, formatDate } from "../shared/labels";
 import { useAction } from "../shared/useAction";
 import { formRunPath, projectFormPath } from "../workspace/workspacePaths";
@@ -62,7 +66,11 @@ export function ProjectFormTemplates({
         throw new Error(
           "This device is still getting ready for forms. Stay connected and try again.",
         );
-      const id = await startOfflineForm(workspace.key, template, projectId);
+      const id = await balebase().offline.startForm(
+        workspace.key,
+        template,
+        projectId,
+      );
       onNavigate(projectFormPath(projectId, id));
     });
   return (

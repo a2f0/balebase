@@ -1,14 +1,7 @@
+import { errorMessage, type OfflineWorkspace } from "@balebase/client-sdk";
 import { useEffect, useReducer } from "react";
 import { balebase } from "../balebase";
-import { errorMessage } from "../shared/errors";
 import { useOnline } from "../shared/network";
-import {
-  activeOfflineKey,
-  type OfflineWorkspace,
-  offlineChanged,
-  readOfflineWorkspace,
-} from "./offlineStore";
-import { syncOfflineWorkspace } from "./offlineSync";
 import {
   initialOfflineWorkspace,
   offlineWorkspaceError,
@@ -23,8 +16,8 @@ export interface OfflineWorkspaceStorage {
 }
 
 const deviceStorage: OfflineWorkspaceStorage = {
-  read: readOfflineWorkspace,
-  sync: syncOfflineWorkspace,
+  read: (key) => balebase().offline.read(key),
+  sync: (key) => balebase().offline.sync(key),
 };
 
 /**
@@ -81,7 +74,7 @@ export function useOfflineWorkspace(storage = deviceStorage) {
       }
     };
     const refresh = () => {
-      const key = activeOfflineKey();
+      const key = balebase().offline.activeKey();
       if (key !== activeKey) {
         activeKey = key;
         activation += 1;
@@ -90,7 +83,7 @@ export function useOfflineWorkspace(storage = deviceStorage) {
       void sync(key, activation);
     };
     refresh();
-    window.addEventListener(offlineChanged, refresh);
+    const stopChanges = balebase().offline.subscribe(refresh);
     window.addEventListener("storage", refresh);
     window.addEventListener("focus", refresh);
     const stopWatching = balebase().network.subscribe(refresh);
@@ -99,7 +92,8 @@ export function useOfflineWorkspace(storage = deviceStorage) {
       current = false;
       window.clearInterval(timer);
       stopWatching();
-      for (const event of [offlineChanged, "storage", "focus"])
+      stopChanges();
+      for (const event of ["storage", "focus"])
         window.removeEventListener(event, refresh);
     };
   }, [storage]);
