@@ -171,10 +171,88 @@ describe("API requests", () => {
       "https://api.balebase.com./v1/api/me",
       "https://api.balebase.com./v1/api/auth/get-session",
     ]);
-    expect(sent[0]?.headers.get("Authorization")).toBe("Bearer tlk_test_key");
+    expect(sent.map(({ headers }) => headers.get("Authorization"))).toEqual([
+      "Bearer tlk_test_key",
+      null,
+    ]);
     expect(
       balebase.offline.scopeKey({ organizationId: "org", userId: "user" }),
     ).toBe(JSON.stringify(["https://API.balebase.com./v1", "user", "org"]));
+  });
+
+  it("sends no key to Better Auth's routes, however they are sent", async () => {
+    const { fetch, sent } = recordRequests();
+    const balebase = new Balebase({
+      apiBaseUrl,
+      apiKey: "tlk_test_key",
+      fetch,
+    });
+    await balebase.fetch("https://api.test/api/auth/get-session");
+    await balebase.fetch(new Request("https://api.test/api/auth"));
+    await balebase.fetch("https://api.test/api/me/../auth/sign-out");
+    // Only the routes under /api/auth are Better Auth's.
+    await balebase.fetch("https://api.test/api/authors");
+    await balebase.fetch("https://api.test/auth/get-session");
+    expect(sent.map(({ headers }) => headers.get("Authorization"))).toEqual([
+      null,
+      null,
+      null,
+      "Bearer tlk_test_key",
+      "Bearer tlk_test_key",
+    ]);
+  });
+
+  it("sends the key only under a proxy's path to the API", async () => {
+    const { fetch, sent } = recordRequests();
+    const balebase = new Balebase({
+      apiBaseUrl: "https://example.test/balebase/",
+      apiKey: "tlk_test_key",
+      fetch,
+    });
+    await balebase.api.session.me();
+    await balebase.fetch("https://example.test/balebase/api/objects/1");
+    await balebase.fetch("https://example.test/balebase/api/auth/get-session");
+    await balebase.fetch("https://example.test/api/me");
+    await balebase.fetch("https://example.test/balebase-old/api/me");
+    await balebase.fetch("https://example.test/balebase/../other/api/me");
+    expect(sent.map(({ url }) => url)[0]).toBe(
+      "https://example.test/balebase/api/me",
+    );
+    expect(sent.map(({ headers }) => headers.get("Authorization"))).toEqual([
+      "Bearer tlk_test_key",
+      "Bearer tlk_test_key",
+      null,
+      null,
+      null,
+      null,
+    ]);
+  });
+
+  it("asks for an API origin when a page with a key has none", async () => {
+    // file:// pages and custom schemes have an opaque origin, "null";
+    // sandboxed iframes report "null" whatever their URL.
+    for (const page of [
+      new URL("file:///Users/sam/report.html"),
+      new URL("capacitor://localhost/"),
+      { href: "https://app.test/", origin: "null" },
+    ]) {
+      Object.defineProperty(globalThis, "location", {
+        configurable: true,
+        value: page,
+      });
+      try {
+        expect(() => new Balebase({ apiKey: "tlk_k" })).toThrow(
+          'Set apiBaseUrl to use apiKey: this page\'s origin is "null"',
+        );
+        // Without a key, nothing about the page's origin matters.
+        expect(() => new Balebase()).not.toThrow();
+        expect(
+          () => new Balebase({ apiBaseUrl, apiKey: "tlk_k" }),
+        ).not.toThrow();
+      } finally {
+        Reflect.deleteProperty(globalThis, "location");
+      }
+    }
   });
 
   it("sends an API key over https or to this machine only", async () => {

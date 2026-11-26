@@ -7,7 +7,11 @@ import {
 import { FinanceCache } from "./client/finance";
 import { Offline } from "./client/offline";
 import { OfflineStore } from "./client/offline/offlineStore";
-import { type ApiFetch, createApiFetch } from "./client/runtime/apiFetch";
+import {
+  type ApiFetch,
+  type ApiKeyScope,
+  createApiFetch,
+} from "./client/runtime/apiFetch";
 import { ApiVersion } from "./client/runtime/apiVersion";
 import { Network } from "./client/runtime/network";
 
@@ -35,7 +39,6 @@ export class Balebase {
   readonly offline: Offline;
   readonly #apiBaseUrl: string;
   #auth: BalebaseAuthClient | undefined;
-  readonly #authFetch: ApiFetch;
 
   constructor(options: BalebaseOptions = {}) {
     // One spelling, since saved data on the device is keyed by it.
@@ -55,31 +58,13 @@ export class Balebase {
     const apiKey = options.apiKey?.trim();
     if (apiKey === "")
       throw new Error("apiKey is blank: pass an API key, or leave it unset.");
-    if (
-      apiKey !== undefined &&
-      !sendsSecretsSafely(apiBaseUrl || location.origin)
-    )
-      throw new Error(
-        "apiKey needs an https apiBaseUrl, or http to localhost, 127.0.0.1, or [::1]: over http elsewhere the key would cross the network unencrypted.",
-      );
-    const transport = {
+    this.fetch = createApiFetch({
+      apiKey:
+        apiKey === undefined ? undefined : apiKeyScope(apiBaseUrl, apiKey),
       apiVersion: this.apiVersion,
       fetch: options.fetch,
       nativeOrigin: options.nativeOrigin,
-    };
-    this.fetch = createApiFetch({
-      ...transport,
-      apiKey:
-        apiKey === undefined
-          ? undefined
-          : // Outside a browser, apiBaseUrl is set (checked above).
-            {
-              origin: new URL(apiBaseUrl || location.origin).origin,
-              value: apiKey,
-            },
     });
-    // Better Auth's routes are session-only, so they never get the key.
-    this.#authFetch = createApiFetch({ ...transport, apiKey: undefined });
     this.#apiBaseUrl = apiBaseUrl;
     this.api = new ApiClient({ baseUrl: apiBaseUrl, fetch: this.fetch });
     this.financeCache = new FinanceCache(apiBaseUrl);
@@ -94,14 +79,14 @@ export class Balebase {
 
   /**
    * The Better Auth client: sign-in, sessions, two-factor, and
-   * organizations. Made on first use; its requests mark a native shell and
-   * record the API version like `fetch`, but never carry `apiKey`, since
-   * those routes are session-only. It watches the session (focus,
+   * organizations. Made on first use; its requests go through `fetch`, which
+   * marks a native shell and records the API version but never sends
+   * `apiKey` to these session-only routes. It watches the session (focus,
    * connectivity, other tabs) only while something reads `useSession`;
    * Better Auth stops that shortly after the last reader leaves.
    */
   get auth(): BalebaseAuthClient {
-    this.#auth ??= createBalebaseAuthClient(this.#apiBaseUrl, this.#authFetch);
+    this.#auth ??= createBalebaseAuthClient(this.#apiBaseUrl, this.fetch);
     return this.#auth;
   }
 }
@@ -124,13 +109,26 @@ function isApiBase(url: string) {
 }
 
 /**
- * Whether a secret sent to `base` stays encrypted or on this machine: https,
- * or http to a loopback address, as a local API is.
+ * Where an API key may go: under `apiBaseUrl`, or the page's origin without
+ * one. Refuses a base the key would cross the network to unencrypted, and an
+ * opaque origin ("null", as for a file:// page, a sandboxed iframe, or a
+ * custom scheme), which names no host to limit it to. Outside a browser,
+ * apiBaseUrl is set (`Balebase` checks first).
  */
-function sendsSecretsSafely(base: string) {
-  const { hostname, protocol } = new URL(base);
-  return (
-    protocol === "https:" ||
-    ["localhost", "127.0.0.1", "[::1]"].includes(hostname)
-  );
+function apiKeyScope(apiBaseUrl: string, value: string): ApiKeyScope {
+  const base = apiBaseUrl || location.origin;
+  const url = base === "null" ? undefined : new URL(base);
+  if (url === undefined || url.origin === "null")
+    throw new Error(
+      'Set apiBaseUrl to use apiKey: this page\'s origin is "null", as for a file:// page or a sandboxed iframe, so the key has no API origin to go to.',
+    );
+  // https, or http to a loopback address, as a local API is.
+  if (
+    url.protocol !== "https:" &&
+    !["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)
+  )
+    throw new Error(
+      "apiKey needs an https apiBaseUrl, or http to localhost, 127.0.0.1, or [::1]: over http elsewhere the key would cross the network unencrypted.",
+    );
+  return { origin: url.origin, path: url.pathname.replace(/\/$/, ""), value };
 }
