@@ -34,7 +34,7 @@ it("reads the session from the SDK's auth client and refetches it", async () => 
     requests.push(pathname);
     return Response.json(session);
   });
-  await mount(<Probe />);
+  const { unmount } = await mount(<Probe />);
   await until(() => latest?.isPending === false);
   expect(latest?.data?.user.id).toBe("user-1");
   expect(latest?.error).toBeNull();
@@ -44,4 +44,10 @@ it("reads the session from the SDK's auth client and refetches it", async () => 
     await latest?.refetch();
   });
   expect(requests).toEqual(["/api/auth/get-session", "/api/auth/get-session"]);
+
+  // The store stops watching the session (window listeners, other tabs) a
+  // second after its last reader leaves (nanostores' STORE_UNMOUNT_DELAY).
+  // Let that happen while this file's window exists, not in a later file.
+  await unmount();
+  await new Promise((resolve) => setTimeout(resolve, 1_050));
 });
