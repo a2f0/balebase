@@ -117,26 +117,24 @@ function isApiBase(url: string) {
 
 /**
  * Where an API key may go: under `apiBaseUrl`, or the page's origin without
- * one. Refuses a base the key would cross the network to unencrypted, and an
- * opaque origin ("null", as a page's URL has in a srcdoc or data: frame,
- * under a custom scheme, and in some browsers for a file: page), which names
- * no host to limit it to. Outside a browser, apiBaseUrl is set (`Balebase`
- * checks first).
+ * one. Refuses a page that is not served over http(s), such as a file://
+ * page, a srcdoc or data: frame, or a custom scheme, whose origin names no
+ * web host to limit the key to (browsers spell it "null", "file://", or the
+ * scheme's). Refuses a base the key would cross the network to unencrypted.
+ * Outside a browser, apiBaseUrl is set (`Balebase` checks first), and it is
+ * always http(s).
  */
 function apiKeyScope(apiBaseUrl: string, value: string): ApiKeyScope {
   const base = apiBaseUrl || location.origin;
   const url = base === "null" ? undefined : new URL(base);
-  if (url === undefined || url.origin === "null")
+  if (url === undefined || !/^https?:$/.test(url.protocol))
     throw new Error(
-      "Set apiBaseUrl to use apiKey: this page's origin names no host (as for a file:// page, a srcdoc or data: frame, or a custom scheme), so the key has no API origin to go to.",
+      "Set apiBaseUrl to use apiKey: this page is not served over http(s) (as for a file:// page, a srcdoc or data: frame, or a custom scheme), so the key has no API origin to go to.",
     );
   // https, or http to a loopback address, as a local API is.
   if (
     url.protocol !== "https:" &&
-    !(
-      url.protocol === "http:" &&
-      ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)
-    )
+    !["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)
   )
     throw new Error(
       "apiKey needs an https apiBaseUrl, or http to localhost, 127.0.0.1, or [::1]: over http elsewhere the key would cross the network unencrypted.",

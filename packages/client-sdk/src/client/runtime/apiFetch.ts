@@ -73,8 +73,9 @@ export const authRoutes = "/api/auth";
  * Whether `input` goes under the key's base, to a route an API key may
  * reach. Paths compare as `fetch` sends them, with dot segments resolved;
  * the route, as the API matches it, with percent-escapes decoded, so
- * `/api/%61uth` is Better Auth's too, and with repeated slashes merged, as
- * proxies often do. A route with a malformed escape gets
+ * `/api/%61uth` is Better Auth's too, and with `%2F` read as a slash and
+ * repeated slashes merged, as some proxies do (so `..%2F` climbs). A route
+ * with a malformed escape gets
  * no key, whatever route it is: the API decodes around the bad escape, so
  * it may be Better Auth's. The typed client never sends one.
  */
@@ -84,10 +85,7 @@ function receivesKey(input: RequestInfo | URL, key: ApiKeyScope) {
   const { pathname } = url;
   if (pathname !== key.path && !pathname.startsWith(`${key.path}/`))
     return false;
-  const route = decoded(pathname.slice(key.path.length))?.replace(
-    /\/{2,}/g,
-    "/",
-  );
+  const route = routed(pathname.slice(key.path.length));
   return (
     route !== undefined &&
     route !== authRoutes &&
@@ -95,9 +93,18 @@ function receivesKey(input: RequestInfo | URL, key: ApiKeyScope) {
   );
 }
 
-function decoded(path: string) {
+/**
+ * `path` as the API may route it, or undefined when it has a malformed
+ * escape. Reading `%2F` as a slash can make new dot segments, so they are
+ * resolved again.
+ */
+function routed(path: string) {
   try {
-    return decodeURI(path);
+    const slashes = decodeURI(path).replace(/%2f/gi, "/");
+    return new URL(
+      slashes.replace(/\/{2,}/g, "/"),
+      "https://route.invalid",
+    ).pathname.replace(/\/{2,}/g, "/");
   } catch {
     return undefined;
   }

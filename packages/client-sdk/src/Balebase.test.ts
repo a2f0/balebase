@@ -218,11 +218,15 @@ describe("API requests", () => {
     // The API routes the decoded path, and proxies often merge slashes.
     await balebase.fetch("https://api.test/api/%61uth/get-session");
     await balebase.fetch("https://api.test//api//auth/get-session");
+    await balebase.fetch("https://api.test/api%2Fauth/get-session");
+    await balebase.fetch("https://api.test/api/me/..%2fauth/sign-out");
     await balebase.fetch("https://api.test/api/objects/%E0%A4%A");
     // Only the routes under /api/auth are Better Auth's.
     await balebase.fetch("https://api.test/api/authors");
     await balebase.fetch("https://api.test/auth/get-session");
     expect(sent.map(({ headers }) => headers.get("Authorization"))).toEqual([
+      null,
+      null,
       null,
       null,
       null,
@@ -264,15 +268,16 @@ describe("API requests", () => {
   });
 
   it("asks for an API origin when a page with a key has none", async () => {
-    // A page's location has its URL's origin: opaque, "null", for srcdoc
-    // and data: frames, custom schemes, and file: in some browsers. Chrome
-    // names a file: page's origin "file://", and WKWebView a custom
-    // scheme's, but neither names a host.
+    // A page's location has its URL's origin: "null" for srcdoc and data:
+    // frames and custom schemes, and for file: in some browsers. Chrome names
+    // a file: page's origin "file://", and WKWebView a custom scheme's, but
+    // none is served over http(s).
     for (const page of [
       new URL("file:///Users/sam/report.html"),
       new URL("about:srcdoc"),
       new URL("data:text/html,<p>Report</p>"),
       new URL("capacitor://localhost/"),
+      new URL("ftp://localhost/"),
       { href: "file:///Users/sam/report.html", origin: "file://" },
       { href: "capacitor://localhost/", origin: "capacitor://localhost" },
     ]) {
@@ -282,7 +287,7 @@ describe("API requests", () => {
       });
       try {
         expect(() => new Balebase({ apiKey: "tlk_k" })).toThrow(
-          "Set apiBaseUrl to use apiKey: this page's origin names no host",
+          "Set apiBaseUrl to use apiKey: this page is not served over http(s)",
         );
         // Without a key, nothing about the page's origin matters.
         expect(() => new Balebase()).not.toThrow();
@@ -299,15 +304,12 @@ describe("API requests", () => {
     expect(
       () => new Balebase({ apiBaseUrl: "http://api.test", apiKey: "tlk_k" }),
     ).toThrow("apiKey needs an https apiBaseUrl");
-    // A page served over http is the API's origin without apiBaseUrl, and
-    // only http to this machine is exempt, not another scheme.
-    for (const page of ["http://app.test", "ftp://localhost"]) {
-      await onPage(page, async () => {
-        expect(() => new Balebase({ apiKey: "tlk_k" })).toThrow(
-          "apiKey needs an https apiBaseUrl",
-        );
-      });
-    }
+    // A page served over http is the API's origin without apiBaseUrl.
+    await onPage("http://app.test", async () => {
+      expect(() => new Balebase({ apiKey: "tlk_k" })).toThrow(
+        "apiKey needs an https apiBaseUrl",
+      );
+    });
     for (const local of [
       "http://localhost:8787",
       "http://127.0.0.1:8787",
