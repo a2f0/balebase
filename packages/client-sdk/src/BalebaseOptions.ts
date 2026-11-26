@@ -19,7 +19,7 @@ export interface BalebaseOptions {
    * session. It is sent as a bearer token with every request under
    * `apiBaseUrl` (its origin and any proxy path), never to another host or
    * path, and never to Better Auth's session-only routes under `/api/auth`,
-   * however they are sent. It needs an https `apiBaseUrl` (or http to this
+   * however they are sent or spelled. It needs an https `apiBaseUrl` (or http to this
    * machine); a page whose origin is "null" must set one. The key's access
    * and the routes API keys may reach still apply. It is a secret: never put
    * one in a page or an app others can open.

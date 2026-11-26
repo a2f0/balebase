@@ -125,7 +125,10 @@ function apiKeyScope(apiBaseUrl: string, value: string): ApiKeyScope {
   // https, or http to a loopback address, as a local API is.
   if (
     url.protocol !== "https:" &&
-    !["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)
+    !(
+      url.protocol === "http:" &&
+      ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)
+    )
   )
     throw new Error(
       "apiKey needs an https apiBaseUrl, or http to localhost, 127.0.0.1, or [::1]: over http elsewhere the key would cross the network unencrypted.",

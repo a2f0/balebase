@@ -190,12 +190,18 @@ describe("API requests", () => {
     await balebase.fetch("https://api.test/api/auth/get-session");
     await balebase.fetch(new Request("https://api.test/api/auth"));
     await balebase.fetch("https://api.test/api/me/../auth/sign-out");
+    // The API routes the decoded path.
+    await balebase.fetch("https://api.test/api/%61uth/get-session");
+    await balebase.fetch("https://api.test/api/objects/%E0%A4%A");
     // Only the routes under /api/auth are Better Auth's.
     await balebase.fetch("https://api.test/api/authors");
     await balebase.fetch("https://api.test/auth/get-session");
     expect(sent.map(({ headers }) => headers.get("Authorization"))).toEqual([
       null,
       null,
+      null,
+      null,
+      // A path that cannot be decoded may be Better Auth's.
       null,
       "Bearer tlk_test_key",
       "Bearer tlk_test_key",
@@ -230,11 +236,13 @@ describe("API requests", () => {
 
   it("asks for an API origin when a page with a key has none", async () => {
     // file:// pages and custom schemes have an opaque origin, "null";
-    // sandboxed iframes report "null" whatever their URL.
+    // sandboxed iframes report "null" whatever their URL. WKWebView names a
+    // custom scheme's page origin, but its URL's origin is still opaque.
     for (const page of [
       new URL("file:///Users/sam/report.html"),
       new URL("capacitor://localhost/"),
       { href: "https://app.test/", origin: "null" },
+      { href: "capacitor://localhost/", origin: "capacitor://localhost" },
     ]) {
       Object.defineProperty(globalThis, "location", {
         configurable: true,
@@ -259,12 +267,15 @@ describe("API requests", () => {
     expect(
       () => new Balebase({ apiBaseUrl: "http://api.test", apiKey: "tlk_k" }),
     ).toThrow("apiKey needs an https apiBaseUrl");
-    // A page served over http is the API's origin without apiBaseUrl.
-    await onPage("http://app.test", async () => {
-      expect(() => new Balebase({ apiKey: "tlk_k" })).toThrow(
-        "apiKey needs an https apiBaseUrl",
-      );
-    });
+    // A page served over http is the API's origin without apiBaseUrl, and
+    // only http to this machine is exempt, not another scheme.
+    for (const page of ["http://app.test", "ftp://localhost"]) {
+      await onPage(page, async () => {
+        expect(() => new Balebase({ apiKey: "tlk_k" })).toThrow(
+          "apiKey needs an https apiBaseUrl",
+        );
+      });
+    }
     for (const local of [
       "http://localhost:8787",
       "http://127.0.0.1:8787",

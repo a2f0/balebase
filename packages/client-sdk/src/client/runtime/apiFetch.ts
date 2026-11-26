@@ -68,7 +68,10 @@ const authRoutes = "/api/auth";
 
 /**
  * Whether `input` goes under the key's base, to a route an API key may
- * reach. Paths compare as `fetch` sends them, with dot segments resolved.
+ * reach. Paths compare as `fetch` sends them, with dot segments resolved;
+ * the route, as the API matches it, with percent-escapes decoded, so
+ * `/api/%61uth` is Better Auth's too. A route that cannot be decoded gets no
+ * key.
  */
 function receivesKey(input: RequestInfo | URL, key: ApiKeyScope) {
   const url = urlOf(input);
@@ -76,8 +79,20 @@ function receivesKey(input: RequestInfo | URL, key: ApiKeyScope) {
   const { pathname } = url;
   if (pathname !== key.path && !pathname.startsWith(`${key.path}/`))
     return false;
-  const route = pathname.slice(key.path.length);
-  return route !== authRoutes && !route.startsWith(`${authRoutes}/`);
+  const route = decoded(pathname.slice(key.path.length));
+  return (
+    route !== undefined &&
+    route !== authRoutes &&
+    !route.startsWith(`${authRoutes}/`)
+  );
+}
+
+function decoded(path: string) {
+  try {
+    return decodeURI(path);
+  } catch {
+    return undefined;
+  }
 }
 
 /**
