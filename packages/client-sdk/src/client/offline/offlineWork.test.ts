@@ -1,7 +1,8 @@
 import { expect, it } from "bun:test";
-import { createOfflineIssue } from "./offlineWork";
+import { Balebase } from "../../Balebase";
 
 it("refuses photos the API would refuse before saving an issue on the device", async () => {
+  const { offline } = new Balebase();
   const issue = {
     assignedTo: null,
     description: "",
@@ -13,13 +14,13 @@ it("refuses photos the API would refuse before saving an issue on the device", a
     new File([new Uint8Array(bytes)], "photo.png", { type });
 
   await expect(
-    createOfflineIssue("workspace", issue, [photo(0, "image/png")], target),
+    offline.createIssue("workspace", issue, [photo(0, "image/png")], target),
   ).rejects.toThrow("Images must not be empty.");
   await expect(
-    createOfflineIssue("workspace", issue, [photo(4, "image/heic")], target),
+    offline.createIssue("workspace", issue, [photo(4, "image/heic")], target),
   ).rejects.toThrow("Images must be JPEG, PNG, GIF, or WebP files.");
   await expect(
-    createOfflineIssue(
+    offline.createIssue(
       "workspace",
       issue,
       Array.from({ length: 11 }, () => photo(4, "image/png")),

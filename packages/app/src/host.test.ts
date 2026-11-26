@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { balebase } from "./balebase";
+import { balebase, offlineShellWait } from "./balebase";
 import { configureHost } from "./host";
+import { waitForOfflineShell } from "./offline/offlineShell";
 import { authCallbackUrl } from "./shared/config";
 import { installFetch } from "./testing/fetch";
 
@@ -81,6 +82,14 @@ describe("host-dependent API requests", () => {
     expect(balebase()).toBe(sdk);
     configureHost({});
     expect(balebase()).not.toBe(sdk);
+  });
+
+  it("waits for the service worker only in a production web build", () => {
+    expect(offlineShellWait({}, true)).toBe(waitForOfflineShell);
+    expect(offlineShellWait({}, false)).toBeUndefined();
+    expect(offlineShellWait(nativeHost("https://localhost"), true)).toBe(
+      undefined,
+    );
   });
 
   it("reads connectivity from the shell's source", () => {

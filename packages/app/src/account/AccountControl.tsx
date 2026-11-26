@@ -1,8 +1,8 @@
+import { errorMessage } from "@balebase/client-sdk";
 import { Avatar, Icon, Toast } from "@balebase/ui/react";
 import { useId, useRef, useState, useSyncExternalStore } from "react";
 import { version as appVersion } from "../../package.json";
 import { balebase } from "../balebase";
-import { errorMessage } from "../shared/errors";
 import { useAction } from "../shared/useAction";
 import { useMenuDismissal } from "../shared/useMenuDismissal";
 import type { AccountSession } from "./accountSessions";

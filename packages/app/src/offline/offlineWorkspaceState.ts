@@ -1,4 +1,4 @@
-import type { OfflineWorkspace } from "./offlineStore";
+import type { OfflineWorkspace } from "@balebase/client-sdk";
 
 /**
  * The device workspace view: the workspace last read and the errors from

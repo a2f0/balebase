@@ -1,7 +1,7 @@
+import { errorMessage } from "@balebase/client-sdk";
 import { Button, Card, PageSection, Toast } from "@balebase/ui/react";
 import { useCallback, useEffect, useReducer, useRef } from "react";
 import { balebase } from "../balebase";
-import { errorMessage } from "../shared/errors";
 import { ListRow } from "../shared/ListRow";
 import { countLabel, formatDate } from "../shared/labels";
 import { initialRestore, restoreTransition } from "../shared/restoreState";

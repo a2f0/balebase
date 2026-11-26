@@ -1,3 +1,4 @@
+import { errorMessage } from "@balebase/client-sdk";
 import {
   Banner,
   Button,
@@ -21,7 +22,6 @@ import {
   useState,
 } from "react";
 import { balebase } from "../balebase";
-import { errorMessage } from "../shared/errors";
 import { ListRow, type ListRowItem } from "../shared/ListRow";
 import { countLabel, formatCalendarDate } from "../shared/labels";
 import { useFocusWhenFolded } from "../shared/useFocusWhenFolded";

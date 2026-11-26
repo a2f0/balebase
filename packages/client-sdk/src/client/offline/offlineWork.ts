@@ -8,12 +8,12 @@ import {
   formWrites,
   type OfflineFormEvent,
   offlineFormTransition,
-} from "./offlineFormState";
+} from "../../data/offline/offlineFormState";
 import {
-  changeOfflineWorkspace,
   type OfflineWorkspace,
   pendingJob,
-} from "./offlineStore";
+} from "../../data/offline/offlineWorkspace";
+import type { OfflineStore } from "./offlineStore";
 
 function required(workspace: OfflineWorkspace | undefined) {
   if (!workspace)
@@ -29,26 +29,29 @@ function required(workspace: OfflineWorkspace | undefined) {
  * happens to the template meanwhile. Resolves the form's ID.
  */
 export function startOfflineForm(
+  store: OfflineStore,
   key: string,
   template: FormTemplate,
   projectId: string,
 ) {
   const id = crypto.randomUUID();
-  return changeOfflineWorkspace(key, (current) => {
-    const workspace = required(current);
-    workspace.forms.push({
-      id,
-      projectId,
-      startedAt: new Date().toISOString(),
-      template,
-      status: "draft",
-      server: { answers: {}, revision: 0, status: "in_progress" },
-      sending: [],
-      local: {},
-      replaced: {},
-    });
-    return workspace;
-  }).then(() => id);
+  return store
+    .change(key, (current) => {
+      const workspace = required(current);
+      workspace.forms.push({
+        id,
+        projectId,
+        startedAt: new Date().toISOString(),
+        template,
+        status: "draft",
+        server: { answers: {}, revision: 0, status: "in_progress" },
+        sending: [],
+        local: {},
+        replaced: {},
+      });
+      return workspace;
+    })
+    .then(() => id);
 }
 
 /** Moves the form by `event`, queueing the server writes it calls for. */
@@ -76,12 +79,13 @@ export function applyOfflineFormEvent(
  * when the answer is given, so a write retried later keeps them.
  */
 export function saveOfflineAnswer(
+  store: OfflineStore,
   key: string,
   id: string,
   itemId: string,
   answer: { at: string; base: string | null; value: string },
 ) {
-  return changeOfflineWorkspace(key, (current) =>
+  return store.change(key, (current) =>
     applyOfflineFormEvent(required(current), id, {
       ...answer,
       itemId,
@@ -94,15 +98,23 @@ export function saveOfflineAnswer(
  * Shares a draft with the server as an in-progress form. From then on its
  * answers sync both ways whenever the device is online.
  */
-export function saveOfflineProgress(key: string, id: string) {
-  return changeOfflineWorkspace(key, (current) =>
+export function saveOfflineProgress(
+  store: OfflineStore,
+  key: string,
+  id: string,
+) {
+  return store.change(key, (current) =>
     applyOfflineFormEvent(required(current), id, { type: "shared" }),
   );
 }
 
 /** Seals the form and queues its completion to sync. */
-export function completeOfflineForm(key: string, id: string) {
-  return changeOfflineWorkspace(key, (current) =>
+export function completeOfflineForm(
+  store: OfflineStore,
+  key: string,
+  id: string,
+) {
+  return store.change(key, (current) =>
     applyOfflineFormEvent(required(current), id, {
       completedAt: new Date().toISOString(),
       saveId: crypto.randomUUID(),
@@ -117,6 +129,7 @@ export function completeOfflineForm(key: string, id: string) {
  * server along with it.
  */
 export async function createOfflineIssue(
+  store: OfflineStore,
   key: string,
   input: IssueInput,
   files: File[],
@@ -131,7 +144,7 @@ export async function createOfflineIssue(
     filename: file.name,
     file,
   }));
-  return changeOfflineWorkspace(
+  return store.change(
     key,
     (current) => {
       const workspace = applyOfflineFormEvent(
@@ -172,8 +185,9 @@ export async function createOfflineIssue(
   );
 }
 
-export function retryOfflineWork(key: string) {
-  return changeOfflineWorkspace(key, (current) => {
+/** Sends every unsynced job again now, blocked ones included. */
+export function retryOfflineWork(store: OfflineStore, key: string) {
+  return store.change(key, (current) => {
     const workspace = required(current);
     for (const entry of workspace.jobs) {
       if (entry.status !== "synced") {

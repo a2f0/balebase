@@ -1,15 +1,9 @@
-import { ApiError } from "@balebase/client-sdk";
+import { ApiError } from "@balebase/api-client";
 import type { OfflineFormState } from "@balebase/validators/offline";
-import { balebase } from "../balebase";
-import { formWrites } from "./offlineFormState";
+import { formWrites } from "../../data/offline/offlineFormState";
+import type { OfflineIdentity } from "../../data/offline/offlineWorkspace";
 import { prepareOfflineDevice } from "./offlinePreparation";
-import {
-  changeOfflineWorkspace,
-  type OfflineIdentity,
-  offlineAccessEpoch,
-  offlineScopeKey,
-  readOfflineWorkspace,
-} from "./offlineStore";
+import type { OfflineRuntime } from "./offlineRuntime";
 import { applyOfflineFormEvent } from "./offlineWork";
 
 /**
@@ -30,19 +24,21 @@ import { applyOfflineFormEvent } from "./offlineWork";
  * device for the old identity or stores data for it.
  */
 export async function pullOfflineWorkspace(
+  runtime: OfflineRuntime,
   identity: OfflineIdentity,
   epoch: string,
 ) {
-  await prepareOfflineDevice(identity, epoch);
-  const key = offlineScopeKey(identity.scope);
+  const { api, store } = runtime;
+  await prepareOfflineDevice(runtime, identity, epoch);
+  const key = store.scopeKey(identity.scope);
   return navigator.locks.request(`balebase-pull:${key}`, async () => {
-    const from = (await readOfflineWorkspace(key))?.cursor;
-    const data = await balebase().api.offline.sync(identity.scope, from);
+    const from = (await store.read(key))?.cursor;
+    const data = await api.offline.sync(identity.scope, from);
     if (!data.changed) return false;
     let stored = false;
-    await changeOfflineWorkspace(key, (current) => {
+    await store.change(key, (current) => {
       if (!current) throw new Error("Offline storage is unavailable.");
-      if (epoch !== offlineAccessEpoch())
+      if (epoch !== store.accessEpoch())
         throw new Error("The active account changed. Reload before syncing.");
       if (current.cursor !== from) return current;
       current.projects = data.projects;
@@ -66,24 +62,25 @@ export async function pullOfflineWorkspace(
  * write says why.
  */
 export async function pullOfflineForms(
+  { api, store }: OfflineRuntime,
   identity: OfflineIdentity,
   epoch: string,
 ) {
-  const key = offlineScopeKey(identity.scope);
-  const workspace = await readOfflineWorkspace(key);
+  const key = store.scopeKey(identity.scope);
+  const workspace = await store.read(key);
   if (!workspace) return;
   for (const form of workspace.forms) {
     if (formWrites(workspace.jobs, form.id)[0]?.status !== "synced") continue;
     let state: OfflineFormState;
     try {
-      state = await balebase().api.offline.form(identity.scope, form.id);
+      state = await api.offline.form(identity.scope, form.id);
     } catch (cause) {
       if (cause instanceof ApiError && cause.status === 404) continue;
       throw cause;
     }
-    await changeOfflineWorkspace(key, (current) => {
+    await store.change(key, (current) => {
       if (!current) throw new Error("Offline storage is unavailable.");
-      if (epoch !== offlineAccessEpoch())
+      if (epoch !== store.accessEpoch())
         throw new Error("The active account changed. Reload before syncing.");
       return current.forms.some((entry) => entry.id === form.id)
         ? applyOfflineFormEvent(current, form.id, { state, type: "pulled" })

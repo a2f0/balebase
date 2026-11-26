@@ -1,5 +1,5 @@
+import type { OfflineWorkspace } from "@balebase/client-sdk";
 import { createContext, useContext } from "react";
-import type { OfflineWorkspace } from "./offlineStore";
 
 /** This device's workspace, as `useOfflineWorkspace` reads it in the App. */
 export interface DeviceState {

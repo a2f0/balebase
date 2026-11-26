@@ -12,7 +12,8 @@
     "test": "bun test src"
   },
   "dependencies": {
-    "@balebase/api-client": "workspace:*"
+    "@balebase/api-client": "workspace:*",
+    "@balebase/validators": "workspace:*"
   },
   "devDependencies": {
     "@types/bun": "1.4.4"

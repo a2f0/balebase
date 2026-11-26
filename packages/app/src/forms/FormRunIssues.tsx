@@ -1,3 +1,4 @@
+import { errorMessage, formItems } from "@balebase/client-sdk";
 import {
   Badge,
   type BadgeTone,
@@ -29,7 +30,6 @@ import { balebase } from "../balebase";
 import { IssueFields } from "../issues/IssueForm";
 import { ApiDownload } from "../shared/ApiDownload";
 import { ApiImage } from "../shared/ApiImage";
-import { errorMessage } from "../shared/errors";
 import { formatDateTime, formatLabel } from "../shared/labels";
 import { useAction } from "../shared/useAction";
 import {
@@ -38,7 +38,6 @@ import {
   issueImageSelectionKey,
   uploadIssueImagesSequentially,
 } from "./formIssueImages";
-import { formItems } from "./formProgress";
 
 const priorityTones: Record<string, BadgeTone> = {
   critical: "danger",

@@ -1,18 +1,17 @@
+import {
+  answerBase,
+  errorMessage,
+  type OfflineForm,
+  offlineAnswers,
+} from "@balebase/client-sdk";
 import { useEffect, useMemo, useReducer, useRef, useState } from "react";
-import { errorMessage } from "../shared/errors";
+import { balebase } from "../balebase";
 import { useUnsavedChanges } from "../workspace/unsavedChanges";
 import {
   initialOfflineAnswers,
   offlineAnswersError,
   offlineAnswersTransition,
 } from "./offlineAnswersState";
-import { answerBase, offlineAnswers } from "./offlineFormState";
-import type { OfflineForm } from "./offlineStore";
-import {
-  completeOfflineForm,
-  saveOfflineAnswer,
-  saveOfflineProgress,
-} from "./offlineWork";
 
 /** Device storage the answers are written to; tests pass their own. */
 export interface OfflineAnswerStorage {
@@ -27,9 +26,10 @@ export interface OfflineAnswerStorage {
 }
 
 const deviceStorage: OfflineAnswerStorage = {
-  completeForm: completeOfflineForm,
-  saveAnswer: saveOfflineAnswer,
-  saveProgress: saveOfflineProgress,
+  completeForm: (key, formId) => balebase().offline.completeForm(key, formId),
+  saveAnswer: (key, formId, itemId, answer) =>
+    balebase().offline.saveAnswer(key, formId, itemId, answer),
+  saveProgress: (key, formId) => balebase().offline.saveProgress(key, formId),
 };
 
 /** What a save queues to sync after writing every answer to the device. */

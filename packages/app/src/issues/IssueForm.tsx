@@ -1,10 +1,10 @@
+import { errorMessage } from "@balebase/client-sdk";
 import { Banner, Button, Field, Select } from "@balebase/ui/react";
 import type { Person } from "@balebase/validators/fields";
 import { issueLimits, issuePriorities } from "@balebase/validators/issueRules";
 import type { IssueInput } from "@balebase/validators/issues";
 import { type FormEvent, useCallback, useState } from "react";
 import { balebase } from "../balebase";
-import { errorMessage } from "../shared/errors";
 import { formatLabel } from "../shared/labels";
 import { useLoad } from "../shared/useLoad";
 

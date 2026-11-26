@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { balebase } from "../balebase";
-import { lockOfflineWorkspace } from "../offline/offlineStore";
 import {
   createOrganizationSlug,
   resolveActiveOrganizationId,
@@ -71,14 +70,14 @@ export function useWorkspaceOrganizations(
     await refetchSession();
   };
   const switchOrganization = async (organizationId: string) => {
-    lockOfflineWorkspace();
+    balebase().offline.lock();
     const result = await authClient.organization.setActive({ organizationId });
     if (result.error) {
       throw new Error(
         result.error.message ?? "Could not switch organizations.",
       );
     }
-    lockOfflineWorkspace();
+    balebase().offline.lock();
     await refetchSession();
   };
   const refresh = async () => {

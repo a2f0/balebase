@@ -1,30 +1,10 @@
+import { answerBase, offlineAnswers } from "@balebase/client-sdk";
 import { DialogHost } from "@balebase/ui/react";
 import type { FormTemplate } from "@balebase/validators/forms";
 import { useState } from "react";
 import { createRoot } from "react-dom/client";
+import { balebase } from "../src/balebase";
 import { DeviceContext } from "../src/offline/offlineContext";
-import { answerBase, offlineAnswers } from "../src/offline/offlineFormState";
-import { pullOfflineForms } from "../src/offline/offlinePull";
-import {
-  activateOfflineWorkspace,
-  activeOfflineKey,
-  changeOfflineWorkspace,
-  emptyOfflineWorkspace,
-  lockOfflineWorkspace,
-  offlineAccessEpoch,
-  offlineImage,
-  offlineScopeKey,
-  readOfflineWorkspace,
-} from "../src/offline/offlineStore";
-import { syncOfflineWorkspace } from "../src/offline/offlineSync";
-import {
-  completeOfflineForm,
-  createOfflineIssue,
-  retryOfflineWork,
-  saveOfflineAnswer,
-  saveOfflineProgress,
-  startOfflineForm,
-} from "../src/offline/offlineWork";
 import { useOfflineWorkspace } from "../src/offline/useOfflineWorkspace";
 import { DeviceProjects } from "../src/projects/DeviceProjects";
 import { useWorkspaceNavigation } from "../src/workspace/navigationGuard";
@@ -35,7 +15,7 @@ const user = {
   email: "inspector@example.com",
 };
 const scope = { userId: user.id, organizationId: "org-1" };
-const key = offlineScopeKey(scope);
+const key = balebase().offline.scopeKey(scope);
 const project = {
   id: "project-1",
   name: "Site",
@@ -89,17 +69,17 @@ function App() {
 
 const testApi = {
   key,
-  activeKey: activeOfflineKey,
+  activeKey: () => balebase().offline.activeKey(),
   /** The device path of a form this fixture started. */
   formPath: (formId: string) =>
     `/projects/${project.id}/forms/${encodeURIComponent(formId)}`,
   /** Stores a synced project and its template, then starts a form from it. */
   async seed() {
-    await changeOfflineWorkspace(
+    await balebase().offline.change(
       key,
       (current) =>
         current ?? {
-          ...emptyOfflineWorkspace({
+          ...balebase().offline.emptyWorkspace({
             scope,
             user,
             organizationName: "Test team",
@@ -109,16 +89,16 @@ const testApi = {
           members: [user],
         },
     );
-    activateOfflineWorkspace(key);
-    return startOfflineForm(key, template, project.id);
+    balebase().offline.activate(key);
+    return balebase().offline.startForm(key, template, project.id);
   },
-  read: () => readOfflineWorkspace(key),
+  read: () => balebase().offline.read(key),
   /** Answers the only item over the answer the form shows now. */
   answer: async (id: string, value: string) => {
-    const form = (await readOfflineWorkspace(key))?.forms.find(
+    const form = (await balebase().offline.read(key))?.forms.find(
       (entry) => entry.id === id,
     );
-    return saveOfflineAnswer(key, id, "check", {
+    return balebase().offline.saveAnswer(key, id, "check", {
       at: new Date().toISOString(),
       base: form ? answerBase(form, "check") : null,
       value,
@@ -126,16 +106,16 @@ const testApi = {
   },
   /** The answers a form shows. */
   answers: async (id: string) => {
-    const form = (await readOfflineWorkspace(key))?.forms.find(
+    const form = (await balebase().offline.read(key))?.forms.find(
       (entry) => entry.id === id,
     );
     return form && offlineAnswers(form);
   },
-  progress: (id: string) => saveOfflineProgress(key, id),
-  complete: (id: string) => completeOfflineForm(key, id),
+  progress: (id: string) => balebase().offline.saveProgress(key, id),
+  complete: (id: string) => balebase().offline.completeForm(key, id),
   /** Raises an issue, with one photo, on the form's only item. */
   issue: (formId: string) =>
-    createOfflineIssue(
+    balebase().offline.createIssue(
       key,
       {
         title: "Broken rail",
@@ -151,24 +131,28 @@ const testApi = {
       { formId, itemId: "check" },
     ),
   photo: (id: string) =>
-    offlineImage(key, id).then(async (blob) => ({
-      type: blob.type,
-      bytes: Array.from(new Uint8Array(await blob.arrayBuffer())),
-    })),
-  retry: () => retryOfflineWork(key),
-  sync: () => syncOfflineWorkspace(key),
+    balebase()
+      .offline.image(key, id)
+      .then(async (blob) => ({
+        type: blob.type,
+        bytes: Array.from(new Uint8Array(await blob.arrayBuffer())),
+      })),
+  retry: () => balebase().offline.retry(key),
+  sync: () => balebase().offline.sync(key),
   /** Reads the server's copy of each shared form, as a project sync does. */
   pull: () =>
-    pullOfflineForms(
+    balebase().offline.pullForms(
       { scope, user, organizationName: "Test team" },
-      offlineAccessEpoch(),
+      balebase().offline.accessEpoch(),
     ),
-  lock: lockOfflineWorkspace,
-  activate: () => activateOfflineWorkspace(key),
+  lock: () => balebase().offline.lock(),
+  activate: () => balebase().offline.activate(key),
   other: () =>
-    readOfflineWorkspace(offlineScopeKey({ ...scope, userId: "other" })),
+    balebase().offline.read(
+      balebase().offline.scopeKey({ ...scope, userId: "other" }),
+    ),
   abort: () =>
-    changeOfflineWorkspace(key, (workspace) => {
+    balebase().offline.change(key, (workspace) => {
       if (workspace) workspace.templates = [];
       throw new Error("Simulated storage failure");
     }),

@@ -27,6 +27,7 @@ Every field of `BalebaseOptions` is optional.
 | `fetch` | The transport; defaults to the global `fetch`, looked up per request |
 | `nativeOrigin` | A native shell's WebView origin, sent as `X-Balebase-Native-Origin` |
 | `network` | A `NetworkStatusSource`, such as the OS's on a device; defaults to the browser's |
+| `waitForOfflineShell` | Resolves once the host can reopen without a connection, such as a web app's active service worker; preparing offline work waits for it |
 
 ## The `Balebase` instance
 
@@ -36,9 +37,38 @@ Every field of `BalebaseOptions` is optional.
 | `apiVersion` | The version the latest API response named, with `subscribe` |
 | `fetch` | `fetch` for API URLs outside the typed routes, such as files; marks native requests and records the version like every typed call |
 | `network` | Whether the device has a network, with `subscribe` |
+| `offline` | Forms and issues done on this device and the queue that syncs them; see below |
 
 The package also exports `ApiError` and the `ApiClient`, `FinanceFilters`, and
-`IssueFilters` types, so hosts need not import `@balebase/api-client`.
+`IssueFilters` types, so hosts need not import `@balebase/api-client`, and
+`errorMessage`, which turns a failure into text to show.
+
+## Offline work
+
+`balebase.offline` keeps a workspace per person and organization in the
+`balebase-offline` IndexedDB database: the projects, templates, and people the
+last pull read, and the forms, issues, and photos made on the device, with the
+jobs that sync them. One workspace is active at a time; `lock` hides it on
+sign-out or an account change without deleting unsynced work, and `activate`
+refuses an identity confirmed before the last lock (`accessEpoch`).
+
+- `pull` prepares the device for an identity and brings its data up to date;
+  `pullForms` brings shared forms up to date with the server's copies.
+- `startForm`, `saveAnswer`, `saveProgress`, `completeForm`, and `createIssue`
+  record work and queue its writes; `retry` requeues failed ones.
+- `sync` drains the active workspace's queue while online, under a Web Lock
+  so one tab drains at a time.
+- `subscribe` reports each change made in this tab.
+
+The form state machine (`offlineFormState.ts`) and its helpers, such as
+`formWrites`, `offlineAnswers`, and `answerBase`, are exported for screens
+that show a form's progress. The database name, version, and key shapes, the
+localStorage pointer, and the lock names are what devices already hold work
+under; changing them strands it.
+
+Offline work needs a browser or WebView: IndexedDB, localStorage, and Web
+Locks. Instances for one API in a tab share its locks and change subscribers,
+as they share the device's storage.
 
 [Using the client SDK](../../docs/client-sdk.md) covers cookies, CORS, native
 hosts, and use outside a browser.
@@ -46,4 +76,7 @@ hosts, and use outside a browser.
 ## Layout
 
 `src/Balebase.ts` is the composition root and `src/index.ts` the public entry
-point. Runtime state the facade holds lives in `src/client/runtime/`.
+point. Each facade with its own subsystem has a folder in `src/client/` whose
+`index.ts` is the facade, such as `offline/`; runtime state the facade holds
+lives in `src/client/runtime/`. Pure domain types and helpers, such as the
+offline form state machine and form progress, live in `src/data/`.

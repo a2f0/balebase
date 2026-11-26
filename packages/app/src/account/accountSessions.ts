@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
+import { balebase } from "../balebase";
 import { clearUserTransactions } from "../finance/transactionCache";
-import { lockOfflineWorkspace } from "../offline/offlineStore";
 import { authClient } from "../shared/authClient";
 import { throwIfRefused } from "../shared/errors";
 import { clearDevicePreferences } from "./devicePreferences";
@@ -73,18 +73,18 @@ export function useAccountSessions(
 
   async function switchAccount(token: string) {
     if (token === sessionToken) return;
-    lockOfflineWorkspace();
+    balebase().offline.lock();
     const result = await authClient.multiSession.setActive({
       sessionToken: token,
     });
     throwIfRefused(result.error, "Could not switch accounts.");
-    lockOfflineWorkspace();
+    balebase().offline.lock();
     await refetchSession();
   }
 
   async function signOutActiveAccount() {
     if (!sessionToken) return;
-    lockOfflineWorkspace();
+    balebase().offline.lock();
     const result = await authClient.multiSession.revoke({
       sessionToken,
     });
@@ -95,7 +95,7 @@ export function useAccountSessions(
       throwIfRefused(result.error, "Could not sign out.");
     }
     // Invalidate preparations started while revocation was still in flight.
-    lockOfflineWorkspace();
+    balebase().offline.lock();
     // Sign-out resets this device's display settings for the next person.
     clearDevicePreferences();
     // Saved bank transactions can be read again online; drop them.

@@ -1,3 +1,4 @@
+import { errorMessage } from "@balebase/client-sdk";
 import { Banner, Button, LoadingState, Toast } from "@balebase/ui/react";
 import type { EmployeeRequirement } from "@balebase/validators/employeeForms";
 import type { OrganizationPeopleData } from "@balebase/validators/organizationSettings";
@@ -15,7 +16,6 @@ import {
   type RequirementScope,
 } from "../employeeForms/EmployeeForms";
 import { AppButtonLink } from "../shared/AppLink";
-import { errorMessage } from "../shared/errors";
 import { useFocusWhenFolded } from "../shared/useFocusWhenFolded";
 import { myDocumentsPath } from "../workspace/workspacePaths";
 import { InviteMemberForm } from "./InviteMemberForm";

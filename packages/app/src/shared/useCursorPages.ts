@@ -1,3 +1,4 @@
+import { errorMessage } from "@balebase/client-sdk";
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import {
   type CursorPage,
@@ -6,7 +7,6 @@ import {
   cursorPagesTransition,
   initialCursorPages,
 } from "./cursorPagesState";
-import { errorMessage } from "./errors";
 
 /**
  * A cursor-paginated list for `InfiniteScroll`. The first page reloads when

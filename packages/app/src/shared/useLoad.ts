@@ -1,5 +1,5 @@
+import { errorMessage } from "@balebase/client-sdk";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { errorMessage } from "./errors";
 
 /**
  * Loads on mount and whenever `load` changes identity, so pass a

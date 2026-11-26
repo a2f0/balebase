@@ -1,4 +1,4 @@
-import type { IssueFilters } from "@balebase/client-sdk";
+import { errorMessage, type IssueFilters } from "@balebase/client-sdk";
 import {
   Banner,
   Button,
@@ -16,7 +16,6 @@ import type { Issue, IssueInput } from "@balebase/validators/issues";
 import { useCallback, useState } from "react";
 import { ActivityFeed } from "../activity/ActivityFeed";
 import { balebase } from "../balebase";
-import { errorMessage } from "../shared/errors";
 import { useLoad } from "../shared/useLoad";
 import {
   financeTransactionPath,

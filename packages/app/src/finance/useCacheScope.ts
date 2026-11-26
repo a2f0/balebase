@@ -1,5 +1,5 @@
+import { errorMessage } from "@balebase/client-sdk";
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import { errorMessage } from "../shared/errors";
 import { useLoad } from "../shared/useLoad";
 import {
   type CacheScope,

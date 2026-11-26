@@ -1,3 +1,4 @@
+import { errorMessage } from "@balebase/client-sdk";
 import { type Plan, plans } from "@balebase/ui/brand";
 import {
   Badge,
@@ -17,7 +18,6 @@ import type {
 } from "@balebase/validators/billing";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { balebase } from "../balebase";
-import { errorMessage } from "../shared/errors";
 import { countLabel, formatLabel } from "../shared/labels";
 import { openCurrentBillingSession } from "./billingSession";
 import { InlineCheckout } from "./InlineCheckout";

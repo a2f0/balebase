@@ -23,4 +23,11 @@ export interface BalebaseOptions {
   nativeOrigin?: string | undefined;
   /** Device connectivity; defaults to the browser's. */
   network?: NetworkStatusSource | undefined;
+  /**
+   * Resolves once the host can reopen without a connection, such as a web
+   * app's service worker taking control; rejects when it cannot. Preparing a
+   * device for offline work waits for it, so no work is stored that the
+   * device could not reopen. Hosts that always reopen leave it unset.
+   */
+  waitForOfflineShell?: (() => Promise<void>) | undefined;
 }

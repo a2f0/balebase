@@ -1,3 +1,4 @@
+import { progressFor } from "@balebase/client-sdk";
 import {
   Button,
   Card,
@@ -26,7 +27,6 @@ import {
   RunOverview,
 } from "./FormRunHeader";
 import { FormIssuePanel } from "./FormRunIssues";
-import { progressFor } from "./formProgress";
 import type { FormRunReload } from "./formRunFetch";
 import { useFormRun } from "./useFormRun";
 

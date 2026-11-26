@@ -1,8 +1,7 @@
-import type { ApiClient } from "@balebase/client-sdk";
+import { type ApiClient, errorMessage } from "@balebase/client-sdk";
 import { Banner, Button, LoadingState, Toast } from "@balebase/ui/react";
 import { useEffect, useRef, useState } from "react";
 import { balebase } from "../balebase";
-import { errorMessage } from "../shared/errors";
 
 type Detail = Awaited<ReturnType<ApiClient["adminJobs"]["detail"]>>;
 

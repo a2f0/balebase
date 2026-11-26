@@ -1,10 +1,8 @@
 import { afterEach, describe, expect, it } from "bun:test";
+import type { OfflineWorkspace } from "@balebase/client-sdk";
 import { act } from "react";
+import { balebase } from "../balebase";
 import { installDom } from "../testing/dom";
-import {
-  activateOfflineWorkspace,
-  type OfflineWorkspace,
-} from "./offlineStore";
 import {
   type OfflineWorkspaceStorage,
   useOfflineWorkspace,
@@ -48,7 +46,7 @@ function Harness() {
 async function mountWorkspace(held: OfflineWorkspaceStorage) {
   storage = held;
   // Active before mounting, so the first refresh reads and syncs it.
-  activateOfflineWorkspace("user-1:org-1");
+  balebase().offline.activate("user-1:org-1");
   await mount(<Harness />);
   return () => {
     if (!latest) throw new Error("Not mounted");
@@ -130,7 +128,7 @@ describe("offline workspace", () => {
     await settleWith(held.syncs[0], { error: new Error("Queue stuck.") });
     expect(view().error).toBe("Queue stuck.");
     await act(async () => {
-      activateOfflineWorkspace("user-1:org-2");
+      balebase().offline.activate("user-1:org-2");
     });
     expect(view().error).toBeUndefined();
   });
@@ -139,10 +137,10 @@ describe("offline workspace", () => {
     const held = heldStorage();
     const view = await mountWorkspace(held.storage);
     await act(async () => {
-      activateOfflineWorkspace("user-1:org-2");
+      balebase().offline.activate("user-1:org-2");
     });
     await act(async () => {
-      activateOfflineWorkspace("user-1:org-1");
+      balebase().offline.activate("user-1:org-1");
     });
     // The first drain, from before switching away, fails only now.
     await settleWith(held.syncs[0], { error: new Error("Queue stuck.") });

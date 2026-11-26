@@ -1,5 +1,7 @@
 import { ApiClient } from "@balebase/api-client";
 import type { BalebaseOptions } from "./BalebaseOptions";
+import { Offline } from "./client/offline";
+import { OfflineStore } from "./client/offline/offlineStore";
 import { type ApiFetch, createApiFetch } from "./client/runtime/apiFetch";
 import { ApiVersion } from "./client/runtime/apiVersion";
 import { Network } from "./client/runtime/network";
@@ -22,6 +24,8 @@ export class Balebase {
   readonly fetch: ApiFetch;
   /** The device's connectivity. */
   readonly network: Network;
+  /** Forms and issues done on this device, and the queue that syncs them. */
+  readonly offline: Offline;
 
   constructor(options: BalebaseOptions = {}) {
     this.fetch = createApiFetch({
@@ -29,10 +33,14 @@ export class Balebase {
       fetch: options.fetch,
       nativeOrigin: options.nativeOrigin,
     });
-    this.api = new ApiClient({
-      baseUrl: options.apiBaseUrl ?? "",
-      fetch: this.fetch,
-    });
+    const apiBaseUrl = options.apiBaseUrl ?? "";
+    this.api = new ApiClient({ baseUrl: apiBaseUrl, fetch: this.fetch });
     this.network = new Network(options.network);
+    this.offline = new Offline({
+      api: this.api,
+      network: this.network,
+      store: new OfflineStore(apiBaseUrl),
+      waitForOfflineShell: options.waitForOfflineShell,
+    });
   }
 }

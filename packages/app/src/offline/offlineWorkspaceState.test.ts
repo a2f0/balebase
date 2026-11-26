@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import type { OfflineWorkspace } from "./offlineStore";
+import type { OfflineWorkspace } from "@balebase/client-sdk";
 import {
   initialOfflineWorkspace,
   type OfflineWorkspaceEvent,

@@ -14,7 +14,7 @@ import type {
   LocalAnswer,
   OfflineForm,
   OfflineFormStatus,
-} from "./offlineStore";
+} from "./offlineWorkspace";
 
 const template = {
   id: "template",

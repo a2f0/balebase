@@ -1,3 +1,4 @@
+import { errorMessage } from "@balebase/client-sdk";
 import {
   Badge,
   type BadgeTone,
@@ -14,7 +15,6 @@ import type {
 import { useCallback, useEffect, useRef, useState } from "react";
 import { balebase } from "../balebase";
 import { AppLink } from "../shared/AppLink";
-import { errorMessage } from "../shared/errors";
 import { formatDateTime, formatLabel } from "../shared/labels";
 
 type Connection = FinanceConnectionDetail["connection"];

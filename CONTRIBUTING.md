@@ -24,7 +24,7 @@ Every workspace lives under `packages/`, and infrastructure lives in
 | API routes, authorization, persistence (Hono on Workers, with D1 and R2), in a folder per feature | `packages/api/src` |
 | Request and response schemas for every route | `packages/validators/src` |
 | Typed client for those routes | `packages/api-client/src` |
-| Client runtime without React (the API, its version, connectivity) that hosts build on | [`packages/client-sdk`](packages/client-sdk/README.md) |
+| Client runtime without React (the API, its version, connectivity, offline work) that hosts build on | [`packages/client-sdk`](packages/client-sdk/README.md) |
 | Database schema | `packages/api/migrations` |
 | Built-in form templates and their seed migrations | `packages/api/templateLibrary`, [residential template library](docs/residential-template-library.md) |
 | Application screens, in one folder per feature, and the host interface each shell fills in | `packages/app/src` |
@@ -185,9 +185,12 @@ it.
 - Give state whose fields change together one union and one reducer, as
   `shared/cursorPagesState.ts` does: tag each request in its events so only
   the request in flight can finish it, and test the transitions directly.
-- Show errors with `errorMessage` from `shared/errors.ts` or with
+- Show errors with `errorMessage` from `@balebase/client-sdk` or with
   `ErrorToast` from `billing/ErrorToast.tsx`, which links to Billing when an
   upgrade resolves the error.
+- Reach work done on the device through `balebase().offline`; its storage,
+  sync queue, and form state machine live in the SDK, and `offline/` holds
+  only the hooks and screens over them.
 - Add a workspace section with a route in `workspace/workspaceRoutes.tsx` and
   a page and sidebar item in `workspace/WorkspaceShell.tsx`.
 - Build paths with the `workspace/workspacePaths.ts` helpers, match a section

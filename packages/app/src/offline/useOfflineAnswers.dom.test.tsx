@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
+import type { OfflineForm } from "@balebase/client-sdk";
 import { act, useState } from "react";
 import { installDom } from "../testing/dom";
-import type { OfflineForm } from "./offlineStore";
 import {
   type Edit,
   type OfflineAnswerStorage,

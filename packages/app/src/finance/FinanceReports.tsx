@@ -1,3 +1,4 @@
+import { errorMessage } from "@balebase/client-sdk";
 import {
   Banner,
   Button,
@@ -15,7 +16,6 @@ import type {
 } from "@balebase/validators/finance";
 import { useEffect, useState } from "react";
 import { balebase } from "../balebase";
-import { errorMessage } from "../shared/errors";
 import { countLabel, formatCalendarDate } from "../shared/labels";
 import { financeOverviewPath } from "../workspace/workspacePaths";
 import {
