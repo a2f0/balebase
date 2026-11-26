@@ -10,6 +10,10 @@ it("binds every member, so screens can pass them on as callbacks", () => {
   for (const [name, member] of Object.entries(offline)) {
     expect([name, typeof member]).toEqual([name, "function"]);
   }
+  // A method on the prototype would lose `this` when passed on.
+  expect(Object.getOwnPropertyNames(Object.getPrototypeOf(offline))).toEqual([
+    "constructor",
+  ]);
   expect(Object.keys(offline)).toContain("sync");
   expect(Object.keys(offline)).not.toContain("change");
 });

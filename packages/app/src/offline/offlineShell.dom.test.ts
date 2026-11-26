@@ -23,18 +23,13 @@ it("rejects at once in a browser without service workers", async () => {
   );
 });
 
-it("resolves once the service worker is active, which the 15 seconds cannot undo", async () => {
+it("resolves once the service worker is active, and stops its timer", async () => {
   using timers = holdTimers(15_000);
   serviceWorkers(Promise.resolve());
-  await expect(waitForOfflineShell()).resolves.toBeUndefined();
-  let late = false;
-  void waitForOfflineShell().catch(() => {
-    late = true;
-  });
-  // The service worker answers first; the 15 seconds pass after.
-  await Bun.sleep(0);
-  await timers.fire();
-  expect(late).toBe(false);
+  const waiting = waitForOfflineShell();
+  expect(timers.pending).toBe(1);
+  await expect(waiting).resolves.toBeUndefined();
+  expect(timers.pending).toBe(0);
 });
 
 it("rejects with what kept the service worker from activating", async () => {
@@ -47,6 +42,7 @@ it("gives up after 15 seconds of downloading", async () => {
   using timers = holdTimers(15_000);
   serviceWorkers(new Promise(() => {}));
   const waiting = waitForOfflineShell();
+  expect(timers.pending).toBe(1);
   let outcome: unknown;
   waiting.catch((cause: unknown) => {
     outcome = cause;

@@ -95,7 +95,8 @@
               "@balebase/api": "Do not import from the API Worker package",
               "@balebase/app-capacitor": "Do not import from the native app shell",
               "@balebase/app-web": "Do not import from the web app shell",
-              "@balebase/website": "Do not import from the website deployment target"
+              "@balebase/website": "Do not import from the website deployment target",
+              "@balebase/client-sdk/testing": "Test fixtures only: its raw offline writes skip the form state machine and the sync queue"
             }
           }
         }
@@ -141,7 +142,8 @@
                   "@balebase/api": "Do not import from the API Worker package",
                   "@balebase/app-capacitor": "Do not import from the native app shell",
                   "@balebase/app-web": "Do not import from the web app shell",
-                  "@balebase/website": "Do not import from the website deployment target"
+                  "@balebase/website": "Do not import from the website deployment target",
+                  "@balebase/client-sdk/testing": "Test fixtures only: its raw offline writes skip the form state machine and the sync queue"
                 },
                 "patterns": [
                   {
@@ -174,7 +176,8 @@
                   "@balebase/api": "Do not import from the API Worker package",
                   "@balebase/app-capacitor": "Do not import from the native app shell",
                   "@balebase/app-web": "Do not import from the web app shell",
-                  "@balebase/website": "Do not import from the website deployment target"
+                  "@balebase/website": "Do not import from the website deployment target",
+                  "@balebase/client-sdk/testing": "Test fixtures only: its raw offline writes skip the form state machine and the sync queue"
                 },
                 "patterns": [
                   {
@@ -225,6 +228,29 @@
           },
           "style": {
             "noExcessiveLinesPerFile": "off"
+          }
+        }
+      }
+    },
+    // Tests and browser fixtures may seed a device through the SDK's
+    // fixtures-only entry; nothing else may.
+    {
+      "includes": ["packages/app/browser/**", "**/*.test.ts", "**/*.test.tsx"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                // Overrides replace rule options, so repeat the root paths.
+                "paths": {
+                  "@balebase/api": "Do not import from the API Worker package",
+                  "@balebase/app-capacitor": "Do not import from the native app shell",
+                  "@balebase/app-web": "Do not import from the web app shell",
+                  "@balebase/website": "Do not import from the website deployment target"
+                }
+              }
+            }
           }
         }
       }
