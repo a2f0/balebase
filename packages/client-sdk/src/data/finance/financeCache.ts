@@ -113,13 +113,22 @@ export function clears(cleared: Cleared, scope: CacheScope) {
  */
 const pageTimeoutMs = 60_000;
 
+/** What a feed page that takes too long fails with. */
+const pageTimeoutMessage = "Downloading transactions timed out. Try again.";
+
+/**
+ * What a Finance summary that takes too long fails with: the app bounds its
+ * summary request with `withPageTimeout` and this message.
+ */
+export const summaryTimeoutMessage = "Loading finances timed out. Try again.";
+
 /**
  * `work`, or an error with `message` once it takes longer than a feed page
  * may. The message defaults to a feed page's.
  */
 export function withPageTimeout<T>(
   work: Promise<T>,
-  message = "Downloading transactions timed out. Try again.",
+  message = pageTimeoutMessage,
 ): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error(message)), pageTimeoutMs);

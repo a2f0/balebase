@@ -232,8 +232,11 @@
         }
       }
     },
-    // Tests and browser fixtures may seed a device through the SDK's
-    // fixtures-only entry; nothing else may.
+    // Tests and the app's browser fixtures may seed a device through the
+    // SDK's fixtures-only entry; nothing else may. The shells' browser
+    // fixtures (app-web, app-capacitor) test their platform code and never
+    // seed a device, so this is app-only on purpose: add a shell's own path,
+    // such as packages/app-web/browser/**, only for a fixture that must.
     {
       "includes": ["packages/app/browser/**", "**/*.test.ts", "**/*.test.tsx"],
       "linter": {

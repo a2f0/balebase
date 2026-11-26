@@ -20,6 +20,13 @@ const scope = { userId: user.id, organizationId: "org-1" };
 const key = balebase().offline.scopeKey(scope);
 // Seeds the device directly, sharing the SDK's storage and subscribers.
 const store = new OfflineStore(apiUrl);
+// `seed` writes through this store and everything else reads through the
+// SDK, so both must key the same workspace; otherwise the seeded workspace
+// is one nothing reads, and no test would say why.
+if (store.scopeKey(scope) !== key)
+  throw new Error(
+    "The offline fixture's store keys workspaces differently from the SDK.",
+  );
 const project = {
   id: "project-1",
   name: "Site",
