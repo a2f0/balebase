@@ -90,6 +90,19 @@ describe("auth", () => {
     );
     expect(balebase.apiVersion.current).toBe("9.9.9");
   });
+
+  it("sends auth calls to the page's origin, like typed calls, without one", async () => {
+    const sent: string[] = [];
+    const balebase = new Balebase({
+      fetch: async (input) => {
+        sent.push(input instanceof Request ? input.url : String(input));
+        return Response.json(null);
+      },
+    });
+    await balebase.api.session.me();
+    await balebase.auth.getSession();
+    expect(sent).toEqual(["/api/me", "/api/auth/get-session"]);
+  });
 });
 
 describe("API version", () => {
