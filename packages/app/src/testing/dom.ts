@@ -160,6 +160,10 @@ export function holdTimers(delay: number) {
     for (const spy of spies) spy.mockRestore();
   };
   return {
+    /** How many held timers have been neither run nor cleared. */
+    get pending() {
+      return held.size;
+    },
     /** Runs the timers held so far, then settles. */
     async fire() {
       const due = [...held.values()];

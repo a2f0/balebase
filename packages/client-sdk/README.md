@@ -85,6 +85,11 @@ refuses an identity confirmed before the last lock (`accessEpoch`).
   so one tab drains at a time.
 - `subscribe` reports each change made in this tab.
 
+Every member is bound, so screens can pass one on as a callback. Test
+fixtures that seed a device directly use `OfflineStore` from
+`@balebase/client-sdk/testing`, which writes without the form state machine
+or the sync queue; hosts never need it.
+
 The form state machine (`offlineFormState.ts`) and its helpers, such as
 `formWrites`, `offlineAnswers`, and `answerBase`, are exported for screens
 that show a form's progress. The database name, version, and key shapes, the
@@ -124,8 +129,9 @@ hosts, and use outside a browser.
 ## Layout
 
 `src/Balebase.ts` is the composition root and `src/index.ts` the public entry
-point. Each facade with its own subsystem has a folder in `src/client/` whose
-`index.ts` is the facade, such as `offline/` and `finance/`; runtime state the
-facade holds lives in `src/client/runtime/`. Pure domain types and helpers,
+point; `src/testing.ts` is the fixtures-only entry. Each facade with its own
+subsystem has a folder in `src/client/` whose `index.ts` is the facade, such
+as `offline/` and `finance/`; runtime state the facade holds lives in
+`src/client/runtime/`. Pure domain types and helpers,
 such as the offline form state machine, form progress, and the transaction
 cache's contracts, live in `src/data/`.

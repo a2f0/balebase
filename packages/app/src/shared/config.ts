@@ -1,8 +1,10 @@
 import { nativeHost } from "../host";
 
+// Trimmed as the SDK trims it, so anything built from it (such as a test
+// fixture's offline store) keys the same saved data.
 export const apiUrl = (
   import.meta.env.VITE_API_URL ?? "http://localhost:8787"
-).replace(/\/$/, "");
+).replace(/\/+$/, "");
 
 export const websiteUrl = (
   import.meta.env.VITE_WEBSITE_URL ?? "https://balebase.com"

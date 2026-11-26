@@ -4,8 +4,10 @@
  */
 export function waitForOfflineShell() {
   if (!("serviceWorker" in navigator))
-    throw new Error(
-      "Offline reopening requires a supported browser with service workers enabled.",
+    return Promise.reject(
+      new Error(
+        "Offline reopening requires a supported browser with service workers enabled.",
+      ),
     );
   return new Promise<void>((resolve, reject) => {
     const timer = window.setTimeout(
