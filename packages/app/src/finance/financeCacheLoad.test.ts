@@ -3,7 +3,6 @@ import {
   ApiError,
   type CacheScope,
   SignedOut,
-  summaryTimeoutMessage,
   type TransactionStore,
 } from "@balebase/client-sdk";
 import type {
@@ -98,6 +97,8 @@ async function pastPageTimeout<T>(load: () => Promise<T>) {
   } finally {
     spy.mockRestore();
   }
+  // A load that set none would wait out the test runner instead.
+  expect(due.length).toBeGreaterThan(0);
   for (const expire of due.splice(0)) expire();
   return loading;
 }
@@ -332,7 +333,7 @@ describe("loading cached finances", () => {
           summary: () => new Promise<FinanceData>(() => {}),
         }),
       ),
-    ).rejects.toThrow(summaryTimeoutMessage);
+    ).rejects.toThrow("Loading finances timed out. Try again.");
   });
 
   it("brings the saved copy up to date through the pull it is given", async () => {

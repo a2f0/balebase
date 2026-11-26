@@ -117,8 +117,8 @@ const pageTimeoutMs = 60_000;
 const pageTimeoutMessage = "Downloading transactions timed out. Try again.";
 
 /**
- * What a Finance summary that takes too long fails with; a load bounds it
- * as a feed page is.
+ * What a Finance summary that takes too long fails with: the app bounds its
+ * summary request with `withPageTimeout` and this message.
  */
 export const summaryTimeoutMessage = "Loading finances timed out. Try again.";
 
