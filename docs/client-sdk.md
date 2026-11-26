@@ -53,7 +53,8 @@ endpoint with a `timeoutMs` (offline sync and job output reads) rejects with a
 `TimeoutError` `DOMException` when it runs out. To end requests sooner, such
 as when the screen that asked for them closes, call them through
 `api.withSignal(signal)`: each then ends at whichever comes first, the
-signal's abort (an `AbortError`) or its own timeout.
+signal's abort (rejecting with its reason, an `AbortError` unless `abort`
+was given another) or its own timeout.
 
 Requests default to `credentials: "include"`; this does not sign the user in.
 The browser must already have a valid API session cookie. The API's CORS

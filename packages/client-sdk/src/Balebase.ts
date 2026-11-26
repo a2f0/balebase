@@ -50,8 +50,9 @@ export class Balebase {
         `apiBaseUrl must be an http(s) URL with no query or credentials, such as https://api.balebase.com, not "${apiBaseUrl}".`,
       );
     }
-    const { apiKey } = options;
-    if (apiKey !== undefined && !apiKey.trim())
+    // A key read from a file can end in a newline, which no header allows.
+    const apiKey = options.apiKey?.trim();
+    if (apiKey === "")
       throw new Error("apiKey is blank: pass an API key, or leave it unset.");
     if (
       apiKey !== undefined &&

@@ -89,6 +89,16 @@ describe("API requests", () => {
     expect(sent).toEqual([null, "Bearer tlk_test_key"]);
   });
 
+  it("sends a key read with a trailing newline without it", async () => {
+    const { fetch, sent } = recordRequests(() => Response.json({ user: null }));
+    await new Balebase({
+      apiBaseUrl,
+      apiKey: "tlk_test_key\r\n",
+      fetch,
+    }).api.session.me();
+    expect(sent[0]?.headers.get("Authorization")).toBe("Bearer tlk_test_key");
+  });
+
   it("refuses a blank API key, such as an environment variable set empty", () => {
     for (const apiKey of ["", "  "]) {
       expect(() => new Balebase({ apiBaseUrl, apiKey })).toThrow(
@@ -122,7 +132,11 @@ describe("API requests", () => {
       fetch,
     });
     await balebase.api.session.me();
-    expect(sent[0]?.url).toBe("https://api.balebase.com./v1/api/me");
+    await balebase.auth.getSession();
+    expect(sent.map(({ url }) => url)).toEqual([
+      "https://api.balebase.com./v1/api/me",
+      "https://api.balebase.com./v1/api/auth/get-session",
+    ]);
     expect(sent[0]?.headers.get("Authorization")).toBe("Bearer tlk_test_key");
     expect(
       balebase.offline.scopeKey({ organizationId: "org", userId: "user" }),

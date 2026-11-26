@@ -16,7 +16,9 @@ import type { ApiFetch } from "../runtime/apiFetch";
 export function createBalebaseAuthClient(apiBaseUrl: string, fetch: ApiFetch) {
   return createAuthClient({
     // Without an origin, Better Auth uses the page's, as the API client does.
-    baseURL: apiBaseUrl || undefined,
+    // Better Auth takes a base URL with a path as its whole route prefix, so
+    // a proxy's path must come with the auth routes' own.
+    baseURL: apiBaseUrl ? `${apiBaseUrl}/api/auth` : undefined,
     fetchOptions: {
       customFetchImpl: (input, init) => fetch(input, init),
     },
