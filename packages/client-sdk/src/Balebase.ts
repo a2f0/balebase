@@ -7,7 +7,11 @@ import {
 import { FinanceCache } from "./client/finance";
 import { Offline } from "./client/offline";
 import { OfflineStore } from "./client/offline/offlineStore";
-import { type ApiFetch, createApiFetch } from "./client/runtime/apiFetch";
+import {
+  type ApiFetch,
+  type ApiKeyScope,
+  createApiFetch,
+} from "./client/runtime/apiFetch";
 import { ApiVersion } from "./client/runtime/apiVersion";
 import { Network } from "./client/runtime/network";
 
@@ -55,13 +59,6 @@ export class Balebase {
     const apiKey = options.apiKey?.trim();
     if (apiKey === "")
       throw new Error("apiKey is blank: pass an API key, or leave it unset.");
-    if (
-      apiKey !== undefined &&
-      !sendsSecretsSafely(apiBaseUrl || location.origin)
-    )
-      throw new Error(
-        "apiKey needs an https apiBaseUrl, or http to localhost, 127.0.0.1, or [::1]: over http elsewhere the key would cross the network unencrypted.",
-      );
     const transport = {
       apiVersion: this.apiVersion,
       fetch: options.fetch,
@@ -70,15 +67,10 @@ export class Balebase {
     this.fetch = createApiFetch({
       ...transport,
       apiKey:
-        apiKey === undefined
-          ? undefined
-          : // Outside a browser, apiBaseUrl is set (checked above).
-            {
-              origin: new URL(apiBaseUrl || location.origin).origin,
-              value: apiKey,
-            },
+        apiKey === undefined ? undefined : apiKeyScope(apiBaseUrl, apiKey),
     });
-    // Better Auth's routes are session-only, so they never get the key.
+    // `fetch` withholds the key from Better Auth's routes too; the auth
+    // client never holds it at all, whatever URLs it builds.
     this.#authFetch = createApiFetch({ ...transport, apiKey: undefined });
     this.#apiBaseUrl = apiBaseUrl;
     this.api = new ApiClient({ baseUrl: apiBaseUrl, fetch: this.fetch });
@@ -124,13 +116,28 @@ function isApiBase(url: string) {
 }
 
 /**
- * Whether a secret sent to `base` stays encrypted or on this machine: https,
- * or http to a loopback address, as a local API is.
+ * Where an API key may go: under `apiBaseUrl`, or the page's origin without
+ * one. Refuses a page that is not served over http(s), such as a file://
+ * page, a srcdoc or data: frame, or a custom scheme, whose origin names no
+ * web host to limit the key to (browsers spell it "null", "file://", or the
+ * scheme's). Refuses a base the key would cross the network to unencrypted.
+ * Outside a browser, apiBaseUrl is set (`Balebase` checks first), and it is
+ * always http(s).
  */
-function sendsSecretsSafely(base: string) {
-  const { hostname, protocol } = new URL(base);
-  return (
-    protocol === "https:" ||
-    ["localhost", "127.0.0.1", "[::1]"].includes(hostname)
-  );
+function apiKeyScope(apiBaseUrl: string, value: string): ApiKeyScope {
+  const base = apiBaseUrl || location.origin;
+  const url = base === "null" ? undefined : new URL(base);
+  if (url === undefined || !/^https?:$/.test(url.protocol))
+    throw new Error(
+      "Set apiBaseUrl to use apiKey: this page is not served over http(s) (as for a file:// page, a srcdoc or data: frame, or a custom scheme), so the key has no API origin to go to.",
+    );
+  // https, or http to a loopback address, as a local API is.
+  if (
+    url.protocol !== "https:" &&
+    !["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)
+  )
+    throw new Error(
+      "apiKey needs an https apiBaseUrl, or http to localhost, 127.0.0.1, or [::1]: over http elsewhere the key would cross the network unencrypted.",
+    );
+  return { origin: url.origin, path: url.pathname.replace(/\/$/, ""), value };
 }

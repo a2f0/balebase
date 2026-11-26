@@ -51,7 +51,10 @@ it("reads the session, refetches it, and stops watching after the last reader le
 
   // Better Auth stops watching the session (focus, connectivity, other
   // tabs) once the store unmounts, which the SDK's docs rely on: nothing to
-  // dispose.
+  // dispose. This spies on removeEventListener, so a Better Auth that
+  // removes its listeners by aborting an AbortSignal instead would fail it
+  // while teardown still works: check how it removes them before reading a
+  // failure as a leak.
   const fromWindow = spyOn(window, "removeEventListener");
   const fromDocument = spyOn(document, "removeEventListener");
   try {

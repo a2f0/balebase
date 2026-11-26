@@ -74,6 +74,35 @@ const sources = {
 
 const ids = (data: FinanceData) => data.transactions.map(({ id }) => id).sort();
 
+/**
+ * Starts `load` with the SDK's 60-second page timeouts held, then lets the
+ * ones it set expire; settles as the load does. Only timers set while the
+ * load starts are held, so later work runs on real timers.
+ */
+async function pastPageTimeout<T>(load: () => Promise<T>) {
+  const due: (() => void)[] = [];
+  const realSetTimeout = globalThis.setTimeout;
+  const spy = spyOn(globalThis, "setTimeout").mockImplementation(((
+    handler: () => void,
+    delay?: number,
+  ) => {
+    if (delay !== 60_000) return realSetTimeout(handler, delay);
+    due.push(handler);
+    return 0;
+  }) as unknown as typeof setTimeout);
+  let loading: Promise<T>;
+  try {
+    loading = load();
+    await Bun.sleep(0);
+  } finally {
+    spy.mockRestore();
+  }
+  // A load that set none would wait out the test runner instead.
+  expect(due.length).toBeGreaterThan(0);
+  for (const expire of due.splice(0)) expire();
+  return loading;
+}
+
 describe("loading cached finances", () => {
   it("clears the saved copy for a refused feed even while the summary is down", async () => {
     const store = balebase().financeCache.memoryStore();
@@ -285,50 +314,26 @@ describe("loading cached finances", () => {
   it("shows the saved copy once a stalled summary times out", async () => {
     const store = balebase().financeCache.memoryStore();
     await loadFinance(store, scope, true, sources);
-    const timeouts: (() => void)[] = [];
-    const realSetTimeout = globalThis.setTimeout;
-    const spy = spyOn(globalThis, "setTimeout").mockImplementation(((
-      handler: () => void,
-      delay?: number,
-    ) => {
-      if (delay !== 60_000) return realSetTimeout(handler, delay);
-      timeouts.push(handler);
-      return 0;
-    }) as unknown as typeof setTimeout);
-    const load = loadFinance(store, scope, true, {
-      ...sources,
-      summary: () => new Promise<FinanceData>(() => {}),
-    });
-    await Bun.sleep(0);
-    spy.mockRestore();
-    for (const fire of timeouts.splice(0)) fire();
-    const loaded = await load;
+    const loaded = await pastPageTimeout(() =>
+      loadFinance(store, scope, true, {
+        ...sources,
+        summary: () => new Promise<FinanceData>(() => {}),
+      }),
+    );
     expect(ids(loaded.data)).toEqual(["a", "b"]);
     expect(loaded.savedAt).toBeString();
   });
 
   it("names the summary when it times out with no saved copy to show", async () => {
     const store = balebase().financeCache.memoryStore();
-    const timeouts: (() => void)[] = [];
-    const realSetTimeout = globalThis.setTimeout;
-    const spy = spyOn(globalThis, "setTimeout").mockImplementation(((
-      handler: () => void,
-      delay?: number,
-    ) => {
-      if (delay !== 60_000) return realSetTimeout(handler, delay);
-      timeouts.push(handler);
-      return 0;
-    }) as unknown as typeof setTimeout);
-    const load = loadFinance(store, scope, false, {
-      ...sources,
-      summary: () => new Promise<FinanceData>(() => {}),
-    });
-    await Bun.sleep(0);
-    spy.mockRestore();
-    for (const fire of timeouts.splice(0)) fire();
-    await expect(load).rejects.toThrow(
-      "Loading finances timed out. Try again.",
-    );
+    await expect(
+      pastPageTimeout(() =>
+        loadFinance(store, scope, false, {
+          ...sources,
+          summary: () => new Promise<FinanceData>(() => {}),
+        }),
+      ),
+    ).rejects.toThrow("Loading finances timed out. Try again.");
   });
 
   it("brings the saved copy up to date through the pull it is given", async () => {

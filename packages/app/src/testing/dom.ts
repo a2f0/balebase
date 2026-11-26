@@ -12,6 +12,16 @@ interface Mounted {
   unmount: () => Promise<void>;
 }
 
+/**
+ * How long a file waits after its last test before removing the window.
+ * Some libraries finish tearing down on a short timer after unmounting:
+ * TipTap destroys an editor, and removes its window listeners, 1 ms later.
+ * A timer due after theirs runs after them, so this must stay longer than
+ * the longest such delay; otherwise that teardown runs in the next file,
+ * with no window.
+ */
+const lateTeardownMs = 5;
+
 interface DomOptions {
   /** Window members to install beyond the document basics. */
   globals?: (window: Window) => Record<string, unknown>;
@@ -68,13 +78,10 @@ export function installDom({ globals, url }: DomOptions = {}) {
   const respond = installFetch();
 
   afterAll(async () => {
-    // Some libraries finish tearing down on a short timer after unmounting:
-    // TipTap destroys an editor, and removes its window listeners, 1 ms
-    // later. A timer due after theirs runs after them, so wait for one while
-    // the window still exists; otherwise that teardown runs in the next
-    // file, with no window. Longer delays, such as a nanostores store's 1 s
-    // unmount, need `holdTimers` in the file that starts them.
-    await new Promise((resolve) => setTimeout(resolve, 5));
+    // Lets late library teardown run while the window still exists. Longer
+    // delays, such as a nanostores store's 1 s unmount, need `holdTimers` in
+    // the file that starts them.
+    await new Promise((resolve) => setTimeout(resolve, lateTeardownMs));
     for (const [key, descriptor] of saved) {
       if (descriptor) Object.defineProperty(globalThis, key, descriptor);
       else Reflect.deleteProperty(globalThis, key);

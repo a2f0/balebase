@@ -71,6 +71,31 @@ describe("API requests", () => {
     expect(sent).toEqual(["Bearer tlk_test_key", "Bearer tlk_test_key", null]);
   });
 
+  it("sends no key where a page's <base> sends a relative URL", async () => {
+    // A page's fetch resolves relative URLs against document.baseURI.
+    const sent: (string | null)[] = [];
+    Object.defineProperty(globalThis, "document", {
+      configurable: true,
+      value: { baseURI: "https://cdn.test/assets/" },
+    });
+    try {
+      await onPage("https://app.test", async () => {
+        const balebase = new Balebase({
+          apiKey: "tlk_test_key",
+          fetch: async (_input, init) => {
+            sent.push(new Headers(init?.headers).get("Authorization"));
+            return Response.json({});
+          },
+        });
+        await balebase.fetch("/api/me");
+        await balebase.fetch("https://app.test/api/me");
+      });
+    } finally {
+      Reflect.deleteProperty(globalThis, "document");
+    }
+    expect(sent).toEqual([null, "Bearer tlk_test_key"]);
+  });
+
   it("sends no key to a page's own origin when the API is elsewhere", async () => {
     // `fetch` resolves a relative URL against the page, not the API.
     const sent: (string | null)[] = [];
@@ -117,6 +142,43 @@ describe("API requests", () => {
       api.stop();
       storage.stop();
     }
+  });
+
+  it("keeps the key on a redirect within the API's origin, wherever it leads", async () => {
+    // Pins the runtime's fetch, as the docs describe: redirects are the
+    // transport's to follow, and a same-origin one keeps Authorization.
+    const api = Bun.serve({
+      fetch: (request) =>
+        new URL(request.url).pathname === "/api/objects/1"
+          ? Response.redirect("/api/auth/get-session", 302)
+          : Response.json({
+              authorization: request.headers.get("Authorization"),
+            }),
+      port: 0,
+    });
+    try {
+      const balebase = new Balebase({
+        apiBaseUrl: api.url.origin,
+        apiKey: "tlk_test_key",
+      });
+      const response = await balebase.fetch(`${api.url}api/objects/1`);
+      expect(new URL(response.url).pathname).toBe("/api/auth/get-session");
+      expect(await response.json()).toEqual({
+        authorization: "Bearer tlk_test_key",
+      });
+    } finally {
+      api.stop();
+    }
+  });
+
+  it("refuses a key for an API base whose path cannot be decoded", () => {
+    // The key could never be shown to go under such a base.
+    expect(
+      () => new Balebase({ apiBaseUrl: "https://api.test/%E0", apiKey: "k" }),
+    ).toThrow("apiBaseUrl's path has a malformed percent-escape");
+    expect(
+      () => new Balebase({ apiBaseUrl: "https://api.test/%E0" }),
+    ).not.toThrow();
   });
 
   it("sends a key read with a trailing newline without it", async () => {
@@ -171,10 +233,108 @@ describe("API requests", () => {
       "https://api.balebase.com./v1/api/me",
       "https://api.balebase.com./v1/api/auth/get-session",
     ]);
-    expect(sent[0]?.headers.get("Authorization")).toBe("Bearer tlk_test_key");
+    expect(sent.map(({ headers }) => headers.get("Authorization"))).toEqual([
+      "Bearer tlk_test_key",
+      null,
+    ]);
     expect(
       balebase.offline.scopeKey({ organizationId: "org", userId: "user" }),
     ).toBe(JSON.stringify(["https://API.balebase.com./v1", "user", "org"]));
+  });
+
+  it("sends no key to Better Auth's routes, however they are sent", async () => {
+    const { fetch, sent } = recordRequests();
+    const balebase = new Balebase({
+      apiBaseUrl,
+      apiKey: "tlk_test_key",
+      fetch,
+    });
+    await balebase.fetch("https://api.test/api/auth/get-session");
+    await balebase.fetch(new Request("https://api.test/api/auth"));
+    await balebase.fetch("https://api.test/api/me/../auth/sign-out");
+    // The API routes the decoded path, and proxies often merge slashes.
+    await balebase.fetch("https://api.test/api/%61uth/get-session");
+    await balebase.fetch("https://api.test//api//auth/get-session");
+    await balebase.fetch("https://api.test/api%2Fauth/get-session");
+    await balebase.fetch("https://api.test/api/me/..%2fauth/sign-out");
+    await balebase.fetch("https://api.test/api/objects/%E0%A4%A");
+    // Only the routes under /api/auth are Better Auth's.
+    await balebase.fetch("https://api.test/api/authors");
+    await balebase.fetch("https://api.test/auth/get-session");
+    expect(sent.map(({ headers }) => headers.get("Authorization"))).toEqual([
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      // A path that cannot be decoded may be Better Auth's.
+      null,
+      "Bearer tlk_test_key",
+      "Bearer tlk_test_key",
+    ]);
+  });
+
+  it("sends the key only under a proxy's path to the API", async () => {
+    const { fetch, sent } = recordRequests();
+    const balebase = new Balebase({
+      apiBaseUrl: "https://example.test/balebase/",
+      apiKey: "tlk_test_key",
+      fetch,
+    });
+    await balebase.api.session.me();
+    await balebase.fetch("https://example.test/balebase/api/objects/1");
+    await balebase.fetch("https://example.test/balebase/api/auth/get-session");
+    await balebase.fetch("https://example.test/balebase//api/auth/get-session");
+    await balebase.fetch("https://example.test/api/me");
+    await balebase.fetch("https://example.test/balebase-old/api/me");
+    await balebase.fetch("https://example.test/balebase/../other/api/me");
+    expect(sent.map(({ url }) => url)[0]).toBe(
+      "https://example.test/balebase/api/me",
+    );
+    expect(sent.map(({ headers }) => headers.get("Authorization"))).toEqual([
+      "Bearer tlk_test_key",
+      "Bearer tlk_test_key",
+      null,
+      null,
+      null,
+      null,
+      null,
+    ]);
+  });
+
+  it("asks for an API origin when a page with a key has none", async () => {
+    // A page's location has its URL's origin: "null" for srcdoc and data:
+    // frames and custom schemes, and for file: in some browsers. Chrome names
+    // a file: page's origin "file://", and WKWebView a custom scheme's, but
+    // none is served over http(s).
+    for (const page of [
+      new URL("file:///Users/sam/report.html"),
+      new URL("about:srcdoc"),
+      new URL("data:text/html,<p>Report</p>"),
+      new URL("capacitor://localhost/"),
+      new URL("ftp://localhost/"),
+      { href: "file:///Users/sam/report.html", origin: "file://" },
+      { href: "capacitor://localhost/", origin: "capacitor://localhost" },
+    ]) {
+      Object.defineProperty(globalThis, "location", {
+        configurable: true,
+        value: page,
+      });
+      try {
+        expect(() => new Balebase({ apiKey: "tlk_k" })).toThrow(
+          "Set apiBaseUrl to use apiKey: this page is not served over http(s)",
+        );
+        // Without a key, nothing about the page's origin matters.
+        expect(() => new Balebase()).not.toThrow();
+        expect(
+          () => new Balebase({ apiBaseUrl, apiKey: "tlk_k" }),
+        ).not.toThrow();
+      } finally {
+        Reflect.deleteProperty(globalThis, "location");
+      }
+    }
   });
 
   it("sends an API key over https or to this machine only", async () => {
