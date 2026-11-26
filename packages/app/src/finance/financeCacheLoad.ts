@@ -5,7 +5,7 @@ import {
   refused,
   SignedOut,
   type TransactionStore,
-  withTimeout,
+  withPageTimeout,
 } from "@balebase/client-sdk";
 import type {
   FinanceData,
@@ -117,7 +117,7 @@ async function loadOnce(
   const requests = [
     // Checked on arrival, so a stalled feed cannot delay the mismatch; and
     // bounded, so a stalled summary cannot keep the load from ending.
-    withTimeout(fetchSummary()).then((data) => {
+    withPageTimeout(fetchSummary()).then((data) => {
       if (
         scope &&
         (data.organizationId !== scope.organizationId ||

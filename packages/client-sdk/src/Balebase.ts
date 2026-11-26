@@ -36,7 +36,8 @@ export class Balebase {
       fetch: options.fetch,
       nativeOrigin: options.nativeOrigin,
     });
-    const apiBaseUrl = options.apiBaseUrl ?? "";
+    // One spelling, since saved data on the device is keyed by it.
+    const apiBaseUrl = (options.apiBaseUrl ?? "").replace(/\/+$/, "");
     this.api = new ApiClient({ baseUrl: apiBaseUrl, fetch: this.fetch });
     this.financeCache = new FinanceCache(apiBaseUrl);
     this.network = new Network(options.network);

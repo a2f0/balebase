@@ -26,7 +26,7 @@ export {
   refused,
   SignedOut,
   type TransactionStore,
-  withTimeout,
+  withPageTimeout,
 } from "./data/finance/financeCache";
 export {
   formItems,

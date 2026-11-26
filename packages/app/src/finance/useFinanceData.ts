@@ -249,16 +249,14 @@ function useTransactionStore(scope: CacheScope | undefined) {
   const userId = scope?.userId;
   const organizationId = scope?.organizationId;
   return useMemo(() => {
+    const { financeCache } = balebase();
     const persistent =
       userId && organizationId && typeof indexedDB !== "undefined";
     return {
       scope: userId && organizationId ? { organizationId, userId } : undefined,
       value: persistent
-        ? fallBack(
-            balebase().financeCache.indexedDbStore(),
-            balebase().financeCache.memoryStore(),
-          )
-        : balebase().financeCache.memoryStore(),
+        ? fallBack(financeCache.indexedDbStore(), financeCache.memoryStore())
+        : financeCache.memoryStore(),
     };
   }, [organizationId, userId]);
 }

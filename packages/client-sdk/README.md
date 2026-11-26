@@ -23,7 +23,7 @@ Every field of `BalebaseOptions` is optional.
 
 | Option | Use |
 | --- | --- |
-| `apiBaseUrl` | The API origin, without a trailing slash or `/api` |
+| `apiBaseUrl` | The API origin, without `/api`; trailing slashes are dropped, since saved data is keyed by it |
 | `fetch` | The transport; defaults to the global `fetch`, looked up per request |
 | `nativeOrigin` | A native shell's WebView origin, sent as `X-Balebase-Native-Origin` |
 | `network` | A `NetworkStatusSource`, such as the OS's on a device; defaults to the browser's |

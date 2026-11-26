@@ -10,7 +10,7 @@ import {
   refused,
   SignedOut,
   type TransactionStore,
-  withTimeout,
+  withPageTimeout,
 } from "../../data/finance/financeCache";
 import { savedSummary } from "../../data/finance/savedSummary";
 import { randomId } from "../../data/shared/randomId";
@@ -560,7 +560,7 @@ async function pullPages(
   const epoch = await pinned;
   for (;;) {
     const from = { cursor: (await store.position(scope)).cursor, epoch };
-    const page = await withTimeout(fetchPage(from.cursor));
+    const page = await withPageTimeout(fetchPage(from.cursor));
     // The session's account or organization changed under this pull (as
     // another tab switching accounts).
     if (

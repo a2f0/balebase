@@ -202,6 +202,16 @@ describe("pulling transactions", () => {
     expect((await store.read(scope)).transactions).toEqual([]);
   });
 
+  it("catches up nothing where the browser keeps no IndexedDB", async () => {
+    expect(typeof indexedDB).toBe("undefined");
+    let requested = false;
+    await cache.catchUp(scope, async () => {
+      requested = true;
+      return page("1", false, [row("never")]);
+    });
+    expect(requested).toBe(false);
+  });
+
   it("clears the saved copy when a record page is refused, and only then", async () => {
     const cleared: CacheScope[] = [];
     const clear = async (which: CacheScope) => {
