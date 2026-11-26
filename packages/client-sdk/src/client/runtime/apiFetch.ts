@@ -63,15 +63,19 @@ export function createApiFetch(options: ApiFetchOptions): ApiFetch {
   };
 }
 
-/** Better Auth's routes, which take a session and never an API key. */
+/**
+ * Better Auth's routes, which take a session and never an API key: the
+ * API's mount in `packages/api/src/app.ts`.
+ */
 const authRoutes = "/api/auth";
 
 /**
  * Whether `input` goes under the key's base, to a route an API key may
  * reach. Paths compare as `fetch` sends them, with dot segments resolved;
  * the route, as the API matches it, with percent-escapes decoded, so
- * `/api/%61uth` is Better Auth's too. A route that cannot be decoded gets no
- * key.
+ * `/api/%61uth` is Better Auth's too. A route with a malformed escape gets
+ * no key, whatever route it is: the API decodes around the bad escape, so
+ * it may be Better Auth's. The typed client never sends one.
  */
 function receivesKey(input: RequestInfo | URL, key: ApiKeyScope) {
   const url = urlOf(input);
