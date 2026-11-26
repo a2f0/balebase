@@ -1,5 +1,6 @@
 import {
   type CacheScope,
+  type FinanceCache,
   type FinanceSummary,
   OrganizationChanged,
   refused,
@@ -11,7 +12,6 @@ import type {
   FinanceData,
   FinanceTransactionChanges,
 } from "@balebase/validators/finance";
-import { balebase } from "../balebase";
 import { newestFirst } from "./financeTransactions";
 
 /** Raised once when a store gives up on IndexedDB for memory. */
@@ -78,6 +78,8 @@ interface LoadSources {
   summary: () => Promise<FinanceData>;
   changes: (cursor: string | null) => Promise<FinanceTransactionChanges>;
   onProgress: (saved: number) => void;
+  /** Brings a saved copy up to date: the SDK's `financeCache.pull`. */
+  pull: FinanceCache["pull"];
 }
 
 /**
@@ -105,7 +107,7 @@ async function loadOnce(
   store: TransactionStore,
   scope: CacheScope | undefined,
   keepTransactions: boolean,
-  { changes, onProgress, summary: fetchSummary }: LoadSources,
+  { changes, onProgress, pull, summary: fetchSummary }: LoadSources,
 ): Promise<{ data: FinanceData; savedAt?: string | undefined }> {
   const cacheScope = scope ?? anyOrganization;
   // A refusal elsewhere (another tab) after this point keeps this load's
@@ -113,11 +115,14 @@ async function loadOnce(
   const { epoch, saved: hasCopy } = await store.position(cacheScope);
   // Other pages keep a saved copy current too, so what they change (such
   // as deleting a bank's data) reaches it.
-  const pull = keepTransactions || hasCopy;
+  const pulling = keepTransactions || hasCopy;
   const requests = [
     // Checked on arrival, so a stalled feed cannot delay the mismatch; and
     // bounded, so a stalled summary cannot keep the load from ending.
-    withPageTimeout(fetchSummary()).then((data) => {
+    withPageTimeout(
+      fetchSummary(),
+      "Loading finances timed out. Try again.",
+    ).then((data) => {
       if (
         scope &&
         (data.organizationId !== scope.organizationId ||
@@ -126,8 +131,8 @@ async function loadOnce(
         throw new OrganizationChanged();
       return data;
     }),
-    pull
-      ? balebase().financeCache.pull(
+    pulling
+      ? pull(
           cacheScope,
           store,
           changes,
@@ -148,7 +153,7 @@ async function loadOnce(
     if (summary.status === "rejected") throw summary.reason;
     if (!latest) throw failure;
     // A saved copy keeps the categories and accounts this page changed.
-    if (pull) await store.saveSummary(cacheScope, latest, epoch);
+    if (pulling) await store.saveSummary(cacheScope, latest, epoch);
     return { data: { ...latest, nextCursor: null, transactions: [] } };
   }
   if (latest) await store.saveSummary(cacheScope, latest, epoch);

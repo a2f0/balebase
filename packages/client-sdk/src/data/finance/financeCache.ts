@@ -113,13 +113,16 @@ export function clears(cleared: Cleared, scope: CacheScope) {
  */
 const pageTimeoutMs = 60_000;
 
-/** `work`, or a timeout error once it takes longer than a feed page may. */
-export function withPageTimeout<T>(work: Promise<T>): Promise<T> {
+/**
+ * `work`, or an error with `message` once it takes longer than a feed page
+ * may. The message defaults to a feed page's.
+ */
+export function withPageTimeout<T>(
+  work: Promise<T>,
+  message = "Downloading transactions timed out. Try again.",
+): Promise<T> {
   return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(
-      () => reject(new Error("Downloading transactions timed out. Try again.")),
-      pageTimeoutMs,
-    );
+    const timer = setTimeout(() => reject(new Error(message)), pageTimeoutMs);
     work.then(
       (value) => {
         clearTimeout(timer);
