@@ -32,10 +32,12 @@ it("resolves once the service worker is active, and stops its timer", async () =
   expect(timers.pending).toBe(0);
 });
 
-it("rejects with what kept the service worker from activating", async () => {
+it("rejects with what kept the service worker from activating, and stops its timer", async () => {
+  using timers = holdTimers(15_000);
   const cause = new Error("Registration failed");
   serviceWorkers(Promise.reject(cause));
   await expect(waitForOfflineShell()).rejects.toBe(cause);
+  expect(timers.pending).toBe(0);
 });
 
 it("gives up after 15 seconds of downloading", async () => {
