@@ -1,4 +1,4 @@
-import type { IssueFilters } from "@balebase/api-client";
+import type { IssueFilters } from "@balebase/client-sdk";
 import {
   Banner,
   Button,
@@ -16,8 +16,8 @@ import type {
 } from "@balebase/validators/finance";
 import { useCallback, useMemo, useState } from "react";
 import { ActivityFeed } from "../activity/ActivityFeed";
+import { balebase } from "../balebase";
 import { IssueList } from "../issues/IssueList";
-import { api } from "../shared/apiClient";
 import { useAction } from "../shared/useAction";
 import { transactionIssuePath } from "../workspace/workspacePaths";
 import { FinanceTransactionRow } from "./FinanceTransactionHistory";
@@ -133,7 +133,7 @@ export function FinanceTransactionPage({
 function useTransaction(id: string, givenScope: CacheScope | undefined) {
   const loaded = useGuardedLoad(
     givenScope,
-    useCallback(() => api.finance.transaction(id), [id]),
+    useCallback(() => balebase().api.finance.transaction(id), [id]),
     "Could not load transaction.",
   );
   const { guard, scope, setData } = loaded;
@@ -153,7 +153,7 @@ function useTransaction(id: string, givenScope: CacheScope | undefined) {
   ) {
     await action.run(async () => {
       const { annotation } = await guard(
-        api.finance.updateTransactionAnnotation(id, input),
+        balebase().api.finance.updateTransactionAnnotation(id, input),
       );
       updateTransaction({ annotation });
       setExpanded(undefined);
@@ -163,7 +163,7 @@ function useTransaction(id: string, givenScope: CacheScope | undefined) {
   function catchUp() {
     return guard(
       catchUpSavedTransactions(scope, (cursor) =>
-        api.finance.transactionChanges(cursor),
+        balebase().api.finance.transactionChanges(cursor),
       ),
     ).catch(() => {
       // A refusal has cleared the page; anything else waits for a load.
@@ -171,7 +171,9 @@ function useTransaction(id: string, givenScope: CacheScope | undefined) {
   }
   async function categorize(_: FinanceTransaction, categoryId: string | null) {
     await action.run(async () => {
-      await guard(api.finance.setTransactionCategory(id, categoryId));
+      await guard(
+        balebase().api.finance.setTransactionCategory(id, categoryId),
+      );
       updateTransaction({ expenseCategoryId: categoryId });
     });
     void catchUp();

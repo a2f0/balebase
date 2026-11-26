@@ -1,4 +1,4 @@
-import type { FinanceFilters } from "@balebase/api-client";
+import type { FinanceFilters } from "@balebase/client-sdk";
 import {
   Badge,
   Banner,

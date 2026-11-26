@@ -1,4 +1,4 @@
-import type { FinanceFilters } from "@balebase/api-client";
+import type { FinanceFilters } from "@balebase/client-sdk";
 import { Button } from "@balebase/ui/react";
 import type { ExpenseCategory } from "@balebase/validators/finance";
 import { FinancePeriodFilter } from "./FinancePeriodFilter";

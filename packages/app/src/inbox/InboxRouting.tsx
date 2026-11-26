@@ -1,7 +1,7 @@
 import { Button, confirmDialog, Toast } from "@balebase/ui/react";
 import type { DomainClaim } from "@balebase/validators/inbox";
 import { Fragment, useEffect, useRef, useState } from "react";
-import { api } from "../shared/apiClient";
+import { balebase } from "../balebase";
 import { useAction } from "../shared/useAction";
 import { useClipboard } from "../shared/useClipboard";
 import { useLoad } from "../shared/useLoad";
@@ -56,7 +56,7 @@ export function useInboxCopyGate() {
 
 function RoutingSettings({ copyGate }: { copyGate: CopyGate }) {
   const settings = useLoad(
-    api.inbox.routing,
+    balebase().api.inbox.routing,
     "Could not load inbox addresses.",
   );
   useRoutingRefresh(settings.reload);
@@ -90,7 +90,9 @@ function RoutingSettings({ copyGate }: { copyGate: CopyGate }) {
       )}
       <DomainForm
         busy={busy}
-        onSubmit={(domain) => change(() => api.inbox.claimDomain(domain))}
+        onSubmit={(domain) =>
+          change(() => balebase().api.inbox.claimDomain(domain))
+        }
       />
       {settings.data?.domains.map((claim) => (
         <DomainRecord
@@ -99,13 +101,15 @@ function RoutingSettings({ copyGate }: { copyGate: CopyGate }) {
           copyGate={copyGate}
           mx={settings.data?.directMx ?? null}
           busy={busy}
-          verify={() => change(() => api.inbox.verifyDomain(claim.id))}
+          verify={() =>
+            change(() => balebase().api.inbox.verifyDomain(claim.id))
+          }
           release={() =>
             remove(
               "Release domain",
               `Remove the domain claim for ${claim.domain}?`,
               async () => {
-                await api.inbox.releaseDomain(claim.id);
+                await balebase().api.inbox.releaseDomain(claim.id);
                 settings.setData(
                   (current) =>
                     current && {
@@ -123,7 +127,7 @@ function RoutingSettings({ copyGate }: { copyGate: CopyGate }) {
       <MailboxForm
         busy={busy}
         onSubmit={(name, address) =>
-          change(() => api.inbox.bindMailbox(name, address))
+          change(() => balebase().api.inbox.bindMailbox(name, address))
         }
       />
       {settings.data?.mailboxes.map((box) => (
@@ -140,7 +144,7 @@ function RoutingSettings({ copyGate }: { copyGate: CopyGate }) {
               void remove(
                 "Disconnect address",
                 `Stop receiving mail for ${box.address}? Existing messages stay in this inbox.`,
-                () => api.inbox.disconnectMailbox(box.id),
+                () => balebase().api.inbox.disconnectMailbox(box.id),
               )
             }
           >
@@ -292,7 +296,7 @@ function DomainRecord({
               disabled={busy || mxCheck.busy}
               onClick={() =>
                 void mxCheck.run(
-                  () => api.inbox.checkMx(claim.id),
+                  () => balebase().api.inbox.checkMx(claim.id),
                   ({ ready }) =>
                     ready
                       ? "Public MX records match."

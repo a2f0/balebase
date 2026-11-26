@@ -1,5 +1,5 @@
-import { ApiError } from "@balebase/api-client";
-import { api } from "../shared/apiClient";
+import { ApiError } from "@balebase/client-sdk";
+import { balebase } from "../balebase";
 
 /**
  * Login repairs Plaid confirmed in this browser that the API has not yet
@@ -70,7 +70,7 @@ function forget(repair: PendingRepair) {
 /** Sends one report; false when it should be tried again later. */
 async function send(repair: PendingRepair) {
   try {
-    await api.finance.reportPlaidLoginRepair(
+    await balebase().api.finance.reportPlaidLoginRepair(
       repair.connectionId,
       repair.linkToken,
     );

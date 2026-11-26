@@ -25,8 +25,8 @@ import {
 } from "@balebase/validators/rules";
 import { type FormEvent, useCallback, useState } from "react";
 import { ActivityFeed } from "../activity/ActivityFeed";
+import { balebase } from "../balebase";
 import { AppButtonLink, AppLink } from "../shared/AppLink";
-import { api } from "../shared/apiClient";
 import { countLabel } from "../shared/labels";
 import { useAction } from "../shared/useAction";
 import { useLoad } from "../shared/useLoad";
@@ -54,7 +54,8 @@ export function OrganizationAccessSettings({
     reload: load,
   } = useLoad(
     useCallback(
-      async () => (organizationId ? api.organizationGroups.list() : undefined),
+      async () =>
+        organizationId ? balebase().api.organizationGroups.list() : undefined,
       [organizationId],
     ),
     "Could not load groups.",
@@ -171,7 +172,7 @@ function GroupCreateForm({
     const nextName = name.trim();
     if (!nextName) return;
     await run(async () => {
-      const { id } = await api.organizationGroups.create({
+      const { id } = await balebase().api.organizationGroups.create({
         capabilities: [],
         name: nextName,
         userIds: [],
@@ -489,7 +490,7 @@ function useGroupEditor(
     await perform(
       "save",
       async () => {
-        await api.organizationGroups.update(group.id, {
+        await balebase().api.organizationGroups.update(group.id, {
           capabilities: organizationCapabilities.filter((capability) =>
             capabilities.has(capability),
           ),
@@ -506,7 +507,7 @@ function useGroupEditor(
   const remove = async () => {
     if (!(await confirmGroupDeletion(group.name))) return;
     await perform("delete", async () => {
-      await api.organizationGroups.delete(group.id);
+      await balebase().api.organizationGroups.delete(group.id);
       onNavigate(organizationGroupPath());
       await onChanged();
     });

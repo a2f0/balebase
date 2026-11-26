@@ -8,13 +8,13 @@ import {
   useRef,
   useState,
 } from "react";
+import { balebase } from "../balebase";
 import {
   EmployeeForms,
   inRequirementScope,
   type RequirementScope,
 } from "../employeeForms/EmployeeForms";
 import { AppButtonLink } from "../shared/AppLink";
-import { api } from "../shared/apiClient";
 import { errorMessage } from "../shared/errors";
 import { useFocusWhenFolded } from "../shared/useFocusWhenFolded";
 import { myDocumentsPath } from "../workspace/workspacePaths";
@@ -242,7 +242,7 @@ function useRequirementSummary(data: OrganizationPeopleData | undefined) {
   const load = useCallback(async (access: string) => {
     const request = ++sequence.current;
     try {
-      const { requirements } = await api.employeeForms.list();
+      const { requirements } = await balebase().api.employeeForms.list();
       if (request !== sequence.current) return;
       setSummary(({ version }) => ({
         access,

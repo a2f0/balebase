@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { ApiError } from "@balebase/api-client";
+import { ApiError } from "@balebase/client-sdk";
 import { errorMessage, errorNotice, UpgradeRequiredError } from "./errors";
 
 describe("error messages", () => {

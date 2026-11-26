@@ -1,10 +1,11 @@
+import type { ApiClient } from "@balebase/client-sdk";
 import type { JobRun } from "@balebase/validators/adminJobs";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api } from "../shared/apiClient";
+import { balebase } from "../balebase";
 import { errorMessage } from "../shared/errors";
 
-type History = Awaited<ReturnType<typeof api.adminJobs.runs>>;
-type Query = Parameters<typeof api.adminJobs.runs>[0];
+type History = Awaited<ReturnType<ApiClient["adminJobs"]["runs"]>>;
+type Query = Parameters<ApiClient["adminJobs"]["runs"]>[0];
 type HistoryState = {
   data?: History;
   error?: string | undefined;
@@ -52,7 +53,7 @@ function historyLoader(
     publish({ loadingMore: Boolean(cursor), refreshing: !cursor });
     try {
       if (cursor) {
-        const next = await api.adminJobs.runs({ ...query, cursor });
+        const next = await balebase().api.adminJobs.runs({ ...query, cursor });
         if (!active) return true;
         data = {
           ...next,
@@ -103,7 +104,7 @@ async function refreshHistory(
   oldest: JobRun | undefined,
   active: () => boolean,
 ) {
-  const data = await api.adminJobs.runs(query);
+  const data = await balebase().api.adminJobs.runs(query);
   let pageCount = 1;
   while (
     active() &&
@@ -111,7 +112,7 @@ async function refreshHistory(
     oldest &&
     newerThan(data.runs.at(-1), oldest)
   ) {
-    const next = await api.adminJobs.runs({
+    const next = await balebase().api.adminJobs.runs({
       ...query,
       cursor: data.nextCursor,
     });

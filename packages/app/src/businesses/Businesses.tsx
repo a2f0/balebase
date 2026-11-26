@@ -20,7 +20,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { api } from "../shared/apiClient";
+import { balebase } from "../balebase";
 import { errorMessage } from "../shared/errors";
 import { ListRow, type ListRowItem } from "../shared/ListRow";
 import { countLabel, formatCalendarDate } from "../shared/labels";
@@ -80,7 +80,10 @@ function BusinessListPage({
   const load = useCallback(async () => {
     dispatch({ type: "loadStarted" });
     try {
-      dispatch({ type: "loaded", data: await api.businesses.list() });
+      dispatch({
+        type: "loaded",
+        data: await balebase().api.businesses.list(),
+      });
     } catch (cause) {
       dispatch({
         type: "loadFailed",
@@ -241,7 +244,9 @@ function BusinessCreateForm({
     event.preventDefault();
     setBusy(true);
     try {
-      const result = await api.businesses.create(businessInput(form));
+      const result = await balebase().api.businesses.create(
+        businessInput(form),
+      );
       setForm(emptyBusinessForm());
       onCreated(result.business);
     } catch (cause) {
@@ -363,7 +368,7 @@ function BusinessRow({
     if (!(await confirmBusinessDeletion(business))) return;
     dispatch({ type: "deleteStarted" });
     try {
-      await api.businesses.delete(business.id);
+      await balebase().api.businesses.delete(business.id);
       onDeleted(business.id);
     } catch (cause) {
       onError(errorMessage(cause, "Could not delete the business."));
@@ -474,7 +479,7 @@ function BusinessEditRow({
     event.preventDefault();
     setBusy(true);
     try {
-      const result = await api.businesses.update(
+      const result = await balebase().api.businesses.update(
         business.id,
         changedBusinessInput(baseline, form),
       );

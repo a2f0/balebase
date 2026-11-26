@@ -1,8 +1,7 @@
-import { ApiError } from "@balebase/api-client";
+import { ApiError } from "@balebase/client-sdk";
 import type { OfflineFormState } from "@balebase/validators/offline";
-import { api } from "../shared/apiClient";
+import { balebase } from "../balebase";
 import { errorMessage } from "../shared/errors";
-import { isOnline } from "../shared/network";
 import { formWrites, pushDue } from "./offlineFormState";
 import {
   activeOfflineKey,
@@ -34,14 +33,14 @@ function readyOfflineJob(workspace: OfflineWorkspace, now: number) {
  * (offline, another workspace, or another drain holding the lock).
  */
 export async function syncOfflineWorkspace(key: string): Promise<boolean> {
-  if (!isOnline() || activeOfflineKey() !== key) return false;
+  if (!balebase().network.online || activeOfflineKey() !== key) return false;
   if (!navigator.locks) return false; // Supported shells provide Web Locks; never race an unguarded drain.
   return navigator.locks.request(
     `balebase-sync:${key}`,
     { ifAvailable: true },
     async (lock) => {
       if (!lock) return false;
-      while (isOnline() && activeOfflineKey() === key) {
+      while (balebase().network.online && activeOfflineKey() === key) {
         const workspace = await readOfflineWorkspace(key);
         if (!workspace) return true;
         if (await queueDuePush(key, workspace)) continue;
@@ -102,10 +101,11 @@ async function send(
 ): Promise<OfflineFormState | undefined> {
   const operation = job.operation;
   if (operation.type !== "image")
-    return (await api.offline.apply(workspace.scope, operation)).form;
+    return (await balebase().api.offline.apply(workspace.scope, operation))
+      .form;
   const blob = await offlineImage(workspace.key, operation.id);
   const file = new File([blob], operation.filename, { type: blob.type });
-  await api.offline.uploadImage(
+  await balebase().api.offline.uploadImage(
     workspace.scope,
     operation.issueId,
     operation.id,

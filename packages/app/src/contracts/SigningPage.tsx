@@ -8,8 +8,8 @@ import {
 } from "@balebase/ui/react";
 import type { SigningField, SigningView } from "@balebase/validators/signing";
 import { useCallback, useState } from "react";
+import { balebase } from "../balebase";
 import { ApiDownload } from "../shared/ApiDownload";
-import { api } from "../shared/apiClient";
 import { formatCalendarDate } from "../shared/labels";
 import { useAction } from "../shared/useAction";
 import { useLoad } from "../shared/useLoad";
@@ -24,7 +24,7 @@ export function SigningPage({ token }: { token: string }) {
     error,
     setData: setView,
   } = useLoad(
-    useCallback(() => api.signing.get(token), [token]),
+    useCallback(() => balebase().api.signing.get(token), [token]),
     "This link could not be opened.",
   );
   return (
@@ -79,7 +79,7 @@ function useSigningSession(
   const finishWith = (work: () => Promise<unknown>) =>
     action.run(async () => {
       await work();
-      onFinished(await api.signing.get(token));
+      onFinished(await balebase().api.signing.get(token));
     });
   return {
     busy: action.busy,
@@ -87,13 +87,18 @@ function useSigningSession(
     decline: async () => {
       const reason = await askDeclineReason();
       if (reason === null) return;
-      void finishWith(() => api.signing.decline(token, reason));
+      void finishWith(() => balebase().api.signing.decline(token, reason));
     },
     dialog,
     error: action.error,
     finish: () =>
       finishWith(() =>
-        api.signing.sign(token, { consent, initials, signature, values }),
+        balebase().api.signing.sign(token, {
+          consent,
+          initials,
+          signature,
+          values,
+        }),
       ),
     initials,
     remaining,
@@ -138,7 +143,7 @@ function SigningSession({
         <div>
           <ApiDownload
             filename="contract.pdf"
-            href={api.signing.documentUrl(token)}
+            href={balebase().api.signing.documentUrl(token)}
             icon="download"
             size="sm"
           >
@@ -316,7 +321,7 @@ function SigningOutcome({ token, view }: { token: string; view: SigningView }) {
   const download = contract.status === "completed" && (
     <ApiDownload
       filename="signed-contract.pdf"
-      href={api.signing.finalUrl(token)}
+      href={balebase().api.signing.finalUrl(token)}
       icon="download"
       variant="primary"
     >
@@ -365,7 +370,9 @@ function SigningOutcome({ token, view }: { token: string; view: SigningView }) {
 }
 
 async function fetchSigningDocument(token: string) {
-  const response = await api.signing.document(token).catch(() => undefined);
+  const response = await balebase()
+    .api.signing.document(token)
+    .catch(() => undefined);
   if (!response) throw new Error("The document could not be loaded.");
   return response.arrayBuffer();
 }

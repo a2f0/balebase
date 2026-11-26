@@ -1,4 +1,4 @@
-import type { NetworkStatusSource } from "@balebase/app/host";
+import type { NetworkStatusSource } from "@balebase/client-sdk";
 import { Capacitor } from "@capacitor/core";
 import { type ConnectionStatus, Network } from "@capacitor/network";
 

@@ -17,8 +17,8 @@ import {
   useCallback,
   useState,
 } from "react";
+import { balebase } from "../balebase";
 import { AppLink } from "../shared/AppLink";
-import { api } from "../shared/apiClient";
 import { countLabel, formatDate } from "../shared/labels";
 import { useAction } from "../shared/useAction";
 import { useLoad } from "../shared/useLoad";
@@ -76,7 +76,7 @@ function AdminOrganizationList({
     reload,
     setData: setOrganizations,
   } = useLoad(
-    useCallback(() => api.adminOrganizations.list(), []),
+    useCallback(() => balebase().api.adminOrganizations.list(), []),
     "Could not load organizations.",
   );
   const lifecycle = useAdminOrganizationLifecycle(setOrganizations);
@@ -144,9 +144,10 @@ function useAdminOrganizationLifecycle(
     await update(
       { organizationId: organization.id, type: "delete" },
       async () => {
-        const deletion = await api.adminOrganizations.markForDeletion(
-          organization.id,
-        );
+        const deletion =
+          await balebase().api.adminOrganizations.markForDeletion(
+            organization.id,
+          );
         return {
           deletedAt: deletion.deletedAt,
           deletedByEmail: deletion.deletedByEmail,
@@ -163,7 +164,7 @@ function useAdminOrganizationLifecycle(
     await update(
       { organizationId: organization.id, type: "restore" },
       async () => {
-        await api.adminOrganizations.restore(organization.id);
+        await balebase().api.adminOrganizations.restore(organization.id);
         return {
           deletedAt: null,
           deletedByEmail: null,

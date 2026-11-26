@@ -19,8 +19,8 @@ import type { Person } from "@balebase/validators/fields";
 import type { LinkedEmail } from "@balebase/validators/inbox";
 import { type ReactNode, useCallback, useState } from "react";
 import { ActivityFeed } from "../activity/ActivityFeed";
+import { balebase } from "../balebase";
 import { LinkedEmailList } from "../inbox/LinkedEmailList";
-import { api } from "../shared/apiClient";
 import { countLabel, formatCalendarDate } from "../shared/labels";
 import { useAction } from "../shared/useAction";
 import { useLoad } from "../shared/useLoad";
@@ -38,7 +38,7 @@ function useEquipmentDetail(
   onNavigate: (pathname: string) => void,
 ) {
   const loaded = useLoad(
-    useCallback(() => api.equipment.get(id), [id]),
+    useCallback(() => balebase().api.equipment.get(id), [id]),
     "Could not load the equipment.",
   );
   const { reload, setData } = loaded;
@@ -47,21 +47,21 @@ function useEquipmentDetail(
 
   const save = (changes: Partial<EquipmentInput>, message: string) =>
     action.run(async () => {
-      const equipment = await api.equipment.update(id, changes);
+      const equipment = await balebase().api.equipment.update(id, changes);
       setData((current) => (current ? { ...current, equipment } : current));
     }, message);
 
   async function remove(item: EquipmentItem) {
     if (!(await confirmEquipmentDeletion(item))) return;
     await action.run(async () => {
-      await api.equipment.delete(id);
+      await balebase().api.equipment.delete(id);
       onNavigate(equipmentPath());
     });
   }
 
   const unlink = (email: LinkedEmail) =>
     action.run(async () => {
-      await api.inbox.unlink(email.id, email.linkId);
+      await balebase().api.inbox.unlink(email.id, email.linkId);
       await reload();
     });
   return {

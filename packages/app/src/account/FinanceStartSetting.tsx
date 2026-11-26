@@ -1,8 +1,8 @@
 import { Card, Field, Select, Toast } from "@balebase/ui/react";
 import { type FinancePeriod, financePeriods } from "@balebase/validators/rules";
 import { useEffect, useReducer, useRef } from "react";
+import { balebase } from "../balebase";
 import { financePeriodLabels, financePeriodOf } from "../finance/financePeriod";
-import { api } from "../shared/apiClient";
 import { errorMessage } from "../shared/errors";
 import {
   financeStartTransition,
@@ -38,13 +38,17 @@ export function FinanceStartSetting({
         <SettingSwitch
           label="Open Finance on uncategorized expenses"
           onSessionChanged={onSessionChanged}
-          save={(value) => api.accountSettings.updateFinanceStart(value)}
+          save={(value) =>
+            balebase().api.accountSettings.updateFinanceStart(value)
+          }
           saved={opensUncategorized}
         />
         <SettingSwitch
           label="Open Finance on transactions grouped by payee"
           onSessionChanged={onSessionChanged}
-          save={(value) => api.accountSettings.updateFinanceView(value)}
+          save={(value) =>
+            balebase().api.accountSettings.updateFinanceView(value)
+          }
           saved={opensByPayee}
         />
         <PeriodSetting
@@ -95,7 +99,8 @@ function PeriodSetting({
   saved: FinancePeriod;
 }) {
   const setting = useSettingSave(
-    (period: FinancePeriod) => api.accountSettings.updateFinancePeriod(period),
+    (period: FinancePeriod) =>
+      balebase().api.accountSettings.updateFinancePeriod(period),
     saved,
     onSessionChanged,
   );

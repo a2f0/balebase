@@ -9,9 +9,9 @@ import {
 } from "@balebase/ui/react";
 import type { EmployeeRequirement } from "@balebase/validators/employeeForms";
 import { useCallback } from "react";
+import { balebase } from "../balebase";
 import { usePaidFeaturesEnabled } from "../organizations/PaidFeatures";
 import { AppButtonLink } from "../shared/AppLink";
-import { api } from "../shared/apiClient";
 import { formatDate } from "../shared/labels";
 import { useAction } from "../shared/useAction";
 import { useLoad } from "../shared/useLoad";
@@ -34,7 +34,9 @@ export function ScreeningRequest({
   const paidFeaturesEnabled = usePaidFeaturesEnabled();
   const loaded = useLoad(
     useCallback(async () => {
-      const { requirements } = await api.employeeForms.list({ own: true });
+      const { requirements } = await balebase().api.employeeForms.list({
+        own: true,
+      });
       const current = requirements.find(
         (item) => item.id === requirementId && item.kind === "background_check",
       );

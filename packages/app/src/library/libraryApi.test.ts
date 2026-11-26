@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { api } from "../shared/apiClient";
+import { balebase } from "../balebase";
 import { installFetch } from "../testing/fetch";
 
 const respond = installFetch();
@@ -12,8 +12,8 @@ describe("library and link API", () => {
       return Response.json({ transactions: [] });
     });
 
-    await api.finance.searchTransactions("  $42.75 ");
-    await api.finance.searchTransactions(" ");
+    await balebase().api.finance.searchTransactions("  $42.75 ");
+    await balebase().api.finance.searchTransactions(" ");
     expect(urls.map((url) => new URL(url).search)).toEqual(["?q=%2442.75", ""]);
   });
 
@@ -25,8 +25,8 @@ describe("library and link API", () => {
     });
 
     const file = new File(["x"], "a.txt");
-    await api.objects.upload(file, "folder/1");
-    await api.objects.upload(file);
+    await balebase().api.objects.upload(file, "folder/1");
+    await balebase().api.objects.upload(file);
     expect(forms.map((form) => form.get("folderId"))).toEqual([
       "folder/1",
       null,

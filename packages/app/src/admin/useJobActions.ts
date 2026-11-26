@@ -2,7 +2,7 @@ import { confirmDialog, promptDialog } from "@balebase/ui/react";
 import type { JobDefinition, JobRun } from "@balebase/validators/adminJobs";
 import { cronProblem, describeCron } from "@balebase/validators/cron";
 import { useState } from "react";
-import { api } from "../shared/apiClient";
+import { balebase } from "../balebase";
 import { errorMessage } from "../shared/errors";
 import { useAction } from "../shared/useAction";
 
@@ -33,7 +33,7 @@ export function useJobActions({
     setJobId(job.id);
     const started = await action.run(async () => {
       try {
-        onRunStarted(await api.adminJobs.run(job.id, { dryRun }));
+        onRunStarted(await balebase().api.adminJobs.run(job.id, { dryRun }));
       } catch (cause) {
         const fallback = `Could not start the ${dryRun ? "dry run" : "job"}.`;
         throw new Error(
@@ -50,7 +50,7 @@ export function useJobActions({
     if (answer === null) return;
     await act(job, async () =>
       onJobChanged(
-        await api.adminJobs.saveSchedule(job.id, {
+        await balebase().api.adminJobs.saveSchedule(job.id, {
           cron: answer,
           enabled: job.schedule?.enabled ?? true,
         }),
@@ -78,7 +78,7 @@ export function useJobActions({
     if (!confirmed) return;
     await act(job, async () =>
       onJobChanged(
-        await api.adminJobs.saveSchedule(job.id, {
+        await balebase().api.adminJobs.saveSchedule(job.id, {
           cron: schedule.cron,
           enabled,
         }),

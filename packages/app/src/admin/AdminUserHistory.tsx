@@ -11,8 +11,8 @@ import {
 } from "@balebase/ui/react";
 import type { AdminUserHistoryEvent } from "@balebase/validators/adminUsers";
 import { useCallback, useState } from "react";
+import { balebase } from "../balebase";
 import { formatRoles } from "../organizations/organizationState";
-import { api } from "../shared/apiClient";
 import { InfiniteScroll } from "../shared/InfiniteScroll";
 import { formatDateTime } from "../shared/labels";
 import { useCursorPages } from "../shared/useCursorPages";
@@ -41,7 +41,7 @@ export function AdminUserHistory({
   const [user, setUser] = useState<{ email: string; name: string }>();
   const fetchPage = useCallback(
     async (cursor?: string) => {
-      const page = await api.adminUsers.history(userId, cursor);
+      const page = await balebase().api.adminUsers.history(userId, cursor);
       setUser(page.user);
       return { items: page.events, nextCursor: page.nextCursor };
     },

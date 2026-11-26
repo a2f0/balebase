@@ -1,5 +1,5 @@
 import type { PlaidLinkDiagnostics } from "@balebase/validators/finance";
-import { api } from "../shared/apiClient";
+import { balebase } from "../balebase";
 
 type LinkEvent = PlaidLinkDiagnostics["events"][number];
 
@@ -25,8 +25,8 @@ export function linkDiagnostics(session: PlaidLinkSession) {
     metadata: PlaidLinkExitMetadata,
   ) => {
     // Diagnostics are best effort; they must never block or fail the flow.
-    api.finance
-      .reportPlaidLinkDiagnostics({
+    balebase()
+      .api.finance.reportPlaidLinkDiagnostics({
         connectionId: session.connectionId ?? null,
         error: error && {
           displayMessage: text(error.display_message, 1000),

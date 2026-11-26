@@ -64,6 +64,8 @@ export class Transport {
       credentials: route.credentials ?? "include",
       method: route.method,
     };
+    if (route.timeoutMs !== undefined)
+      init.signal = AbortSignal.timeout(route.timeoutMs);
     if (route.body === "form") init.body = body as FormData;
     else if (route.body === "file") {
       const file = body as Blob;

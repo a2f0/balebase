@@ -18,9 +18,9 @@ import {
 } from "@balebase/validators/rules";
 import { type FormEvent, useCallback, useState } from "react";
 import { useHandlesBackgroundChecks } from "../backgroundChecks/BackgroundChecksAccess";
+import { balebase } from "../balebase";
 import { usePaidFeaturesEnabled } from "../organizations/PaidFeatures";
 import { AppLink } from "../shared/AppLink";
-import { api } from "../shared/apiClient";
 import { formatCalendarDate, formatDate } from "../shared/labels";
 import { useAction } from "../shared/useAction";
 import { useLoad } from "../shared/useLoad";
@@ -281,7 +281,7 @@ function RequirementAssignmentForm({
     event.preventDefault();
     if (!canSend) return;
     void action(async () => {
-      await api.employeeForms.create({ memberId }, drafts);
+      await balebase().api.employeeForms.create({ memberId }, drafts);
       setDrafts([]);
     }, "Requests sent.");
   }
@@ -307,7 +307,10 @@ function RequirementAssignmentForm({
  */
 export function useManagedRequirements() {
   const loaded = useLoad(
-    useCallback(async () => (await api.employeeForms.list()).requirements, []),
+    useCallback(
+      async () => (await balebase().api.employeeForms.list()).requirements,
+      [],
+    ),
     "Could not load requirements.",
   );
   const change = useAction("Could not update requirements.");
@@ -452,7 +455,7 @@ export function RequirementActions({
         onChange={(event) =>
           void action(
             () =>
-              api.employeeForms.update(requirement.id, {
+              balebase().api.employeeForms.update(requirement.id, {
                 dueDate: event.target.value,
               }),
             "Due date updated.",
@@ -466,7 +469,7 @@ export function RequirementActions({
           disabled={busy}
           onClick={() =>
             void action(
-              () => api.employeeForms.delete(requirement.id),
+              () => balebase().api.employeeForms.delete(requirement.id),
               "Requirement removed.",
             )
           }
@@ -566,7 +569,7 @@ function CheckrReportControl({
         disabled={busy}
         onClick={() =>
           void action(
-            () => api.employeeForms.refreshScreening(requirement.id),
+            () => balebase().api.employeeForms.refreshScreening(requirement.id),
             "Checkr status refreshed.",
           )
         }
@@ -624,7 +627,7 @@ function CheckrRequestControl({
           if (!stateCode) return;
           void action(
             () =>
-              api.employeeForms.requestScreening(
+              balebase().api.employeeForms.requestScreening(
                 requirement.id,
                 stateCode,
                 city,
@@ -697,7 +700,8 @@ function RequirementDocumentControl({
               const file = event.target.files?.[0];
               if (file) {
                 void action(
-                  () => api.employeeForms.upload(requirement.id, file),
+                  () =>
+                    balebase().api.employeeForms.upload(requirement.id, file),
                   "Form submitted.",
                 );
               }
@@ -749,7 +753,7 @@ function RequirementStatusControl({
       onChange={(event) =>
         void action(
           () =>
-            api.employeeForms.update(requirement.id, {
+            balebase().api.employeeForms.update(requirement.id, {
               documentRevision: reviewRevisionForStatus(
                 requirement.kind,
                 requirement.documentRevision,

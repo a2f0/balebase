@@ -5,7 +5,7 @@ import type {
 } from "@balebase/validators/contracts";
 import { contractLimits } from "@balebase/validators/rules";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api } from "../shared/apiClient";
+import { balebase } from "../balebase";
 import { useAction } from "../shared/useAction";
 import { addNavigationGuard } from "../workspace/navigationGuard";
 import { confirmDiscardChanges } from "../workspace/unsavedChanges";
@@ -138,7 +138,10 @@ function useDraftSaving({
     async (value: DraftInput) => {
       const saving = revision.current;
       onChanged(
-        await api.contracts.saveDraft(contractId, titled(value, untitled)),
+        await balebase().api.contracts.saveDraft(
+          contractId,
+          titled(value, untitled),
+        ),
       );
       if (revision.current !== saving) return false;
       unsaved.current = null;
@@ -189,7 +192,7 @@ function useDraftSaving({
     remove: async () => {
       if (!(await confirmContractDeletion(contract.title))) return;
       void run(async () => {
-        await api.contracts.delete(contractId);
+        await balebase().api.contracts.delete(contractId);
         unsaved.current = null;
         onDeleted();
       });
@@ -204,7 +207,7 @@ function useDraftSaving({
           setNotice("You edited the draft while it saved. Send it again.");
           return;
         }
-        onChanged(await api.contracts.send(contractId));
+        onChanged(await balebase().api.contracts.send(contractId));
       }),
   };
 }
@@ -247,8 +250,8 @@ function useSaveOnLeave({
     () => () => {
       const value = unsaved.current;
       if (!value) return;
-      void api.contracts
-        .saveDraft(contractId, titled(value, untitled))
+      void balebase()
+        .api.contracts.saveDraft(contractId, titled(value, untitled))
         .catch(() => undefined);
     },
     [contractId, unsaved, untitled],
@@ -549,5 +552,5 @@ function draftFrom(contract: ContractDetail): DraftInput {
 }
 
 async function fetchDocument(id: string) {
-  return (await api.contracts.document(id)).arrayBuffer();
+  return (await balebase().api.contracts.document(id)).arrayBuffer();
 }

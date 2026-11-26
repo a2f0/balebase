@@ -1,5 +1,5 @@
 import { describe, expect, it, spyOn } from "bun:test";
-import { ApiError } from "@balebase/api-client";
+import { ApiError } from "@balebase/client-sdk";
 import type {
   FinanceData,
   FinanceTransaction,

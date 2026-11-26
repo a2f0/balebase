@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { balebase } from "../balebase";
 import { lockOfflineWorkspace } from "../offline/offlineStore";
 import {
   createOrganizationSlug,
   resolveActiveOrganizationId,
   type WorkspaceOrganization,
 } from "../organizations/organizationState";
-import { api } from "../shared/apiClient";
 import { authClient } from "../shared/authClient";
 
 export interface OrganizationSession {
@@ -33,7 +33,7 @@ export function useWorkspaceOrganizations(
   // confirms the list; one for an account no longer signed in is ignored.
   const loadOrganizations = useCallback(async () => {
     const forUser = currentUser.current;
-    const listed = await api.organizationSettings.organizations();
+    const listed = await balebase().api.organizationSettings.organizations();
     if (currentUser.current !== forUser) return;
     setOrganizations(listed);
     setListedFor(forUser);

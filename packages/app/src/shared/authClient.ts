@@ -6,14 +6,16 @@ import {
   twoFactorClient,
 } from "better-auth/client/plugins";
 import { createAuthClient } from "better-auth/react";
-import { fetchApi } from "../apiVersion";
+import { balebase } from "../balebase";
 import { apiUrl } from "./config";
 
 export const authClient = createAuthClient({
   baseURL: apiUrl,
-  // Like the app's other API calls, go through fetchApi: it looks fetch up per
-  // request and records the API version each response names.
-  fetchOptions: { customFetchImpl: (input, init) => fetchApi(input, init) },
+  // Like the app's other API calls, go through the SDK's fetch: it looks fetch
+  // up per request, marks native requests, and records the API version.
+  fetchOptions: {
+    customFetchImpl: (input, init) => balebase().fetch(input, init),
+  },
   plugins: [
     inferAdditionalFields({
       user: {

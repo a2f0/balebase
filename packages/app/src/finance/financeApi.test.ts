@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { api } from "../shared/apiClient";
+import { balebase } from "../balebase";
 import { apiUrl } from "../shared/config";
 import { installFetch } from "../testing/fetch";
 
@@ -8,9 +8,15 @@ const respond = installFetch();
 describe("finance API", () => {
   it("requests expense reports for a range, or all time without one", async () => {
     const requested = await captureRequests(async () => {
-      await api.finance.expenseReport({ from: "2026-08-01", to: "2026-08-31" });
-      await api.finance.expenseReport({ from: null, to: null });
-      await api.finance.expenseReport({ from: "2026-01-01", to: null });
+      await balebase().api.finance.expenseReport({
+        from: "2026-08-01",
+        to: "2026-08-31",
+      });
+      await balebase().api.finance.expenseReport({ from: null, to: null });
+      await balebase().api.finance.expenseReport({
+        from: "2026-01-01",
+        to: null,
+      });
     });
     expect(requested).toEqual([
       `${apiUrl}/api/finance/reports/expenses?from=2026-08-01&to=2026-08-31`,
@@ -22,7 +28,7 @@ describe("finance API", () => {
   it("combines account, category, name, year, expense, and pagination filters", async () => {
     const cursor = JSON.stringify({ date: "2025-08-01", id: "txn/1" });
     const requested = await captureRequests(async () => {
-      await api.finance.data(
+      await balebase().api.finance.data(
         {
           accountIds: ["checking/1", "savings"],
           categorySlug: "meals-2",

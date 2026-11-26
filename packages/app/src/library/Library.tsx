@@ -32,10 +32,10 @@ import {
   useState,
 } from "react";
 import { ActivityFeed } from "../activity/ActivityFeed";
+import { balebase } from "../balebase";
 import { LinkedEmailList } from "../inbox/LinkedEmailList";
 import { ApiDownload } from "../shared/ApiDownload";
 import { AppButtonLink, AppLink } from "../shared/AppLink";
-import { api } from "../shared/apiClient";
 import { countLabel, formatBytes, formatShortDate } from "../shared/labels";
 import { useAction } from "../shared/useAction";
 import { useLoad } from "../shared/useLoad";
@@ -212,9 +212,9 @@ function useLibraryData(folderId: string | undefined) {
   const { data, error, reload } = useLoad(
     useCallback(async () => {
       const [folders, objects, detail] = await Promise.all([
-        api.libraryFolders.list(),
-        api.objects.list(folderId),
-        folderId ? api.libraryFolders.get(folderId) : undefined,
+        balebase().api.libraryFolders.list(),
+        balebase().api.objects.list(folderId),
+        folderId ? balebase().api.libraryFolders.get(folderId) : undefined,
       ]);
       return { detail, folders, objects };
     }, [folderId]),
@@ -256,27 +256,29 @@ function useLibraryActions(
     deleteFolder: async (detail: LibraryFolderDetail) => {
       if (!(await confirmFolderDeletion(detail.folder))) return;
       await action.run(async () => {
-        await api.libraryFolders.delete(detail.folder.id);
+        await balebase().api.libraryFolders.delete(detail.folder.id);
         onNavigate(libraryPath());
       });
     },
     error: action.error,
     folderForm,
     move: (object: StoredObject, destination: string | null) =>
-      run(() => api.objects.move(object.id, destination)),
-    remove: (object: StoredObject) => run(() => api.objects.delete(object.id)),
+      run(() => balebase().api.objects.move(object.id, destination)),
+    remove: (object: StoredObject) =>
+      run(() => balebase().api.objects.delete(object.id)),
     saveFolder: async (name: string) => {
       const saved = await run(() =>
         folderForm === "rename" && folderId
-          ? api.libraryFolders.rename(folderId, name)
-          : api.libraryFolders.create(name),
+          ? balebase().api.libraryFolders.rename(folderId, name)
+          : balebase().api.libraryFolders.create(name),
       );
       if (saved) setFolderForm(undefined);
     },
     setFolderForm,
     unlink: (email: LinkedEmail) =>
-      run(() => api.inbox.unlink(email.id, email.linkId)),
-    upload: (file: File) => run(() => api.objects.upload(file, folderId)),
+      run(() => balebase().api.inbox.unlink(email.id, email.linkId)),
+    upload: (file: File) =>
+      run(() => balebase().api.objects.upload(file, folderId)),
   };
 }
 
@@ -670,7 +672,7 @@ function FileCard({
             plain
             filename={object.filename}
             className="fileCardLink"
-            href={api.objects.downloadUrl(object.id)}
+            href={balebase().api.objects.downloadUrl(object.id)}
           >
             <div className="filePreview">
               <Icon name="document" size={28} strokeWidth={1.5} />

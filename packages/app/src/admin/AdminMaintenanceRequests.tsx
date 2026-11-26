@@ -10,7 +10,7 @@ import type {
   MaintenanceRequest,
 } from "@balebase/validators/adminJobs";
 import { useCallback } from "react";
-import { api } from "../shared/apiClient";
+import { balebase } from "../balebase";
 import { InfiniteScroll } from "../shared/InfiniteScroll";
 import { formatDateTime } from "../shared/labels";
 import { useCursorPages } from "../shared/useCursorPages";
@@ -31,7 +31,7 @@ export function AdminMaintenanceRequests({
 }) {
   const fetchPage = useCallback(
     async (cursor?: string) => {
-      const page = await api.adminJobs.requests({
+      const page = await balebase().api.adminJobs.requests({
         ...(jobId ? { jobId } : {}),
         ...(cursor ? { cursor } : {}),
       });

@@ -1,5 +1,5 @@
 import type { FinanceRuleMatchType } from "@balebase/validators/rules";
-import { api } from "../shared/apiClient";
+import { balebase } from "../balebase";
 import { countLabel } from "../shared/labels";
 
 /** A payee's new categorization rule, and whether it fills existing rows. */
@@ -28,7 +28,8 @@ export function createRuleAction(
 ): CreateRule {
   return (input) =>
     save(async () => {
-      const { applied } = await api.finance.createCategorizationRule(input);
+      const { applied } =
+        await balebase().api.finance.createCategorizationRule(input);
       rulesChanged.dispatchEvent(new Event("change"));
       return input.applyToExisting
         ? `Added a rule for “${input.payeeName}” and categorized ${countLabel(applied, "transaction")}.`

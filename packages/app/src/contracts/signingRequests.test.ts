@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { api } from "../shared/apiClient";
+import { balebase } from "../balebase";
 import { apiUrl } from "../shared/config";
 import { installFetch } from "../testing/fetch";
 
@@ -29,10 +29,10 @@ describe("signing requests", () => {
       signature: "data:image/png;base64,AA==",
       values: { f1: "Acme" },
     };
-    await api.signing.get("tok");
-    await api.signing.sign("tok", signature);
-    await api.signing.decline("tok", "Wrong rate");
-    await api.signing.document("tok");
+    await balebase().api.signing.get("tok");
+    await balebase().api.signing.sign("tok", signature);
+    await balebase().api.signing.decline("tok", "Wrong rate");
+    await balebase().api.signing.document("tok");
     expect(requests.map(({ method, url }) => `${method} ${url}`)).toEqual([
       `GET ${apiUrl}/api/signing/tok`,
       `POST ${apiUrl}/api/signing/tok/sign`,
@@ -45,10 +45,12 @@ describe("signing requests", () => {
     });
     expect(requests[1]?.body).toBe(JSON.stringify(signature));
     expect(requests[2]?.body).toBe(JSON.stringify({ reason: "Wrong rate" }));
-    expect(api.signing.documentUrl("tok")).toBe(
+    expect(balebase().api.signing.documentUrl("tok")).toBe(
       `${apiUrl}/api/signing/tok/document`,
     );
-    expect(api.signing.finalUrl("tok")).toBe(`${apiUrl}/api/signing/tok/final`);
+    expect(balebase().api.signing.finalUrl("tok")).toBe(
+      `${apiUrl}/api/signing/tok/final`,
+    );
   });
 
   it("surfaces the API's error message", async () => {
@@ -58,7 +60,7 @@ describe("signing requests", () => {
         { status: 404 },
       ),
     );
-    await expect(api.signing.get("tok")).rejects.toThrow(
+    await expect(balebase().api.signing.get("tok")).rejects.toThrow(
       "This signing link is no longer valid.",
     );
   });

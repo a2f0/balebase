@@ -1,0 +1,20 @@
+{
+  "name": "@balebase/client-sdk",
+  "version": "0.1.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "check": "bunx --bun --no-install tsc --noEmit",
+    "test": "bun test src"
+  },
+  "dependencies": {
+    "@balebase/api-client": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.4"
+  }
+}

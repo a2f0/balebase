@@ -24,7 +24,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { api } from "../shared/apiClient";
+import { balebase } from "../balebase";
 import { ListRow, type ListRowItem } from "../shared/ListRow";
 import { countLabel } from "../shared/labels";
 import { useLoad } from "../shared/useLoad";
@@ -64,7 +64,7 @@ export function FinanceCategoryRules({
   const load = useCallback(async () => {
     const request = ++latest.current;
     try {
-      return (await api.finance.categorizationRules()).rules;
+      return (await balebase().api.finance.categorizationRules()).rules;
     } catch (cause) {
       if (refused(cause) && mounted.current && request === latest.current)
         await refusedRef.current(cause);
@@ -180,12 +180,14 @@ function AddRuleForm({
     event.preventDefault();
     const sent = { categoryId, matchType, payeeName };
     const saved = await run(async () => {
-      const { applied } = await api.finance.createCategorizationRule({
-        applyToExisting,
-        categoryId,
-        matchType,
-        payeeName,
-      });
+      const { applied } = await balebase().api.finance.createCategorizationRule(
+        {
+          applyToExisting,
+          categoryId,
+          matchType,
+          payeeName,
+        },
+      );
       return applyToExisting
         ? `Added a rule for “${payeeName}” and categorized ${countLabel(applied, "transaction")}.`
         : `Added a rule for “${payeeName}”.`;
@@ -344,7 +346,9 @@ function RuleRow({
   }
   const apply = () =>
     run(async () => {
-      const { applied } = await api.finance.applyCategorizationRule(rule.id);
+      const { applied } = await balebase().api.finance.applyCategorizationRule(
+        rule.id,
+      );
       return `Categorized ${countLabel(applied, "transaction")} matching “${rule.payeeName}”.`;
     });
   async function remove() {
@@ -357,7 +361,7 @@ function RuleRow({
     });
     if (!confirmed) return;
     await run(async () => {
-      await api.finance.deleteCategorizationRule(rule.id);
+      await balebase().api.finance.deleteCategorizationRule(rule.id);
       return `Deleted the rule for “${rule.payeeName}”.`;
     });
   }
@@ -444,7 +448,7 @@ function EditRuleRow({
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const saved = await run(async () => {
-      await api.finance.updateCategorizationRule(rule.id, {
+      await balebase().api.finance.updateCategorizationRule(rule.id, {
         categoryId,
         matchType,
         payeeName,

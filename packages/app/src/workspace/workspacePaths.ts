@@ -1,4 +1,4 @@
-import type { FinanceFilters } from "@balebase/api-client";
+import type { FinanceFilters } from "@balebase/client-sdk";
 import type { OrganizationCapability } from "@balebase/validators/organizationGroups";
 
 /** The page at `base`, or a page beneath it. */

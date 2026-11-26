@@ -21,6 +21,11 @@ export type Endpoint<R extends Route> = EndpointBody<R> &
     method: R["method"];
     path: R["path"];
     response: R["response"] extends z.ZodType ? "json" : R["response"];
+    /**
+     * Abandons the request after this many milliseconds, for routes that can
+     * outlast a stalled connection the browser would otherwise wait on.
+     */
+    timeoutMs?: number;
     /** Carries the route's type for inference; never set. */
     readonly route?: R;
   };

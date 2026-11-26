@@ -5,7 +5,7 @@ import type {
   RenderTask,
 } from "pdfjs-dist";
 import { type MouseEvent, useEffect, useRef, useState } from "react";
-import { fetchApi } from "../apiVersion";
+import { balebase } from "../balebase";
 import { ApiDownload } from "../shared/ApiDownload";
 import { ApiImage } from "../shared/ApiImage";
 import { countLabel, formatBytes } from "../shared/labels";
@@ -362,7 +362,8 @@ function usePdfDocument(url: string, enabled: boolean): PdfState {
     let active = true;
     let task: PDFDocumentLoadingTask | undefined;
     setState({ loading: true });
-    fetchApi(url, { credentials: "include" })
+    balebase()
+      .fetch(url, { credentials: "include" })
       .then((response) => {
         if (!response.ok) throw new Error("The PDF could not be downloaded.");
         return response.arrayBuffer();

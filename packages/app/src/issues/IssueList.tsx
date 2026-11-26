@@ -1,4 +1,4 @@
-import type { IssueFilters } from "@balebase/api-client";
+import type { IssueFilters } from "@balebase/client-sdk";
 import {
   Badge,
   Banner,
@@ -8,8 +8,8 @@ import {
   LoadingState,
 } from "@balebase/ui/react";
 import { useCallback } from "react";
+import { balebase } from "../balebase";
 import { AppLink } from "../shared/AppLink";
-import { api } from "../shared/apiClient";
 import { InfiniteScroll } from "../shared/InfiniteScroll";
 import { formatLabel } from "../shared/labels";
 import { useCursorPages } from "../shared/useCursorPages";
@@ -24,7 +24,7 @@ export function IssueList({
 }) {
   const fetchPage = useCallback(
     async (cursor?: string) => {
-      const page = await api.issues.list(filters, cursor);
+      const page = await balebase().api.issues.list(filters, cursor);
       return { items: page.issues, nextCursor: page.nextCursor };
     },
     [filters],

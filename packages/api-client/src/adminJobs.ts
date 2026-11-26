@@ -45,6 +45,8 @@ const endpoints = {
     method: "GET",
     path: "/api/admin/jobs/runs/:runId",
     response: "json",
+    // Bounds a slow output read so the run page can offer a retry.
+    timeoutMs: 30_000,
   }),
 };
 

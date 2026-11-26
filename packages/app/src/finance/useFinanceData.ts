@@ -1,8 +1,8 @@
-import type { FinanceFilters } from "@balebase/api-client";
+import type { FinanceFilters } from "@balebase/client-sdk";
 import type { FinanceData } from "@balebase/validators/finance";
 import type { FinancePeriod } from "@balebase/validators/rules";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api } from "../shared/apiClient";
+import { balebase } from "../balebase";
 import { errorMessage } from "../shared/errors";
 import {
   fallBack,
@@ -145,11 +145,12 @@ function useCachedLoad(
         store.scope,
         keepTransactions,
         {
-          changes: (cursor) => api.finance.transactionChanges(cursor),
+          changes: (cursor) =>
+            balebase().api.finance.transactionChanges(cursor),
           onProgress: (saved) => {
             if (current()) setSaving(saved);
           },
-          summary: () => api.finance.summary(),
+          summary: () => balebase().api.finance.summary(),
         },
       );
       if (!current()) return;
@@ -306,7 +307,7 @@ function useSyncPolling(
     async function poll() {
       try {
         const statuses = await Promise.all(
-          ids.map((id) => api.finance.syncStatus(id)),
+          ids.map((id) => balebase().api.finance.syncStatus(id)),
         );
         // Reload history once a job finishes; retries only read small metadata.
         if (

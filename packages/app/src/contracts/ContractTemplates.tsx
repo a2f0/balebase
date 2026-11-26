@@ -26,8 +26,8 @@ import {
   useState,
 } from "react";
 import { ActivityFeed } from "../activity/ActivityFeed";
+import { balebase } from "../balebase";
 import { AppLink } from "../shared/AppLink";
-import { api } from "../shared/apiClient";
 import { formatDate } from "../shared/labels";
 import { useAction } from "../shared/useAction";
 import { useLoad } from "../shared/useLoad";
@@ -71,7 +71,7 @@ function TemplateList({
   onNavigate: (pathname: string) => void;
 }) {
   const list = useLoad(
-    useCallback(() => api.contractTemplates.list(), []),
+    useCallback(() => balebase().api.contractTemplates.list(), []),
     "Could not load contract templates.",
   );
   const templates = list.data;
@@ -83,7 +83,7 @@ function TemplateList({
   const busy = writer.busy || uploader.busy;
   function writeTemplate() {
     writer.start(async () => {
-      const created = await api.contractTemplates.createAuthored(
+      const created = await balebase().api.contractTemplates.createAuthored(
         writtenTemplateInput(newAuthoredDraft(), "Untitled template"),
       );
       if (!created) throw new Error("Contract template not found.");
@@ -97,7 +97,7 @@ function TemplateList({
     if (uploading.current) return;
     uploading.current = true;
     const uploaded = await uploader.run(async () => {
-      const template = await api.contractTemplates.upload(file);
+      const template = await balebase().api.contractTemplates.upload(file);
       if (!template) throw new Error("Contract template not found.");
       if (mounted.current) onNavigate(contractTemplatePath(template.id));
     });
@@ -378,8 +378,8 @@ function useTemplatePage(id: string, onNavigate: (pathname: string) => void) {
   const loaded = useLoad(
     useCallback(async () => {
       const [template, versions] = await Promise.all([
-        api.contractTemplates.get(id),
-        api.contractTemplates.versions(id),
+        balebase().api.contractTemplates.get(id),
+        balebase().api.contractTemplates.versions(id),
       ]);
       return { template, versions };
     }, [id]),
@@ -401,7 +401,7 @@ function useTemplatePage(id: string, onNavigate: (pathname: string) => void) {
   async function selectVersion(version: number) {
     if (!(await discard())) return;
     deletion.setError(undefined);
-    versionLoad.start(() => api.contractTemplates.get(id, version));
+    versionLoad.start(() => balebase().api.contractTemplates.get(id, version));
   }
   function saved(value: ContractTemplate) {
     versionLoad.reset();
@@ -420,7 +420,7 @@ function useTemplatePage(id: string, onNavigate: (pathname: string) => void) {
     if (!(await confirmTemplateDeletion())) return;
     versionLoad.reset();
     await deletion.run(async () => {
-      await api.contractTemplates.delete(id);
+      await balebase().api.contractTemplates.delete(id);
       if (mounted.current) onNavigate(contractTemplatePath());
     });
   }

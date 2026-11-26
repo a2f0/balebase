@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
-import { ApiError } from "@balebase/api-client";
+import { ApiError } from "@balebase/client-sdk";
 import type { FormTemplate } from "@balebase/validators/forms";
-import { api } from "../shared/apiClient";
+import { balebase } from "../balebase";
 import { apiUrl } from "../shared/config";
 import { installFetch } from "../testing/fetch";
 import {
@@ -21,8 +21,8 @@ describe("form template API", () => {
       return Response.json({ template });
     });
 
-    await api.forms.updateTemplate(template);
-    await api.forms.copyTemplate(template);
+    await balebase().api.forms.updateTemplate(template);
+    await balebase().api.forms.copyTemplate(template);
     const saved = {
       definition: template.definition,
       description: template.description,
@@ -105,7 +105,7 @@ describe("form issue API", () => {
     const failures = await uploadIssueImagesSequentially(
       "issue/id",
       [file],
-      api.forms.uploadIssueImage,
+      balebase().api.forms.uploadIssueImage,
       async (milliseconds) => {
         waits.push(milliseconds);
       },

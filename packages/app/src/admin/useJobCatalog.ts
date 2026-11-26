@@ -1,12 +1,12 @@
 import type { JobDefinition, JobRun } from "@balebase/validators/adminJobs";
 import { useCallback } from "react";
-import { api } from "../shared/apiClient";
+import { balebase } from "../balebase";
 import { useLoad } from "../shared/useLoad";
 
 /** The job catalog, which a schedule change updates in place. */
 export function useJobCatalog() {
   const loaded = useLoad(
-    useCallback(() => api.adminJobs.list(), []),
+    useCallback(() => balebase().api.adminJobs.list(), []),
     "Could not load jobs.",
   );
   const { setData } = loaded;

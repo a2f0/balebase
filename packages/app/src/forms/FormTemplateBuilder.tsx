@@ -26,8 +26,8 @@ import type {
 import { formLimits } from "@balebase/validators/rules";
 import { type ReactNode, useCallback, useState } from "react";
 import { ActivityFeed } from "../activity/ActivityFeed";
+import { balebase } from "../balebase";
 import { ErrorToast } from "../billing/ErrorToast";
-import { api } from "../shared/apiClient";
 import type { ErrorNotice } from "../shared/errors";
 import { countLabel, formatDate } from "../shared/labels";
 import { useAction } from "../shared/useAction";
@@ -61,18 +61,18 @@ interface BackLink {
 function loadTemplate(id: string, manageGlobal: boolean, version?: number) {
   if (manageGlobal) {
     return version === undefined
-      ? api.adminFormTemplates.get(id)
-      : api.adminFormTemplates.getVersion(id, version);
+      ? balebase().api.adminFormTemplates.get(id)
+      : balebase().api.adminFormTemplates.getVersion(id, version);
   }
   return version === undefined
-    ? api.forms.getTemplate(id)
-    : api.forms.getTemplateVersion(id, version);
+    ? balebase().api.forms.getTemplate(id)
+    : balebase().api.forms.getTemplateVersion(id, version);
 }
 
 function loadVersions(id: string, manageGlobal: boolean) {
   return manageGlobal
-    ? api.adminFormTemplates.listVersions(id)
-    : api.forms.listTemplateVersions(id);
+    ? balebase().api.adminFormTemplates.listVersions(id)
+    : balebase().api.forms.listTemplateVersions(id);
 }
 
 /**
@@ -85,10 +85,11 @@ function saveTemplate(
   manageGlobal: boolean,
   status: TemplatePublication,
 ) {
-  if (manageGlobal) return api.adminFormTemplates.update(template, status);
+  if (manageGlobal)
+    return balebase().api.adminFormTemplates.update(template, status);
   return template.scope === "global"
-    ? api.forms.copyTemplate(template)
-    : api.forms.updateTemplate(template, status);
+    ? balebase().api.forms.copyTemplate(template)
+    : balebase().api.forms.updateTemplate(template, status);
 }
 
 function useTemplateBuilder({

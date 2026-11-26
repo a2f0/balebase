@@ -1,6 +1,6 @@
 import { Button, Card, PageSection, Toast } from "@balebase/ui/react";
 import { useCallback, useEffect, useReducer, useRef } from "react";
-import { api } from "../shared/apiClient";
+import { balebase } from "../balebase";
 import { errorMessage } from "../shared/errors";
 import { ListRow } from "../shared/ListRow";
 import { countLabel, formatDate } from "../shared/labels";
@@ -21,7 +21,7 @@ export function DeletedBusinesses({
   onNavigate: (pathname: string) => void;
 }) {
   const loaded = useLoad(
-    useCallback(() => api.businesses.listDeleted(), []),
+    useCallback(() => balebase().api.businesses.listDeleted(), []),
     "Could not load deleted businesses.",
   );
   const { reload } = loaded;
@@ -56,7 +56,7 @@ export function DeletedBusinesses({
     const request = requests.current;
     dispatch({ request, type: "restoreStarted" });
     try {
-      const business = await api.businesses.restore(id);
+      const business = await balebase().api.businesses.restore(id);
       dispatch({ id: business.id, request, type: "restoreSucceeded" });
     } catch (cause) {
       dispatch({

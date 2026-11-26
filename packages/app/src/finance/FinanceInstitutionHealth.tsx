@@ -12,8 +12,8 @@ import type {
   InstitutionProductHealth,
 } from "@balebase/validators/finance";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { balebase } from "../balebase";
 import { AppLink } from "../shared/AppLink";
-import { api } from "../shared/apiClient";
 import { errorMessage } from "../shared/errors";
 import { formatDateTime, formatLabel } from "../shared/labels";
 
@@ -113,7 +113,7 @@ function useInstitutionHealth(
     setBusy(true);
     setError(undefined);
     try {
-      const next = await guard(api.finance.institutionHealth(id));
+      const next = await guard(balebase().api.finance.institutionHealth(id));
       if (request === latest.current) setHealth(next);
     } catch (cause) {
       if (request === latest.current)

@@ -1,6 +1,6 @@
 import type { ContractDetail } from "@balebase/validators/contracts";
 import { useEffect, useRef } from "react";
-import { api } from "../shared/apiClient";
+import { balebase } from "../balebase";
 import {
   type AuthoringEvent,
   type AuthoringRequestState,
@@ -63,7 +63,7 @@ async function performRequest(
     case "sending": {
       if (!state.saved?.authoring)
         throw new Error("Save and review this contract first.");
-      const contract = await api.contracts.send(
+      const contract = await balebase().api.contracts.send(
         state.saved.id,
         state.saved.authoring.revision,
       );
@@ -71,19 +71,19 @@ async function performRequest(
       return { contract, request, type: "sent" };
     }
     case "deleting":
-      if (state.saved) await api.contracts.delete(state.saved.id);
+      if (state.saved) await balebase().api.contracts.delete(state.saved.id);
       return { request, type: "deleted" };
   }
 }
 
 async function saveWrittenContract(state: AuthoringRequestState) {
   const contract = state.saved?.authoring
-    ? await api.contracts.saveAuthored(
+    ? await balebase().api.contracts.saveAuthored(
         state.saved.id,
         state.draft,
         state.saved.authoring.revision,
       )
-    : await api.contracts.createAuthored(state.draft);
+    : await balebase().api.contracts.createAuthored(state.draft);
   if (!contract?.authoring)
     throw new Error(
       "The written contract could not be saved. Your source is still here.",
@@ -94,10 +94,10 @@ async function saveWrittenContract(state: AuthoringRequestState) {
 async function loadSavedPdf(saved: ContractDetail | undefined) {
   if (!saved?.authoring)
     throw new Error("Save this contract before previewing.");
-  const response = await api.contracts.document(saved.id);
+  const response = await balebase().api.contracts.document(saved.id);
   const bytes = await response.arrayBuffer();
   // Check after fetching so another tab's newer PDF cannot be reviewed as this revision.
-  const latest = await api.contracts.get(saved.id);
+  const latest = await balebase().api.contracts.get(saved.id);
   if (latest?.authoring?.revision !== saved.authoring.revision) {
     throw new Error(
       "This contract changed elsewhere. Reopen it to review the latest revision; your local source has been kept.",

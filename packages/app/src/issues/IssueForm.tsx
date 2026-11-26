@@ -3,7 +3,7 @@ import type { Person } from "@balebase/validators/fields";
 import { issueLimits, issuePriorities } from "@balebase/validators/issueRules";
 import type { IssueInput } from "@balebase/validators/issues";
 import { type FormEvent, useCallback, useState } from "react";
-import { api } from "../shared/apiClient";
+import { balebase } from "../balebase";
 import { errorMessage } from "../shared/errors";
 import { formatLabel } from "../shared/labels";
 import { useLoad } from "../shared/useLoad";
@@ -174,7 +174,8 @@ function useIssueMembers(offlineMembers: Person[] | undefined) {
   const online = !offlineMembers;
   const { data, error } = useLoad(
     useCallback(
-      async () => (online ? (await api.issues.members()).members : []),
+      async () =>
+        online ? (await balebase().api.issues.members()).members : [],
       [online],
     ),
     "Could not load assignees.",

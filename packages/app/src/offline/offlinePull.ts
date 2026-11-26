@@ -1,6 +1,6 @@
-import { ApiError } from "@balebase/api-client";
+import { ApiError } from "@balebase/client-sdk";
 import type { OfflineFormState } from "@balebase/validators/offline";
-import { api } from "../shared/apiClient";
+import { balebase } from "../balebase";
 import { formWrites } from "./offlineFormState";
 import { prepareOfflineDevice } from "./offlinePreparation";
 import {
@@ -37,7 +37,7 @@ export async function pullOfflineWorkspace(
   const key = offlineScopeKey(identity.scope);
   return navigator.locks.request(`balebase-pull:${key}`, async () => {
     const from = (await readOfflineWorkspace(key))?.cursor;
-    const data = await api.offline.sync(identity.scope, from);
+    const data = await balebase().api.offline.sync(identity.scope, from);
     if (!data.changed) return false;
     let stored = false;
     await changeOfflineWorkspace(key, (current) => {
@@ -76,7 +76,7 @@ export async function pullOfflineForms(
     if (formWrites(workspace.jobs, form.id)[0]?.status !== "synced") continue;
     let state: OfflineFormState;
     try {
-      state = await api.offline.form(identity.scope, form.id);
+      state = await balebase().api.offline.form(identity.scope, form.id);
     } catch (cause) {
       if (cause instanceof ApiError && cause.status === 404) continue;
       throw cause;

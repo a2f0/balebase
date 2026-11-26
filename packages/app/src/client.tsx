@@ -3,6 +3,7 @@ import { type ReactNode, StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import "@balebase/ui/styles.css";
 import { App } from "./App";
+import { startBalebase } from "./balebase";
 import { type AppHost, configureHost } from "./host";
 import { AppBoundary } from "./workspace/AppBoundary";
 import "./styles/app.css";
@@ -16,6 +17,7 @@ export function renderApp(host: AppHost = {}, notices?: ReactNode) {
   }
 
   configureHost(host);
+  startBalebase(host);
   startThemeSync();
 
   const reportError = (

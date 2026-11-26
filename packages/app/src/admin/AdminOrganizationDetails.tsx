@@ -18,7 +18,7 @@ import type {
 import type { OrganizationMember } from "@balebase/validators/organizationSettings";
 import { useCallback } from "react";
 import { ActivityFeed } from "../activity/ActivityFeed";
-import { api } from "../shared/apiClient";
+import { balebase } from "../balebase";
 import { countLabel, formatCalendarDate, formatDate } from "../shared/labels";
 import { useLoad } from "../shared/useLoad";
 import { adminOrganizationPath } from "../workspace/workspacePaths";
@@ -38,7 +38,7 @@ export function AdminOrganizationDetails({
     reload: load,
   } = useLoad(
     useCallback(
-      () => api.adminOrganizations.get(organizationId),
+      () => balebase().api.adminOrganizations.get(organizationId),
       [organizationId],
     ),
     "Could not load organization details.",

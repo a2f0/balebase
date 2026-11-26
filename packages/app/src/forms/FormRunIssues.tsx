@@ -25,10 +25,10 @@ import {
 } from "@balebase/validators/issueRules";
 import type { IssueInput } from "@balebase/validators/issues";
 import { useEffect, useMemo, useState } from "react";
+import { balebase } from "../balebase";
 import { IssueFields } from "../issues/IssueForm";
 import { ApiDownload } from "../shared/ApiDownload";
 import { ApiImage } from "../shared/ApiImage";
-import { api } from "../shared/apiClient";
 import { errorMessage } from "../shared/errors";
 import { formatDateTime, formatLabel } from "../shared/labels";
 import { useAction } from "../shared/useAction";
@@ -477,9 +477,9 @@ function useFormIssueCardActions({
     },
     busy,
     removeImage: (imageId: string) =>
-      run(() => api.forms.deleteIssueImage(issue.id, imageId)),
+      run(() => balebase().api.forms.deleteIssueImage(issue.id, imageId)),
     update: (update: FormIssueUpdate) =>
-      run(() => api.forms.updateIssue(issue.id, update)),
+      run(() => balebase().api.forms.updateIssue(issue.id, update)),
   };
 }
 
@@ -504,7 +504,7 @@ function FormIssueThumbnails({
                 plain
                 filename={image.filename}
                 className="runThumbLink"
-                href={api.forms.issueImageUrl(issue.id, image.id)}
+                href={balebase().api.forms.issueImageUrl(issue.id, image.id)}
                 rel="noreferrer"
                 target="_blank"
               >
@@ -513,7 +513,11 @@ function FormIssueThumbnails({
                   className="runThumbImage"
                   decoding="async"
                   loading="lazy"
-                  src={api.forms.issueImageUrl(issue.id, image.id, "thumbnail")}
+                  src={balebase().api.forms.issueImageUrl(
+                    issue.id,
+                    image.id,
+                    "thumbnail",
+                  )}
                 />
               </ApiDownload>
               <Button

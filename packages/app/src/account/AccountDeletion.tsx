@@ -1,10 +1,10 @@
 import { Button, Card, confirmDialog, Toast } from "@balebase/ui/react";
-import { api } from "../shared/apiClient";
+import { balebase } from "../balebase";
 import { useAction } from "../shared/useAction";
 import { useLoad } from "../shared/useLoad";
 
 const loadRequestedAt = async () =>
-  (await api.accountSettings.deletion()).requestedAt;
+  (await balebase().api.accountSettings.deletion()).requestedAt;
 
 export function AccountDeletion() {
   const loaded = useLoad(
@@ -20,8 +20,8 @@ export function AccountDeletion() {
     if (!requestedAt && !(await confirmDeletionRequest())) return;
     await action.run(async () => {
       await (requestedAt
-        ? api.accountSettings.cancelDeletion()
-        : api.accountSettings.requestDeletion());
+        ? balebase().api.accountSettings.cancelDeletion()
+        : balebase().api.accountSettings.requestDeletion());
       loaded.setData(await loadRequestedAt());
     });
   }

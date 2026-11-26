@@ -1,4 +1,4 @@
-import { ApiError } from "@balebase/api-client";
+import { ApiError } from "@balebase/client-sdk";
 
 export type OrganizationTwoFactorRequirement = "setup" | "verification";
 /** Why a Free organization has no seat for this user: an owner can upgrade. */

@@ -1,5 +1,5 @@
 import type { ActivityResourceType } from "@balebase/validators/activity";
-import { api } from "../shared/apiClient";
+import { balebase } from "../balebase";
 
 export type ActivitySource =
   | {
@@ -36,42 +36,42 @@ export function listActivity(
   cursor?: string,
   resourceType?: ActivityResourceType,
 ) {
-  if (!source) return api.activity.list(cursor, resourceType);
+  if (!source) return balebase().api.activity.list(cursor, resourceType);
   const { id } = source;
   switch (source.type) {
     case "admin_organization":
-      return api.adminOrganizations.activity(id, cursor);
+      return balebase().api.adminOrganizations.activity(id, cursor);
     case "admin_purges":
-      return api.adminJobs.purges(cursor);
+      return balebase().api.adminJobs.purges(cursor);
     case "form_run":
-      return api.forms.runActivity(id, cursor);
+      return balebase().api.forms.runActivity(id, cursor);
     case "form_template":
-      return api.forms.templateActivity(id, cursor);
+      return balebase().api.forms.templateActivity(id, cursor);
     case "business":
-      return api.businesses.activity(id, cursor);
+      return balebase().api.businesses.activity(id, cursor);
     case "contract_template":
-      return api.contractTemplates.activity(id, cursor);
+      return balebase().api.contractTemplates.activity(id, cursor);
     case "employee_requirement":
-      return api.employeeForms.activity(id, cursor);
+      return balebase().api.employeeForms.activity(id, cursor);
     case "equipment":
-      return api.equipment.activity(id, cursor);
+      return balebase().api.equipment.activity(id, cursor);
     case "finance_connection":
-      return api.finance.connectionActivity(id, cursor);
+      return balebase().api.finance.connectionActivity(id, cursor);
     case "finance_transaction":
-      return api.finance.transactionActivity(id, cursor);
+      return balebase().api.finance.transactionActivity(id, cursor);
     case "global_form_template":
-      return api.adminFormTemplates.activity(id, cursor);
+      return balebase().api.adminFormTemplates.activity(id, cursor);
     case "inbound_email":
-      return api.inbox.activity(id, cursor);
+      return balebase().api.inbox.activity(id, cursor);
     case "issue":
-      return api.issues.activity(id, cursor);
+      return balebase().api.issues.activity(id, cursor);
     case "library_file":
-      return api.objects.activity(id, cursor);
+      return balebase().api.objects.activity(id, cursor);
     case "library_folder":
-      return api.libraryFolders.activity(id, cursor);
+      return balebase().api.libraryFolders.activity(id, cursor);
     case "organization_group":
-      return api.organizationGroups.activity(id, cursor);
+      return balebase().api.organizationGroups.activity(id, cursor);
     case "project":
-      return api.projects.activity(id, cursor);
+      return balebase().api.projects.activity(id, cursor);
   }
 }

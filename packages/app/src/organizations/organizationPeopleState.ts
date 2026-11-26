@@ -1,7 +1,7 @@
 import { confirmDialog } from "@balebase/ui/react";
 import type { OrganizationMember } from "@balebase/validators/organizationSettings";
 import { useCallback } from "react";
-import { api } from "../shared/apiClient";
+import { balebase } from "../balebase";
 import { authClient } from "../shared/authClient";
 import { throwIfRefused } from "../shared/errors";
 import { useAction } from "../shared/useAction";
@@ -19,7 +19,9 @@ export function useOrganizationPeopleData(organizationId: string) {
   const loaded = useLoad(
     useCallback(
       async () =>
-        organizationId ? api.organizationSettings.people() : undefined,
+        organizationId
+          ? balebase().api.organizationSettings.people()
+          : undefined,
       [organizationId],
     ),
     "Could not load organization people.",
@@ -74,7 +76,7 @@ export function organizationPeopleActions(
     if (member.twoFactorRequired === required) return;
     await state.run(
       async () => {
-        await api.organizationSettings.updateMemberTwoFactorRequirement(
+        await balebase().api.organizationSettings.updateMemberTwoFactorRequirement(
           member.id,
           required,
         );

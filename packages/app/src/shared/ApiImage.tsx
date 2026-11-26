@@ -1,5 +1,5 @@
 import { type ComponentProps, useEffect, useState } from "react";
-import { fetchApi } from "../apiVersion";
+import { balebase } from "../balebase";
 import { nativeHost } from "../host";
 
 /** WebView image loads cannot use the native HTTP cookie store. */
@@ -19,7 +19,8 @@ export function ApiImage({
     let active = true;
     let blob: string | undefined;
     const controller = new AbortController();
-    void fetchApi(src, { credentials: "include", signal: controller.signal })
+    void balebase()
+      .fetch(src, { credentials: "include", signal: controller.signal })
       .then(async (response) => {
         if (!response.ok) throw new Error("Image unavailable");
         const bytes = await response.blob();

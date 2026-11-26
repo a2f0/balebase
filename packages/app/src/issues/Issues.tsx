@@ -1,4 +1,4 @@
-import type { IssueFilters } from "@balebase/api-client";
+import type { IssueFilters } from "@balebase/client-sdk";
 import {
   Banner,
   Button,
@@ -15,7 +15,7 @@ import {
 import type { Issue, IssueInput } from "@balebase/validators/issues";
 import { useCallback, useState } from "react";
 import { ActivityFeed } from "../activity/ActivityFeed";
-import { api } from "../shared/apiClient";
+import { balebase } from "../balebase";
 import { errorMessage } from "../shared/errors";
 import { useLoad } from "../shared/useLoad";
 import {
@@ -146,13 +146,14 @@ function NewIssue({
   const { data: label, error } = useLoad(
     useCallback(async () => {
       if (!transactionId) return undefined;
-      const { transaction } = await api.finance.transaction(transactionId);
+      const { transaction } =
+        await balebase().api.finance.transaction(transactionId);
       return transaction.merchantName ?? transaction.name;
     }, [transactionId]),
     "Could not load the transaction.",
   );
   async function save(input: IssueInput) {
-    const { issueId } = await api.issues.create(
+    const { issueId } = await balebase().api.issues.create(
       input,
       transactionId
         ? { type: "finance_transaction", id: transactionId }
@@ -203,7 +204,7 @@ function IssueDetail({
   onNavigate: (path: string) => void;
 }) {
   const loaded = useLoad(
-    useCallback(() => api.issues.get(id), [id]),
+    useCallback(() => balebase().api.issues.get(id), [id]),
     "Could not load issue.",
   );
   const { setData } = loaded;
@@ -233,7 +234,7 @@ function IssueDetail({
     if (!issue) return;
     setBusy(true);
     try {
-      const data = await api.issues.update(id, {
+      const data = await balebase().api.issues.update(id, {
         ...input,
         expectedRevision: issue.revision,
       });

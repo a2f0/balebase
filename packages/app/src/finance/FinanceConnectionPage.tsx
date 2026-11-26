@@ -24,8 +24,8 @@ import {
   useReducer,
 } from "react";
 import { ActivityFeed } from "../activity/ActivityFeed";
+import { balebase } from "../balebase";
 import { AppLink } from "../shared/AppLink";
-import { api } from "../shared/apiClient";
 import { errorMessage } from "../shared/errors";
 import { countLabel, formatDateTime, formatLabel } from "../shared/labels";
 import { useAction } from "../shared/useAction";
@@ -358,7 +358,7 @@ function useConnection(
 ) {
   const loaded = useGuardedLoad(
     givenScope,
-    useCallback(() => api.finance.connection(id), [id]),
+    useCallback(() => balebase().api.finance.connection(id), [id]),
     "Could not load connection.",
   );
   const { data, guard, reload, setData } = loaded;
@@ -380,19 +380,21 @@ function useConnection(
     deleteData: async () => {
       if (!data || !(await confirmDataDeletion(data.connection))) return;
       await action.run(async () => {
-        await guard(api.finance.deleteConnectionData(id));
+        await guard(balebase().api.finance.deleteConnectionData(id));
         onNavigate("/finance/connections");
       });
     },
     disconnect: async () => {
       if (!data || !(await confirmDisconnect(data.connection))) return;
       await run(async () => {
-        await guard(api.finance.disconnectConnection(id));
+        await guard(balebase().api.finance.disconnectConnection(id));
         return "Bank disconnected. Imported history was retained.";
       });
     },
     sync: () =>
-      run(async () => syncNotice(await guard(api.finance.startSync(id)))),
+      run(async () =>
+        syncNotice(await guard(balebase().api.finance.startSync(id))),
+      ),
   };
   return {
     actions,
@@ -425,7 +427,7 @@ function useSyncStatusPolling(
     let timer: ReturnType<typeof setTimeout> | undefined;
     async function poll(polled: string) {
       try {
-        const next = await guard(api.finance.syncStatus(id));
+        const next = await guard(balebase().api.finance.syncStatus(id));
         if (!active) return;
         dispatch({ job: polled, type: "pollSucceeded" });
         if (syncPending(next.connection.syncJob?.status)) {

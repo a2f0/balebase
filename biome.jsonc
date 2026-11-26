@@ -155,7 +155,8 @@
         }
       }
     },
-    // App shared modules stay below features: they import only the host interface.
+    // App shared modules stay below features: they import only the host interface
+    // and the app's SDK.
     {
       "includes": [
         "packages/app/src/shared/**",
@@ -177,7 +178,7 @@
                 },
                 "patterns": [
                   {
-                    "group": ["../**", "!../host", "!../apiVersion"],
+                    "group": ["../**", "!../host", "!../balebase"],
                     "message": "shared/ sits below the features; move this code into the feature that owns it."
                   }
                 ]

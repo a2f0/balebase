@@ -23,8 +23,8 @@ import {
   useRef,
   useState,
 } from "react";
+import { balebase } from "../balebase";
 import { AppLink } from "../shared/AppLink";
-import { api } from "../shared/apiClient";
 import { websiteUrl } from "../shared/config";
 import { errorMessage } from "../shared/errors";
 import { formatDateTime } from "../shared/labels";
@@ -180,7 +180,10 @@ function categorizeTransaction(
     setData((current) => withCategories(current, change));
     setSaving(true);
     try {
-      await api.finance.setTransactionCategory(transaction.id, categoryId);
+      await balebase().api.finance.setTransactionCategory(
+        transaction.id,
+        categoryId,
+      );
       // Saved transactions catch up, so the change outlasts going offline.
       await refresh();
     } catch (cause) {
@@ -251,7 +254,7 @@ async function saveCategories(
   ) {
     const batch = changes.slice(start, start + financeLimits.bulkCategorize);
     try {
-      await api.finance.setTransactionsCategory(
+      await balebase().api.finance.setTransactionsCategory(
         batch.map(({ id }) => id),
         categoryId,
       );
@@ -343,13 +346,16 @@ function financeActions(
       input: FinanceTransactionAnnotation,
     ) =>
       run(async () => {
-        await api.finance.updateTransactionAnnotation(transaction.id, input);
+        await balebase().api.finance.updateTransactionAnnotation(
+          transaction.id,
+          input,
+        );
         return "Transaction annotation saved.";
       }),
     deleteData: async (connection: FinanceConnection) => {
       if (await confirmDataDeletion(connection)) {
         await run(async () => {
-          await api.finance.deleteConnectionData(connection.id);
+          await balebase().api.finance.deleteConnectionData(connection.id);
           return "Imported bank data permanently deleted.";
         });
       }
@@ -357,13 +363,13 @@ function financeActions(
     disconnect: async (connection: FinanceConnection) => {
       if (await confirmDisconnect(connection)) {
         await run(async () => {
-          await api.finance.disconnectConnection(connection.id);
+          await balebase().api.finance.disconnectConnection(connection.id);
           return "Bank disconnected. Imported history was retained.";
         });
       }
     },
     sync: (id: string) =>
-      run(async () => syncNotice(await api.finance.startSync(id))),
+      run(async () => syncNotice(await balebase().api.finance.startSync(id))),
     createRule: createRuleAction(save),
   };
 }
@@ -701,7 +707,7 @@ function usePlaidConnect(
         const connectionId =
           repairing ??
           (
-            await api.finance.exchangePlaidPublicToken(publicToken, {
+            await balebase().api.finance.exchangePlaidPublicToken(publicToken, {
               id: metadata.institution?.institution_id ?? null,
               name: metadata.institution?.name ?? null,
             })
@@ -713,7 +719,7 @@ function usePlaidConnect(
           ? await reportLoginRepair(repairing, linkToken)
           : true;
         clearOAuthState();
-        const result = await api.finance.startSync(connectionId);
+        const result = await balebase().api.finance.startSync(connectionId);
         await load();
         setNotice(syncNotice(result));
         if (!recorded)
@@ -770,10 +776,11 @@ function usePlaidConnect(
   };
   return {
     busy,
-    connect: () => start(() => api.finance.createPlaidLinkToken(), undefined),
+    connect: () =>
+      start(() => balebase().api.finance.createPlaidLinkToken(), undefined),
     repair: (connection: FinanceConnection) =>
       start(
-        () => api.finance.createPlaidUpdateLinkToken(connection.id),
+        () => balebase().api.finance.createPlaidUpdateLinkToken(connection.id),
         connection.id,
       ),
   };

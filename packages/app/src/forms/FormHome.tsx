@@ -19,8 +19,8 @@ import type {
   FormTemplateSummary,
 } from "@balebase/validators/forms";
 import { useCallback, useEffect, useState } from "react";
+import { balebase } from "../balebase";
 import { ErrorToast } from "../billing/ErrorToast";
-import { api } from "../shared/apiClient";
 import { InfiniteScroll } from "../shared/InfiniteScroll";
 import { countLabel, formatDate } from "../shared/labels";
 import { useAction } from "../shared/useAction";
@@ -43,7 +43,10 @@ export function FormHome({
   onNavigate: (pathname: string) => void;
 }) {
   const templates = useLoad(
-    useCallback(async () => (await api.forms.listTemplates()).templates, []),
+    useCallback(
+      async () => (await balebase().api.forms.listTemplates()).templates,
+      [],
+    ),
     "Could not load forms.",
   );
   const creating = useAction("Could not create the template.");
@@ -54,7 +57,8 @@ export function FormHome({
 
   async function createTemplate() {
     await creating.run(async () => {
-      const { template } = await api.forms.createTemplate("Untitled template");
+      const { template } =
+        await balebase().api.forms.createTemplate("Untitled template");
       onNavigate(formTemplatePath(template.id));
     });
   }
@@ -111,7 +115,7 @@ function useFormRunList() {
 
   const fetchPage = useCallback(
     async (cursor?: string) => {
-      const page = await api.forms.listRuns(cursor, view);
+      const page = await balebase().api.forms.listRuns(cursor, view);
       return { items: page.forms, nextCursor: page.nextCursor };
     },
     [view],

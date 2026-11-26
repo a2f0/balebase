@@ -1,11 +1,11 @@
 import { Card, LoadingState, Toast } from "@balebase/ui/react";
 import type { SecurityEventAction } from "@balebase/validators/accountSettings";
 import { useEffect, useRef } from "react";
-import { api } from "../shared/apiClient";
+import { balebase } from "../balebase";
 import { useLoad } from "../shared/useLoad";
 
 const loadEvents = async () =>
-  (await api.accountSettings.securityEvents()).events;
+  (await balebase().api.accountSettings.securityEvents()).events;
 
 const actionLabels: Record<SecurityEventAction, string> = {
   image_changed: "Profile picture changed",

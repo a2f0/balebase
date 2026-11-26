@@ -23,8 +23,8 @@ import type {
 } from "@balebase/validators/inbox";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityFeed } from "../activity/ActivityFeed";
+import { balebase } from "../balebase";
 import { ApiDownload } from "../shared/ApiDownload";
-import { api } from "../shared/apiClient";
 import {
   countLabel,
   formatBytes,
@@ -87,7 +87,7 @@ function useInboxMessages(folder: InboxFolder, mailbox: string | undefined) {
       async () => ({
         folder,
         mailbox,
-        listing: await api.inbox.list(
+        listing: await balebase().api.inbox.list(
           folder,
           mailbox || undefined,
           mailbox === undefined ? openedByLink : undefined,
@@ -135,7 +135,8 @@ function useInboxMessages(folder: InboxFolder, mailbox: string | undefined) {
   const detailId = listing ? selectedId : undefined;
   const message = useLoad(
     useCallback(
-      async () => (detailId ? api.inbox.get(detailId, folder) : undefined),
+      async () =>
+        detailId ? balebase().api.inbox.get(detailId, folder) : undefined,
       [detailId, folder],
     ),
     "Could not load the email.",
@@ -205,15 +206,23 @@ function useInboxActions(messages: ReturnType<typeof useInboxMessages>) {
     if (email.linkCount > 0) return;
     const subject = email.subject || "(no subject)";
     if (!(await confirmMoveToTrash(subject))) return;
-    await runAction(email.id, api.inbox.delete, "Email moved to Trash.");
+    await runAction(
+      email.id,
+      balebase().api.inbox.delete,
+      "Email moved to Trash.",
+    );
   }
 
   async function restore(email: InboundEmailDetail) {
-    await runAction(email.id, api.inbox.restore, "Email restored to Inbox.");
+    await runAction(
+      email.id,
+      balebase().api.inbox.restore,
+      "Email restored to Inbox.",
+    );
   }
 
   async function archive(email: InboundEmailDetail) {
-    await runAction(email.id, api.inbox.archive, "Email archived.");
+    await runAction(email.id, balebase().api.inbox.archive, "Email archived.");
   }
 
   async function runAction(
@@ -785,7 +794,11 @@ function AttachmentList({
               attachment={attachment}
               key={attachment.id}
               kind={kind}
-              url={api.inbox.attachmentUrl(email.id, attachment.id, folder)}
+              url={balebase().api.inbox.attachmentUrl(
+                email.id,
+                attachment.id,
+                folder,
+              )}
             />
           ))}
         </div>
@@ -813,7 +826,11 @@ function AttachmentChips({
           plain
           filename={attachment.filename}
           className="inboxAttachment"
-          href={api.inbox.attachmentUrl(email.id, attachment.id, folder)}
+          href={balebase().api.inbox.attachmentUrl(
+            email.id,
+            attachment.id,
+            folder,
+          )}
           key={attachment.id}
         >
           <Icon name="attachment" size={16} />

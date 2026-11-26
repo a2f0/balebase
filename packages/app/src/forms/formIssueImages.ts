@@ -1,10 +1,10 @@
-import { ApiError } from "@balebase/api-client";
+import { ApiError } from "@balebase/client-sdk";
 import type { FormIssueInput } from "@balebase/validators/forms";
 import {
   issueImageProblem,
   maxIssueImages,
 } from "@balebase/validators/issueRules";
-import { api } from "../shared/apiClient";
+import { balebase } from "../balebase";
 
 type IssueImageUploader = (issueId: string, file: File) => Promise<unknown>;
 
@@ -16,8 +16,8 @@ export async function createIssueWithImages(
   formId: string,
   issue: FormIssueInput,
   images: File[],
-  create = api.forms.createIssue,
-  upload: IssueImageUploader = api.forms.uploadIssueImage,
+  create = balebase().api.forms.createIssue,
+  upload: IssueImageUploader = balebase().api.forms.uploadIssueImage,
 ) {
   const { issueId } = await create(formId, issue);
   const failedUploads = (
@@ -36,7 +36,7 @@ const maxIssueImageRetryDelay = 10_000;
 export async function uploadIssueImagesSequentially(
   issueId: string,
   files: File[],
-  upload: IssueImageUploader = api.forms.uploadIssueImage,
+  upload: IssueImageUploader = balebase().api.forms.uploadIssueImage,
   wait: WaitForRetry = waitForRetry,
 ) {
   const failures: unknown[] = [];

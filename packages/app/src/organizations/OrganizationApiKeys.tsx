@@ -21,7 +21,7 @@ import {
   apiKeyNameMaxLength,
 } from "@balebase/validators/rules";
 import { type FormEvent, useCallback, useState } from "react";
-import { api } from "../shared/apiClient";
+import { balebase } from "../balebase";
 import { formatDate } from "../shared/labels";
 import { useAction } from "../shared/useAction";
 import { useClipboard } from "../shared/useClipboard";
@@ -74,7 +74,7 @@ export function OrganizationApiKeys({
     setData: setApiKeys,
   } = useLoad(
     useCallback(
-      async () => (organizationId ? api.apiKeys.list() : undefined),
+      async () => (organizationId ? balebase().api.apiKeys.list() : undefined),
       [organizationId],
     ),
     "Could not load API keys. Please try again.",
@@ -136,7 +136,7 @@ function CreateApiKeyCard({
     if (!name.trim()) return;
     await run(async () =>
       onCreated(
-        await api.apiKeys.create({
+        await balebase().api.apiKeys.create({
           access,
           expiresInDays: expirationDays(expiration),
           name: name.trim(),
@@ -268,7 +268,9 @@ function ApiKeyList({
   async function revoke(apiKey: ApiKey) {
     if (!(await confirmRevoke(apiKey.name))) return;
     setRevokingId(apiKey.id);
-    await run(async () => onRevoked(await api.apiKeys.revoke(apiKey.id)));
+    await run(async () =>
+      onRevoked(await balebase().api.apiKeys.revoke(apiKey.id)),
+    );
     setRevokingId(undefined);
   }
 

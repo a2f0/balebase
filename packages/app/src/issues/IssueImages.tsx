@@ -5,14 +5,14 @@ import {
   PageSection,
 } from "@balebase/ui/react";
 import { useCallback } from "react";
+import { balebase } from "../balebase";
 import { ApiImage } from "../shared/ApiImage";
-import { api } from "../shared/apiClient";
 import { useLoad } from "../shared/useLoad";
 
 export function IssueImages({ issueId }: { issueId: string }) {
   const loaded = useLoad(
     useCallback(
-      async () => (await api.offline.images(issueId)).images,
+      async () => (await balebase().api.offline.images(issueId)).images,
       [issueId],
     ),
     "Could not load issue photos.",
@@ -31,7 +31,7 @@ export function IssueImages({ issueId }: { issueId: string }) {
           <ApiImage
             key={image.id}
             alt={image.filename}
-            src={api.forms.issueImageUrl(issueId, image.id)}
+            src={balebase().api.forms.issueImageUrl(issueId, image.id)}
             width={180}
             height={180}
             style={{ objectFit: "contain" }}
