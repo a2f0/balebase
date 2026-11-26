@@ -34,7 +34,7 @@ Every field of `BalebaseOptions` is optional in a browser.
 | Option | Use |
 | --- | --- |
 | `apiBaseUrl` | The API origin, without `/api`, a query, or credentials; trailing slashes are dropped, since saved data is keyed by it, and a proxy's path is kept. Required outside a browser |
-| `apiKey` | An organization API key, sent as `Authorization: Bearer` with every request under `apiBaseUrl` (its origin and any proxy path). The SDK never sends it to another host or path, or to Better Auth's session-only routes under `/api/auth`, including the `auth` client's; but standard `fetch` keeps it on a redirect within the API's origin, wherever that leads. Needs an https `apiBaseUrl`, or http to this machine; for scripts and servers, never a page |
+| `apiKey` | An organization API key, sent as `Authorization: Bearer` with every request under `apiBaseUrl` (its origin and any proxy path). The SDK never sends it to another host or path, or to Better Auth's session-only routes at `apiBaseUrl`'s `/api/auth`, including the `auth` client's; but standard `fetch` keeps it on a redirect within the API's origin, wherever that leads. Needs an https `apiBaseUrl`, or http to this machine; for scripts and servers, never a page |
 | `fetch` | The transport; defaults to the global `fetch`, looked up per request |
 | `nativeOrigin` | A native shell's WebView origin, sent as `X-Balebase-Native-Origin` |
 | `network` | A `NetworkStatusSource`, such as the OS's on a device; defaults to the browser's |

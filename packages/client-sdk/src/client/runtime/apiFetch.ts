@@ -71,40 +71,61 @@ export const authRoutes = "/api/auth";
 
 /**
  * Whether `input` goes under the key's base, to a route an API key may
- * reach. Paths compare as `fetch` sends them, with dot segments resolved;
- * the route, as the API matches it, with percent-escapes decoded, so
- * `/api/%61uth` is Better Auth's too, and with `%2F` read as a slash and
- * repeated slashes merged, as some proxies do (so `..%2F` climbs). A route
- * with a malformed escape gets
- * no key, whatever route it is: the API decodes around the bad escape, so
- * it may be Better Auth's. The typed client never sends one.
+ * reach. Servers and proxies read a path differently, so the key goes only
+ * when both readings agree: the path as `fetch` sends it (dot segments
+ * resolved), which the API decodes once before routing, and the path as a
+ * decoding proxy may pass it on (see `normalized`). Neither may leave the
+ * base or be one of Better Auth's routes. This keeps the key from obvious
+ * mistakes; the API, which refuses keys on routes they may not reach, is
+ * the boundary.
  */
 function receivesKey(input: RequestInfo | URL, key: ApiKeyScope) {
   const url = urlOf(input);
   if (url?.origin !== key.origin) return false;
-  const { pathname } = url;
-  if (pathname !== key.path && !pathname.startsWith(`${key.path}/`))
-    return false;
-  const route = routed(pathname.slice(key.path.length));
+  // The API decodes the path once before routing, so `/api/%61uth` is
+  // Better Auth's too.
+  const sent = routeUnder(url.pathname, key.path);
+  const routed = sent === undefined ? undefined : decodeOnce(sent);
+  const proxied = routeUnder(
+    normalized(url.pathname),
+    normalized(key.path)?.replace(/\/$/, ""),
+  );
   return (
-    route !== undefined &&
-    route !== authRoutes &&
-    !route.startsWith(`${authRoutes}/`)
+    routed !== undefined &&
+    proxied !== undefined &&
+    !isAuthRoute(routed) &&
+    !isAuthRoute(proxied)
   );
 }
 
+/** What follows `base` in `path`, or undefined when `path` is not under it. */
+function routeUnder(path: string | undefined, base: string | undefined) {
+  if (path === undefined || base === undefined) return undefined;
+  if (path !== base && !path.startsWith(`${base}/`)) return undefined;
+  return path.slice(base.length);
+}
+
+function isAuthRoute(route: string) {
+  return route === authRoutes || route.startsWith(`${authRoutes}/`);
+}
+
 /**
- * `path` as the API may route it, or undefined when it has a malformed
- * escape. Reading `%2F` as a slash can make new dot segments, so they are
- * resolved again.
+ * `path` as a proxy that decodes it may pass it on: percent-escapes
+ * decoded, `%2F` and `\` read as slashes, repeated slashes merged, and the
+ * dot segments that makes (`..%2F`) resolved. Undefined when it has a
+ * malformed escape, which the API decodes around: such a path could be any
+ * route, so it gets no key. The typed client never sends one.
  */
-function routed(path: string) {
+function normalized(path: string) {
+  const decoded = decodeOnce(path);
+  if (decoded === undefined) return undefined;
+  const slashes = decoded.replace(/%2f|\\/gi, "/").replace(/\/{2,}/g, "/");
+  return new URL(slashes, "https://route.invalid").pathname;
+}
+
+function decodeOnce(path: string) {
   try {
-    const slashes = decodeURI(path).replace(/%2f/gi, "/");
-    return new URL(
-      slashes.replace(/\/{2,}/g, "/"),
-      "https://route.invalid",
-    ).pathname.replace(/\/{2,}/g, "/");
+    return decodeURI(path);
   } catch {
     return undefined;
   }
