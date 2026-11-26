@@ -48,3 +48,31 @@ it("bounds offline sync and job output reads, and nothing else", async () => {
     uploadImage: true,
   });
 });
+
+it("keeps every area of the client under a caller's signal", async () => {
+  const sent: { signal: AbortSignal | null | undefined; url: string }[] = [];
+  const api = new ApiClient({
+    baseUrl: "https://api.test",
+    fetch: async (url, init) => {
+      sent.push({ signal: init.signal, url });
+      return Response.json({ user: null });
+    },
+  });
+  const leaving = new AbortController();
+  const scoped = api.withSignal(leaving.signal);
+  expect(scoped).toBeInstanceOf(ApiClient);
+  await scoped.session.me();
+  await scoped.adminJobs.detail("run-1");
+  await api.session.me();
+  expect(sent.map(({ url }) => url)).toEqual([
+    "https://api.test/api/me",
+    "https://api.test/api/admin/jobs/runs/run-1",
+    "https://api.test/api/me",
+  ]);
+  leaving.abort();
+  expect(sent.map(({ signal }) => signal?.aborted)).toEqual([
+    true,
+    true,
+    undefined,
+  ]);
+});

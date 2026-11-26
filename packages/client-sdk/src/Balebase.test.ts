@@ -6,6 +6,21 @@ afterEach(() => {
   globalThis.fetch = originalFetch;
 });
 
+const apiBaseUrl = "https://api.test";
+
+/** Runs `use` as a page would, with `origin` as its location. */
+async function onPage(origin: string, use: () => Promise<void>) {
+  Object.defineProperty(globalThis, "location", {
+    configurable: true,
+    value: new URL(origin),
+  });
+  try {
+    await use();
+  } finally {
+    Reflect.deleteProperty(globalThis, "location");
+  }
+}
+
 /** Answers every request with `reply`, keeping what was sent. */
 function recordRequests(reply = () => Response.json({})) {
   const sent: { headers: Headers; url: string }[] = [];
@@ -21,7 +36,7 @@ describe("API requests", () => {
   it("sends typed calls to the API origin", async () => {
     const user = { email: "sam@example.test", id: "u1", name: "Sam" };
     const { fetch, sent } = recordRequests(() => Response.json({ user }));
-    const balebase = new Balebase({ apiBaseUrl: "https://api.test", fetch });
+    const balebase = new Balebase({ apiBaseUrl, fetch });
     expect(await balebase.api.session.me()).toEqual({ user });
     expect(sent.map(({ url }) => url)).toEqual(["https://api.test/api/me"]);
   });
@@ -36,8 +51,16 @@ describe("API requests", () => {
     ).toBe(JSON.stringify(["https://api.test", "user", "org"]));
   });
 
+  it("refuses to start outside a browser without an API origin", () => {
+    for (const missing of [undefined, "", "/"]) {
+      expect(() => new Balebase({ apiBaseUrl: missing })).toThrow(
+        "Set apiBaseUrl: outside a browser there is no page origin",
+      );
+    }
+  });
+
   it("looks the global fetch up per request when given no transport", async () => {
-    const balebase = new Balebase({ apiBaseUrl: "https://api.test" });
+    const balebase = new Balebase({ apiBaseUrl });
     const { fetch, sent } = recordRequests();
     globalThis.fetch = fetch as typeof globalThis.fetch;
     await balebase.fetch("https://api.test/api/objects/1");
@@ -47,7 +70,7 @@ describe("API requests", () => {
   it("sends a native shell's origin and preserves request headers", async () => {
     for (const nativeOrigin of ["capacitor://localhost", "https://localhost"]) {
       const { fetch, sent } = recordRequests();
-      const balebase = new Balebase({ fetch, nativeOrigin });
+      const balebase = new Balebase({ apiBaseUrl, fetch, nativeOrigin });
       await balebase.fetch(
         new Request("https://api.test/api/me", {
           headers: { "X-Test": "preserved" },
@@ -65,8 +88,42 @@ describe("API requests", () => {
 
   it("sends no native marker from a browser", async () => {
     const { fetch, sent } = recordRequests();
-    await new Balebase({ fetch }).fetch(new Request("https://api.test/api/me"));
+    await new Balebase({ apiBaseUrl, fetch }).fetch(
+      new Request("https://api.test/api/me"),
+    );
     expect(sent[0]?.headers.has("X-Balebase-Native-Origin")).toBe(false);
+    expect(sent[0]?.headers.has("Authorization")).toBe(false);
+  });
+
+  it("sends an API key as a bearer token with every request", async () => {
+    const { fetch, sent } = recordRequests(() => Response.json({ user: null }));
+    const balebase = new Balebase({
+      apiBaseUrl,
+      apiKey: "tlk_test_key",
+      fetch,
+      nativeOrigin: "https://localhost",
+    });
+    await balebase.api.session.me();
+    await balebase.fetch(
+      new Request("https://api.test/api/objects/1", {
+        headers: { "X-Test": "preserved" },
+      }),
+    );
+    await balebase.auth.getSession();
+    // A request that names its own credentials keeps them.
+    await balebase.fetch("https://api.test/api/me", {
+      headers: { Authorization: "Bearer tlk_other_key" },
+    });
+    expect(sent.map(({ headers }) => headers.get("Authorization"))).toEqual([
+      "Bearer tlk_test_key",
+      "Bearer tlk_test_key",
+      "Bearer tlk_test_key",
+      "Bearer tlk_other_key",
+    ]);
+    expect(sent[1]?.headers.get("X-Test")).toBe("preserved");
+    for (const { headers } of sent) {
+      expect(headers.get("X-Balebase-Native-Origin")).toBe("https://localhost");
+    }
   });
 });
 
@@ -93,14 +150,16 @@ describe("auth", () => {
 
   it("sends auth calls to the page's origin, like typed calls, without one", async () => {
     const sent: string[] = [];
-    const balebase = new Balebase({
-      fetch: async (input) => {
-        sent.push(input instanceof Request ? input.url : String(input));
-        return Response.json(null);
-      },
+    await onPage("https://app.test", async () => {
+      const balebase = new Balebase({
+        fetch: async (input) => {
+          sent.push(input instanceof Request ? input.url : String(input));
+          return Response.json(null);
+        },
+      });
+      await balebase.api.session.me();
+      await balebase.auth.getSession();
     });
-    await balebase.api.session.me();
-    await balebase.auth.getSession();
     expect(sent).toEqual(["/api/me", "/api/auth/get-session"]);
   });
 });
@@ -112,7 +171,7 @@ describe("API version", () => {
     const { fetch } = recordRequests(() =>
       Response.json({ error: "No." }, { headers, status }),
     );
-    const balebase = new Balebase({ fetch });
+    const balebase = new Balebase({ apiBaseUrl, fetch });
     const changes: (string | null)[] = [];
     const stop = balebase.apiVersion.subscribe(() =>
       changes.push(balebase.apiVersion.current),
@@ -141,6 +200,7 @@ describe("network", () => {
   it("reads and follows the host's connectivity", () => {
     let listener: ((online: boolean) => void) | undefined;
     const balebase = new Balebase({
+      apiBaseUrl,
       network: {
         getOnline: () => false,
         subscribe(next) {
@@ -161,7 +221,7 @@ describe("network", () => {
   });
 
   it("reports online outside a browser, where nothing can change it", () => {
-    const { network } = new Balebase();
+    const { network } = new Balebase({ apiBaseUrl });
     expect(network.online).toBe(true);
     network.subscribe(() => {
       throw new Error("A headless source never changes.");

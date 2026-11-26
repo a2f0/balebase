@@ -11,6 +11,11 @@ export interface ApiClientOptions {
   baseUrl: string;
   /** Sends each request. The default looks the global fetch up per call. */
   fetch?: (input: string, init: RequestInit) => Promise<Response>;
+  /**
+   * Ends every request when it aborts, as well as at each route's own
+   * timeout. Usually set through `withSignal`.
+   */
+  signal?: AbortSignal | undefined;
 }
 
 /** A route's input, optional when every part of it is. */
@@ -27,12 +32,26 @@ interface LooseInput {
 
 /** Sends requests for the contract's routes. Area clients build on it. */
 export class Transport {
-  readonly #baseUrl: string;
+  readonly #options: ApiClientOptions;
   readonly #fetch: NonNullable<ApiClientOptions["fetch"]>;
 
   constructor(options: ApiClientOptions) {
-    this.#baseUrl = options.baseUrl;
+    this.#options = options;
     this.#fetch = options.fetch ?? ((input, init) => fetch(input, init));
+  }
+
+  /**
+   * This client with every request also ending when `signal` aborts, such as
+   * when the screen that asked for it goes away. Each route's own timeout
+   * still applies, so a request ends at whichever comes first.
+   */
+  withSignal(signal: AbortSignal): this {
+    const current = this.#options.signal;
+    const Client = this.constructor as new (options: ApiClientOptions) => this;
+    return new Client({
+      ...this.#options,
+      signal: current ? AbortSignal.any([current, signal]) : signal,
+    });
   }
 
   /** The absolute URL of a route, for links and downloads the browser opens. */
@@ -51,7 +70,7 @@ export class Transport {
           search.append(key, String(item));
       }
     }
-    return `${this.#baseUrl}${path}${search.size ? `?${search}` : ""}`;
+    return `${this.#options.baseUrl}${path}${search.size ? `?${search}` : ""}`;
   }
 
   /** Sends a route's request. A response that isn't OK throws an ApiError. */
@@ -64,8 +83,11 @@ export class Transport {
       credentials: route.credentials ?? "include",
       method: route.method,
     };
+    const signals: AbortSignal[] = [];
+    if (this.#options.signal) signals.push(this.#options.signal);
     if (route.timeoutMs !== undefined)
-      init.signal = AbortSignal.timeout(route.timeoutMs);
+      signals.push(AbortSignal.timeout(route.timeoutMs));
+    if (signals.length > 0) init.signal = AbortSignal.any(signals);
     if (route.body === "form") init.body = body as FormData;
     else if (route.body === "file") {
       const file = body as Blob;

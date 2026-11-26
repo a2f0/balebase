@@ -18,22 +18,26 @@ function useRunDetail(runId: string, before: string) {
     if (previous.current.runId !== runId || previous.current.before !== before)
       setDetail(undefined);
     previous.current = { runId, before };
-    let active = true;
+    // Leaving the run or its page ends the read in flight, which can take up
+    // to the endpoint's 30-second timeout, and drops anything it returns.
+    const leaving = new AbortController();
+    const { signal } = leaving;
+    const api = balebase().api.withSignal(signal);
     let polling = false;
     let timer: ReturnType<typeof setTimeout>;
     setError(undefined);
     function load() {
-      return balebase()
-        .api.adminJobs.detail(runId, before || undefined)
+      return api.adminJobs
+        .detail(runId, before || undefined)
         .then((result) => {
-          if (!active) return;
+          if (signal.aborted) return;
           polling =
             result.run.status === "queued" || result.run.status === "running";
           setDetail(result);
           setError(undefined);
         })
         .catch((cause: unknown) => {
-          if (!active) return;
+          if (signal.aborted) return;
           setError(
             cause instanceof Error && cause.name === "TimeoutError"
               ? "Loading job output took too long. Try again."
@@ -41,13 +45,13 @@ function useRunDetail(runId: string, before: string) {
           );
         })
         .finally(() => {
-          if (active && !before && polling)
+          if (!signal.aborted && !before && polling)
             timer = setTimeout(() => void load(), runPollMs);
         });
     }
     void load();
     return () => {
-      active = false;
+      leaving.abort();
       clearTimeout(timer);
     };
   }, [runId, before, attempt]);

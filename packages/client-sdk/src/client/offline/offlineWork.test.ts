@@ -2,7 +2,7 @@ import { expect, it } from "bun:test";
 import { Balebase } from "../../Balebase";
 
 it("refuses photos the API would refuse before saving an issue on the device", async () => {
-  const { offline } = new Balebase();
+  const { offline } = new Balebase({ apiBaseUrl: "https://api.test" });
   const issue = {
     assignedTo: null,
     description: "",

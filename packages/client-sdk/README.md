@@ -15,15 +15,26 @@ const { user } = await balebase.api.session.me();
 
 With no options, requests go to the page's own origin through the global
 `fetch`, and connectivity comes from the browser. Outside a browser there is
-no page origin, so set `apiBaseUrl`.
+no page origin, so `new Balebase` throws without `apiBaseUrl`. A script or
+server, which has no browser session, signs its requests with an
+organization API key:
+
+```ts
+const balebase = new Balebase({
+  apiBaseUrl: "https://api.balebase.com",
+  apiKey: process.env.BALEBASE_API_KEY,
+});
+const { user } = await balebase.api.session.me(); // the key's creator
+```
 
 ## Options
 
-Every field of `BalebaseOptions` is optional.
+Every field of `BalebaseOptions` is optional in a browser.
 
 | Option | Use |
 | --- | --- |
-| `apiBaseUrl` | The API origin, without `/api`; trailing slashes are dropped, since saved data is keyed by it |
+| `apiBaseUrl` | The API origin, without `/api`; trailing slashes are dropped, since saved data is keyed by it. Required outside a browser |
+| `apiKey` | An organization API key, sent as `Authorization: Bearer` with every request; for scripts and servers, never a page |
 | `fetch` | The transport; defaults to the global `fetch`, looked up per request |
 | `nativeOrigin` | A native shell's WebView origin, sent as `X-Balebase-Native-Origin` |
 | `network` | A `NetworkStatusSource`, such as the OS's on a device; defaults to the browser's |
@@ -33,7 +44,7 @@ Every field of `BalebaseOptions` is optional.
 
 | Member | Holds |
 | --- | --- |
-| `api` | The `ApiClient` from `@balebase/api-client`: one typed method per route |
+| `api` | The `ApiClient` from `@balebase/api-client`: one typed method per route. `api.withSignal(signal)` is the same client with every request also ending when `signal` aborts |
 | `apiVersion` | The version the latest API response named, with `subscribe` |
 | `auth` | The Better Auth client (`better-auth/client`) with the API's plugins: sign-in, sessions, two-factor, organizations. Made on first use; its requests go through `fetch` |
 | `fetch` | `fetch` for API URLs outside the typed routes, such as files; marks native requests and records the version like every typed call |
@@ -44,6 +55,12 @@ Every field of `BalebaseOptions` is optional.
 React hosts read the session with Better Auth's `useStore` from
 `better-auth/react` over `balebase.auth.useSession`, the store the React
 client would wrap.
+
+An instance needs no closing. It starts nothing when made: the auth client
+watches the session (focus, other tabs) only while something reads
+`auth.useSession`, and stops a second after its last reader leaves. The
+offline and finance subscriptions belong to whoever subscribed, and every
+`subscribe` returns its own unsubscribe.
 
 The package also exports `ApiError` and the `ApiClient`, `FinanceFilters`, and
 `IssueFilters` types, so hosts need not import `@balebase/api-client`;

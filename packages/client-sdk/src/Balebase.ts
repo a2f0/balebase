@@ -37,13 +37,19 @@ export class Balebase {
   #auth: BalebaseAuthClient | undefined;
 
   constructor(options: BalebaseOptions = {}) {
+    // One spelling, since saved data on the device is keyed by it.
+    const apiBaseUrl = (options.apiBaseUrl ?? "").replace(/\/+$/, "");
+    if (!apiBaseUrl && typeof location === "undefined") {
+      throw new Error(
+        "Set apiBaseUrl: outside a browser there is no page origin to send API requests to.",
+      );
+    }
     this.fetch = createApiFetch({
+      apiKey: options.apiKey,
       apiVersion: this.apiVersion,
       fetch: options.fetch,
       nativeOrigin: options.nativeOrigin,
     });
-    // One spelling, since saved data on the device is keyed by it.
-    const apiBaseUrl = (options.apiBaseUrl ?? "").replace(/\/+$/, "");
     this.#apiBaseUrl = apiBaseUrl;
     this.api = new ApiClient({ baseUrl: apiBaseUrl, fetch: this.fetch });
     this.financeCache = new FinanceCache(apiBaseUrl);
