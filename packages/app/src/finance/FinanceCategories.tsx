@@ -1,3 +1,4 @@
+import { type CategoryTotals, periodTotals } from "@balebase/client-sdk";
 import {
   Button,
   Card,
@@ -15,7 +16,6 @@ import { type FormEvent, useEffect, useRef, useState } from "react";
 import { balebase } from "../balebase";
 import { ListRow } from "../shared/ListRow";
 import { countLabel } from "../shared/labels";
-import { type CategoryTotals, periodTotals } from "./categoryYearCounts";
 import {
   periodTransactionCount,
   readHideEmptyCategories,

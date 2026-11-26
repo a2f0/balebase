@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
 import { balebase } from "../balebase";
-import { clearUserTransactions } from "../finance/transactionCache";
 import { authClient } from "../shared/authClient";
 import { throwIfRefused } from "../shared/errors";
 import { clearDevicePreferences } from "./devicePreferences";
@@ -99,7 +98,10 @@ export function useAccountSessions(
     // Sign-out resets this device's display settings for the next person.
     clearDevicePreferences();
     // Saved bank transactions can be read again online; drop them.
-    if (userId) await clearUserTransactions(userId).catch(() => undefined);
+    if (userId)
+      await balebase()
+        .financeCache.clearUser(userId)
+        .catch(() => undefined);
     await refetchSession();
   }
 

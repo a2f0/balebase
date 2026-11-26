@@ -1,3 +1,4 @@
+import type { CacheScope } from "@balebase/client-sdk";
 import {
   Badge,
   Banner,
@@ -29,7 +30,6 @@ import { connectionTone } from "./FinanceAccounts";
 import { FinanceSourceFields, type SourceField } from "./FinanceSourceFields";
 import { FinanceSyncSettings } from "./FinanceSyncSettings";
 import { formatImportedHistory, formatMoney } from "./financeFormat";
-import type { CacheScope } from "./transactionCache";
 import { useGuardedLoad } from "./useCacheScope";
 
 export function FinanceAccountPage({

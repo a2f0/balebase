@@ -1,9 +1,6 @@
+import type { CacheScope } from "@balebase/client-sdk";
 import { useEffect } from "react";
-import {
-  type CacheScope,
-  clearFormerOrganizations,
-  clearScopeTransactions,
-} from "./transactionCache";
+import { balebase } from "../balebase";
 
 interface FinanceAccess {
   can: (capability: "finance") => boolean;
@@ -45,11 +42,11 @@ export function useRevokedFinanceCleanup(
   const membershipKey = memberships && JSON.stringify(memberships);
   useEffect(() => {
     if (!userId || !membershipKey) return;
-    void clearFormerOrganizations(userId, JSON.parse(membershipKey)).catch(
-      () => {
+    void balebase()
+      .financeCache.clearFormerOrganizations(userId, JSON.parse(membershipKey))
+      .catch(() => {
         // Retried on the next load; nothing to show for it here.
-      },
-    );
+      });
   }, [membershipKey, userId]);
   const scope = revokedFinanceScope(
     userId,
@@ -60,11 +57,13 @@ export function useRevokedFinanceCleanup(
   const revokedOrganization = scope?.organizationId;
   useEffect(() => {
     if (!revokedUser || !revokedOrganization) return;
-    void clearScopeTransactions({
-      organizationId: revokedOrganization,
-      userId: revokedUser,
-    }).catch(() => {
-      // Retried on the next load; nothing to show for it here.
-    });
+    void balebase()
+      .financeCache.clearScope({
+        organizationId: revokedOrganization,
+        userId: revokedUser,
+      })
+      .catch(() => {
+        // Retried on the next load; nothing to show for it here.
+      });
   }, [revokedOrganization, revokedUser]);
 }

@@ -1,8 +1,9 @@
+import { type CacheScope, clears } from "@balebase/client-sdk";
 import type { FinancePeriod } from "@balebase/validators/rules";
 import { type ReactNode, useCallback } from "react";
+import { balebase } from "../balebase";
 import { KeptPage } from "../workspace/KeptPage";
 import { Finance } from "./Finance";
-import { type CacheScope, clears, onCleared } from "./transactionCache";
 import { useCacheScope } from "./useCacheScope";
 
 /**
@@ -33,7 +34,7 @@ export function FinanceSection({
   const discardWhen = useCallback(
     (discard: () => void) =>
       scope &&
-      onCleared((cleared) => {
+      balebase().financeCache.onCleared((cleared) => {
         if (clears(cleared, scope)) discard();
       }),
     [scope],

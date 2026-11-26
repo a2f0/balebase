@@ -1,4 +1,4 @@
-import type { IssueFilters } from "@balebase/client-sdk";
+import type { CacheScope, IssueFilters } from "@balebase/client-sdk";
 import {
   Banner,
   Button,
@@ -22,7 +22,6 @@ import { useAction } from "../shared/useAction";
 import { transactionIssuePath } from "../workspace/workspacePaths";
 import { FinanceTransactionRow } from "./FinanceTransactionHistory";
 import { FinanceTransactionSourceData } from "./FinanceTransactionSourceData";
-import { type CacheScope, catchUpSavedTransactions } from "./transactionCache";
 import { useGuardedLoad } from "./useCacheScope";
 
 export function FinanceTransactionPage({
@@ -162,7 +161,7 @@ function useTransaction(id: string, givenScope: CacheScope | undefined) {
   }
   function catchUp() {
     return guard(
-      catchUpSavedTransactions(scope, (cursor) =>
+      balebase().financeCache.catchUp(scope, (cursor) =>
         balebase().api.finance.transactionChanges(cursor),
       ),
     ).catch(() => {

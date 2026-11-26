@@ -1,4 +1,4 @@
-import { errorMessage } from "@balebase/client-sdk";
+import { type CacheScope, errorMessage } from "@balebase/client-sdk";
 import {
   Badge,
   Banner,
@@ -47,7 +47,6 @@ import {
   syncPollError,
   syncPollTransition,
 } from "./syncPollState";
-import type { CacheScope } from "./transactionCache";
 import { useGuardedLoad } from "./useCacheScope";
 
 type Connection = FinanceConnectionDetail["connection"];

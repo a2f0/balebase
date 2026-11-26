@@ -1,22 +1,14 @@
 import { describe, expect, it, spyOn } from "bun:test";
-import { ApiError } from "@balebase/client-sdk";
+import { ApiError } from "@balebase/api-client";
 import type {
   FinanceTransaction,
   FinanceTransactionChanges,
 } from "@balebase/validators/finance";
-import { apiUrl } from "../shared/config";
-import {
-  type CacheScope,
-  catchUpSavedTransactions,
-  clearedOnRefusal,
-  clearFormerOrganizations,
-  clearScopeTransactions,
-  clearUserTransactions,
-  memoryTransactionStore,
-  onCleared,
-  pullTransactions,
-  SignedOut,
-} from "./transactionCache";
+import { type CacheScope, SignedOut } from "../../data/finance/financeCache";
+import { FinanceCache } from ".";
+
+const apiUrl = "https://api.test";
+const cache = new FinanceCache(apiUrl);
 
 const scope: CacheScope = { organizationId: "org", userId: "person" };
 
@@ -72,7 +64,7 @@ function feed(pages: Record<string, FinanceTransactionChanges>) {
 
 describe("pulling transactions", () => {
   it("resumes from the last saved page after an interrupted download", async () => {
-    const store = memoryTransactionStore();
+    const store = cache.memoryStore();
     let fail = true;
     const pages = feed({
       start: page("1", true, [row("a"), row("b")]),
@@ -85,7 +77,7 @@ describe("pulling transactions", () => {
       }
       return pages.fetchPage(cursor);
     };
-    await expect(pullTransactions(scope, store, interrupted)).rejects.toThrow(
+    await expect(cache.pull(scope, store, interrupted)).rejects.toThrow(
       "Failed to fetch",
     );
     // The first page and its cursor were kept; nothing is complete yet.
@@ -94,7 +86,7 @@ describe("pulling transactions", () => {
     expect(partial.completedAt).toBeNull();
     expect(partial.transactions.map(({ id }) => id)).toEqual(["a", "b"]);
 
-    await pullTransactions(scope, store, interrupted);
+    await cache.pull(scope, store, interrupted);
     // The retry asked for the page after the saved cursor, not the start.
     expect(pages.requested).toEqual([null, "1"]);
     const done = await store.read(scope);
@@ -109,16 +101,16 @@ describe("pulling transactions", () => {
   });
 
   it("reads again after a running pull for callers who arrive during it", async () => {
-    const store = memoryTransactionStore();
+    const store = cache.memoryStore();
     const pages = feed({
       start: page("1", false, [row("a")]),
       "1": page("2", false, [row("a", 7)]),
     });
-    const first = pullTransactions(scope, store, pages.fetchPage);
+    const first = cache.pull(scope, store, pages.fetchPage);
     // A save committed while the first pull runs: its callers must see it.
     const [second, third] = [
-      pullTransactions(scope, store, pages.fetchPage),
-      pullTransactions(scope, store, pages.fetchPage),
+      cache.pull(scope, store, pages.fetchPage),
+      cache.pull(scope, store, pages.fetchPage),
     ];
     expect(second).toBe(third);
     expect(second).not.toBe(first);
@@ -130,10 +122,10 @@ describe("pulling transactions", () => {
   });
 
   it("ends a queued pull whose saved copy was cleared before it started", async () => {
-    const store = memoryTransactionStore();
+    const store = cache.memoryStore();
     const held = Promise.withResolvers<FinanceTransactionChanges>();
-    const first = pullTransactions(scope, store, () => held.promise);
-    const queued = pullTransactions(scope, store, async () =>
+    const first = cache.pull(scope, store, () => held.promise);
+    const queued = cache.pull(scope, store, async () =>
       page("1", false, [row("queued")]),
     );
     // Access ends (or the person signs out) while both wait.
@@ -152,13 +144,13 @@ describe("pulling transactions", () => {
   });
 
   it("re-reads the cursor after another writer moves it", async () => {
-    const store = memoryTransactionStore();
+    const store = cache.memoryStore();
     const pages = feed({
       start: page("1", false, [row("a")]),
       "1": page("2", false, [row("b")]),
       "2": page("3", false, [row("c")]),
     });
-    await pullTransactions(scope, store, pages.fetchPage);
+    await cache.pull(scope, store, pages.fetchPage);
     expect(pages.requested).toEqual([null]);
 
     // Another tab applies the next page while this pull's request is out.
@@ -174,7 +166,7 @@ describe("pulling transactions", () => {
       }
       return answer;
     };
-    await pullTransactions(scope, store, racing);
+    await cache.pull(scope, store, racing);
     // Its page was refused (the cursor moved), so it read on from the new one.
     expect(pages.requested).toEqual([null, "1", "2"]);
     const kept = await store.read(scope);
@@ -187,11 +179,9 @@ describe("pulling transactions", () => {
   });
 
   it("catches a saved copy up, keeping it through outages and nothing after a refusal", async () => {
-    const store = memoryTransactionStore();
-    await pullTransactions(scope, store, async () =>
-      page("1", false, [row("a")]),
-    );
-    await catchUpSavedTransactions(
+    const store = cache.memoryStore();
+    await cache.pull(scope, store, async () => page("1", false, [row("a")]));
+    await cache.catchUp(
       scope,
       async () => {
         throw new TypeError("Failed to fetch");
@@ -201,7 +191,7 @@ describe("pulling transactions", () => {
     expect((await store.read(scope)).transactions).toHaveLength(1);
     // A refusal clears it and is reported, so the page clears too.
     await expect(
-      catchUpSavedTransactions(
+      cache.catchUp(
         scope,
         async () => {
           throw new ApiError(new Response(null, { status: 403 }), null);
@@ -219,21 +209,23 @@ describe("pulling transactions", () => {
     };
     const status = (code: number) =>
       Promise.reject(new ApiError(new Response(null, { status: code }), null));
-    await expect(clearedOnRefusal(scope, status(503), clear)).rejects.toThrow();
+    await expect(
+      cache.clearedOnRefusal(scope, status(503), clear),
+    ).rejects.toThrow();
     expect(
-      await clearedOnRefusal(scope, Promise.resolve("record"), clear),
+      await cache.clearedOnRefusal(scope, Promise.resolve("record"), clear),
     ).toBe("record");
     await expect(
-      clearedOnRefusal(undefined, status(403), clear),
+      cache.clearedOnRefusal(undefined, status(403), clear),
     ).rejects.toThrow();
     // Ended by a clearing already: not cleared again.
     await expect(
-      clearedOnRefusal(scope, Promise.reject(new SignedOut()), clear),
+      cache.clearedOnRefusal(scope, Promise.reject(new SignedOut()), clear),
     ).rejects.toBeInstanceOf(SignedOut);
     expect(cleared).toEqual([]);
-    await expect(clearedOnRefusal(scope, status(403), clear)).rejects.toThrow(
-      "Request failed with status 403.",
-    );
+    await expect(
+      cache.clearedOnRefusal(scope, status(403), clear),
+    ).rejects.toThrow("Request failed with status 403.");
     expect(cleared).toEqual([scope]);
   });
 
@@ -244,11 +236,11 @@ describe("pulling transactions", () => {
       const { except, organizationId, userId } = event.data;
       heard.push({ except, organizationId, userId });
     };
-    await clearScopeTransactions(scope);
-    await clearFormerOrganizations("person", ["org"]);
-    await clearUserTransactions("person");
+    await cache.clearScope(scope);
+    await cache.clearFormerOrganizations("person", ["org"]);
+    await cache.clearUser("person");
     // A tab clearing because another told it does not tell the rest again.
-    await clearScopeTransactions(scope, false);
+    await cache.clearScope(scope, false);
     await Bun.sleep(5);
     listener.close();
     expect(heard).toEqual([
@@ -261,13 +253,13 @@ describe("pulling transactions", () => {
   it("tells this tab's listeners about clearings here and in other tabs", async () => {
     const heard: unknown[] = [];
     const fromOtherTab = Promise.withResolvers<void>();
-    const stop = onCleared(({ except, organizationId, userId }) => {
+    const stop = cache.onCleared(({ except, organizationId, userId }) => {
       heard.push({ except, organizationId, userId });
       if (organizationId === undefined) fromOtherTab.resolve();
     });
-    await clearScopeTransactions(scope);
+    await cache.clearScope(scope);
     // A copy only this tab keeps, without IndexedDB.
-    await memoryTransactionStore().clear({
+    await cache.memoryStore().clear({
       ...scope,
       organizationId: "memory",
     });
@@ -283,6 +275,39 @@ describe("pulling transactions", () => {
     ]);
   });
 
+  it("shares this tab's listeners between caches for one API only", async () => {
+    const heard: string[] = [];
+    const last = Promise.withResolvers<void>();
+    const stop = cache.onCleared(({ organizationId }) => {
+      if (organizationId) heard.push(organizationId);
+      if (organizationId === "last") last.resolve();
+    });
+    // A second SDK for the API, as after a host change, reaches them.
+    await new FinanceCache(apiUrl)
+      .memoryStore()
+      .clear({ ...scope, organizationId: "same-api" });
+    await new FinanceCache("https://other.test")
+      .memoryStore()
+      .clear({ ...scope, organizationId: "other-api" });
+    // Another API's announcements from other tabs do not either; one
+    // channel delivers in order, so hearing "last" means the first arrived.
+    const otherTab = new BroadcastChannel("balebase-finance-cleared");
+    for (const [api, organizationId] of [
+      ["https://other.test", "other-tab"],
+      [apiUrl, "last"],
+    ])
+      otherTab.postMessage({
+        apiUrl: api,
+        organizationId,
+        source: "other-tab",
+        userId: "person",
+      });
+    await last.promise;
+    otherTab.close();
+    stop();
+    expect(heard).toEqual(["same-api", "last"]);
+  });
+
   it("gives up on a stalled page so pulls waiting behind it can run", async () => {
     // Holds the page timeout (only) until fired below.
     const timeouts: (() => void)[] = [];
@@ -295,10 +320,10 @@ describe("pulling transactions", () => {
       timeouts.push(handler);
       return 0;
     }) as unknown as typeof setTimeout);
-    const store = memoryTransactionStore();
-    const stalled = pullTransactions(scope, store, () => new Promise(() => {}));
+    const store = cache.memoryStore();
+    const stalled = cache.pull(scope, store, () => new Promise(() => {}));
     // A later load queues behind the stalled pull.
-    const later = pullTransactions(scope, store, async () =>
+    const later = cache.pull(scope, store, async () =>
       page("1", false, [row("a")]),
     );
     await Bun.sleep(0);
@@ -313,13 +338,10 @@ describe("pulling transactions", () => {
 
   it("shares a pull only with the same store", async () => {
     const pages = feed({ start: page("1", false, [row("a")]) });
-    const [first, second] = [
-      memoryTransactionStore(),
-      memoryTransactionStore(),
-    ];
+    const [first, second] = [cache.memoryStore(), cache.memoryStore()];
     await Promise.all([
-      pullTransactions(scope, first, pages.fetchPage),
-      pullTransactions(scope, second, pages.fetchPage),
+      cache.pull(scope, first, pages.fetchPage),
+      cache.pull(scope, second, pages.fetchPage),
     ]);
     expect(pages.requested).toEqual([null, null]);
     expect((await second.read(scope)).transactions.map(({ id }) => id)).toEqual(
@@ -328,7 +350,7 @@ describe("pulling transactions", () => {
   });
 
   it("starts over once when the server is behind the device, and refuses other organizations", async () => {
-    const store = memoryTransactionStore();
+    const store = cache.memoryStore();
     await store.apply(
       scope,
       { cursor: null, epoch: "0" },
@@ -339,7 +361,7 @@ describe("pulling transactions", () => {
       "9": { ...page("", false, []), cursor: null, reset: true },
       start: page("1", false, [row("fresh")]),
     });
-    await pullTransactions(scope, store, pages.fetchPage);
+    await cache.pull(scope, store, pages.fetchPage);
     expect(pages.requested).toEqual(["9", null]);
     expect((await store.read(scope)).transactions.map(({ id }) => id)).toEqual([
       "fresh",
@@ -355,7 +377,7 @@ describe("pulling transactions", () => {
       userId: "someone-else",
     });
     for (const answer of [elsewhere, someoneElse])
-      await expect(pullTransactions(scope, store, answer)).rejects.toThrow(
+      await expect(cache.pull(scope, store, answer)).rejects.toThrow(
         "The signed-in account or organization changed",
       );
     expect((await store.read(scope)).transactions.map(({ id }) => id)).toEqual([

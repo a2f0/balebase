@@ -1,17 +1,17 @@
 import { describe, expect, it, spyOn } from "bun:test";
-import { ApiError } from "@balebase/client-sdk";
+import {
+  ApiError,
+  type CacheScope,
+  SignedOut,
+  type TransactionStore,
+} from "@balebase/client-sdk";
 import type {
   FinanceData,
   FinanceTransaction,
   FinanceTransactionChanges,
 } from "@balebase/validators/finance";
+import { balebase } from "../balebase";
 import { fallBack, loadFinance } from "./financeCacheLoad";
-import {
-  type CacheScope,
-  memoryTransactionStore,
-  SignedOut,
-  type TransactionStore,
-} from "./transactionCache";
 
 const scope: CacheScope = { organizationId: "org", userId: "person" };
 
@@ -75,7 +75,7 @@ const ids = (data: FinanceData) => data.transactions.map(({ id }) => id).sort();
 
 describe("loading cached finances", () => {
   it("clears the saved copy for a refused feed even while the summary is down", async () => {
-    const store = memoryTransactionStore();
+    const store = balebase().financeCache.memoryStore();
     await loadFinance(store, scope, true, sources);
     const offline = await loadFinance(store, scope, true, {
       ...sources,
@@ -105,7 +105,7 @@ describe("loading cached finances", () => {
   });
 
   it("clears the saved copy when a page without transactions is refused", async () => {
-    const store = memoryTransactionStore();
+    const store = balebase().financeCache.memoryStore();
     await loadFinance(store, scope, true, sources);
     // The Categories page reads only the summary.
     await expect(
@@ -120,7 +120,7 @@ describe("loading cached finances", () => {
   });
 
   it("clears at once on a refusal while the other request still waits", async () => {
-    const store = memoryTransactionStore();
+    const store = balebase().financeCache.memoryStore();
     await loadFinance(store, scope, true, sources);
     const stalled = Promise.withResolvers<FinanceTransactionChanges>();
     const waited = Bun.sleep(1000).then(() => "still waiting");
@@ -146,7 +146,7 @@ describe("loading cached finances", () => {
   });
 
   it("brings a saved copy up to date from pages without transactions", async () => {
-    const store = memoryTransactionStore();
+    const store = balebase().financeCache.memoryStore();
     let feeds = 0;
     const counted = {
       ...sources,
@@ -169,7 +169,7 @@ describe("loading cached finances", () => {
       "b",
     ]);
     // Nor does it save a summary for a scope without a saved copy.
-    const fresh = memoryTransactionStore();
+    const fresh = balebase().financeCache.memoryStore();
     await loadFinance(fresh, scope, false, counted);
     expect((await fresh.read(scope)).summary).toBeNull();
     // Their changes to categories reach the saved copy's summary.
@@ -203,7 +203,7 @@ describe("loading cached finances", () => {
   });
 
   it("catches up a saved copy that finished empty from other pages", async () => {
-    const store = memoryTransactionStore();
+    const store = balebase().financeCache.memoryStore();
     let feeds = 0;
     const counted = {
       ...sources,
@@ -222,7 +222,7 @@ describe("loading cached finances", () => {
   });
 
   it("keeps the saved copy for errors that are not refusals", async () => {
-    const store = memoryTransactionStore();
+    const store = balebase().financeCache.memoryStore();
     await loadFinance(store, scope, true, sources);
     const limited = await loadFinance(store, scope, true, {
       ...sources,
@@ -235,14 +235,14 @@ describe("loading cached finances", () => {
   });
 
   it("ends a pull that a sign-out overtakes instead of falling back to memory", async () => {
-    const primary = memoryTransactionStore();
+    const primary = balebase().financeCache.memoryStore();
     const signingOut: TransactionStore = {
       ...primary,
       apply: async () => {
         throw new SignedOut();
       },
     };
-    const secondary = memoryTransactionStore();
+    const secondary = balebase().financeCache.memoryStore();
     let pulls = 0;
     await expect(
       loadFinance(fallBack(signingOut, secondary), scope, true, {
@@ -258,7 +258,7 @@ describe("loading cached finances", () => {
   });
 
   it("ends at once when the feed finds another account while the summary stalls", async () => {
-    const store = memoryTransactionStore();
+    const store = balebase().financeCache.memoryStore();
     await loadFinance(store, scope, true, sources);
     const stalled = new Promise<FinanceData>(() => {});
     const waited = Bun.sleep(1000).then(() => "still waiting");
@@ -282,7 +282,7 @@ describe("loading cached finances", () => {
   });
 
   it("shows the saved copy once a stalled summary times out", async () => {
-    const store = memoryTransactionStore();
+    const store = balebase().financeCache.memoryStore();
     await loadFinance(store, scope, true, sources);
     const timeouts: (() => void)[] = [];
     const realSetTimeout = globalThis.setTimeout;
@@ -307,7 +307,7 @@ describe("loading cached finances", () => {
   });
 
   it("saves nothing read in another account's session", async () => {
-    const store = memoryTransactionStore();
+    const store = balebase().financeCache.memoryStore();
     await loadFinance(store, scope, true, sources);
     const before = await store.read(scope);
     await expect(
@@ -320,7 +320,7 @@ describe("loading cached finances", () => {
   });
 
   it("saves nothing when either response is another organization's", async () => {
-    const store = memoryTransactionStore();
+    const store = balebase().financeCache.memoryStore();
     await loadFinance(store, scope, true, sources);
     const before = await store.read(scope);
     await expect(
@@ -359,7 +359,7 @@ describe("loading cached finances", () => {
   });
 
   it("lets a retry after a clearing finish while the pull it overtook ends", async () => {
-    const store = memoryTransactionStore();
+    const store = balebase().financeCache.memoryStore();
     const stalled = Promise.withResolvers<FinanceTransactionChanges>();
     const asked = Promise.withResolvers<void>();
     let calls = 0;
@@ -380,14 +380,14 @@ describe("loading cached finances", () => {
   });
 
   it("downloads again into memory when IndexedDB fails after a pull", async () => {
-    const primary = memoryTransactionStore();
+    const primary = balebase().financeCache.memoryStore();
     const failing: TransactionStore = {
       ...primary,
       saveSummary: async () => {
         throw new DOMException("Quota exceeded.", "QuotaExceededError");
       },
     };
-    const secondary = memoryTransactionStore();
+    const secondary = balebase().financeCache.memoryStore();
     const store = fallBack(failing, secondary);
     let pulls = 0;
     const loaded = await loadFinance(store, scope, true, {

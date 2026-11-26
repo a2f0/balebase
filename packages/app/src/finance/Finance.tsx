@@ -1,4 +1,10 @@
-import { errorMessage } from "@balebase/client-sdk";
+import {
+  type CacheScope,
+  type CategoryChange,
+  categoryYearCounts,
+  errorMessage,
+  refused,
+} from "@balebase/client-sdk";
 import { productName } from "@balebase/ui/brand";
 import {
   Banner,
@@ -36,7 +42,6 @@ import {
   financePageFor,
   financePages,
 } from "../workspace/workspacePaths";
-import { type CategoryChange, categoryYearCounts } from "./categoryYearCounts";
 import {
   FinanceAccounts,
   FinanceConnectionAlert,
@@ -66,7 +71,6 @@ import {
   linkErrorMessage,
   type PlaidLinkSession,
 } from "./plaidLinkDiagnostics";
-import { type CacheScope, refused } from "./transactionCache";
 import {
   type FinanceListingState,
   initialFilters,

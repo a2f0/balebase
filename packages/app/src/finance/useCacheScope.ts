@@ -1,14 +1,13 @@
-import { errorMessage } from "@balebase/client-sdk";
-import { useCallback, useEffect, useMemo, useRef } from "react";
-import { useLoad } from "../shared/useLoad";
 import {
   type CacheScope,
-  clearedOnRefusal,
   clears,
-  onClearedElsewhere,
+  errorMessage,
   refused,
   SignedOut,
-} from "./transactionCache";
+} from "@balebase/client-sdk";
+import { useCallback, useEffect, useMemo, useRef } from "react";
+import { balebase } from "../balebase";
+import { useLoad } from "../shared/useLoad";
 
 /**
  * The scope by value: routes build a new scope object on every render, and
@@ -52,12 +51,12 @@ export function useGuardedLoad<T>(
   const loaded = useLoad(
     useCallback(async () => {
       const started = refusals.current;
-      const value = await clearedOnRefusal(scope, load()).catch(
-        (cause: unknown) => {
+      const value = await balebase()
+        .financeCache.clearedOnRefusal(scope, load())
+        .catch((cause: unknown) => {
           onRefusal(cause);
           throw cause;
-        },
-      );
+        });
       if (refusals.current !== started) throw new SignedOut();
       return value;
     }, [load, onRefusal, scope]),
@@ -70,16 +69,18 @@ export function useGuardedLoad<T>(
   // Another tab found access gone (or signed out): drop what was read too.
   useEffect(() => {
     if (!scope) return;
-    return onClearedElsewhere((cleared) => {
+    return balebase().financeCache.onClearedElsewhere((cleared) => {
       if (clears(cleared, scope)) onRefusal(new SignedOut());
     });
   }, [onRefusal, scope]);
   const guard = useCallback(
     <R>(work: Promise<R>) =>
-      clearedOnRefusal(scope, work).catch((cause: unknown) => {
-        onRefusal(cause);
-        throw cause;
-      }),
+      balebase()
+        .financeCache.clearedOnRefusal(scope, work)
+        .catch((cause: unknown) => {
+          onRefusal(cause);
+          throw cause;
+        }),
     [onRefusal, scope],
   );
   return { ...loaded, guard, scope };

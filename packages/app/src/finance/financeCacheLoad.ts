@@ -1,18 +1,18 @@
-import type {
-  FinanceData,
-  FinanceTransactionChanges,
-} from "@balebase/validators/finance";
-import { newestFirst } from "./financeTransactions";
 import {
   type CacheScope,
   type FinanceSummary,
   OrganizationChanged,
-  pullTransactions,
   refused,
   SignedOut,
   type TransactionStore,
   withTimeout,
-} from "./transactionCache";
+} from "@balebase/client-sdk";
+import type {
+  FinanceData,
+  FinanceTransactionChanges,
+} from "@balebase/validators/finance";
+import { balebase } from "../balebase";
+import { newestFirst } from "./financeTransactions";
 
 /** Raised once when a store gives up on IndexedDB for memory. */
 class StoreFellBack extends Error {
@@ -127,7 +127,7 @@ async function loadOnce(
       return data;
     }),
     pull
-      ? pullTransactions(
+      ? balebase().financeCache.pull(
           cacheScope,
           store,
           changes,

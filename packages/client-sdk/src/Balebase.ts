@@ -1,5 +1,6 @@
 import { ApiClient } from "@balebase/api-client";
 import type { BalebaseOptions } from "./BalebaseOptions";
+import { FinanceCache } from "./client/finance";
 import { Offline } from "./client/offline";
 import { OfflineStore } from "./client/offline/offlineStore";
 import { type ApiFetch, createApiFetch } from "./client/runtime/apiFetch";
@@ -22,6 +23,8 @@ export class Balebase {
    * and records the API version.
    */
   readonly fetch: ApiFetch;
+  /** The transactions this device keeps for Finance. */
+  readonly financeCache: FinanceCache;
   /** The device's connectivity. */
   readonly network: Network;
   /** Forms and issues done on this device, and the queue that syncs them. */
@@ -35,6 +38,7 @@ export class Balebase {
     });
     const apiBaseUrl = options.apiBaseUrl ?? "";
     this.api = new ApiClient({ baseUrl: apiBaseUrl, fetch: this.fetch });
+    this.financeCache = new FinanceCache(apiBaseUrl);
     this.network = new Network(options.network);
     this.offline = new Offline({
       api: this.api,

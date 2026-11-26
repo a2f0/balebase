@@ -1,6 +1,6 @@
+import { randomId } from "@balebase/client-sdk";
 import { dismissDialogs } from "@balebase/ui/react";
 import { useEffect, useRef } from "react";
-import { randomId } from "../shared/randomId";
 
 const positionKey = "workspacePosition";
 /** Names an entry for good: positions are reused once Back and a new page
