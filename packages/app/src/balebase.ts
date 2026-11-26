@@ -7,7 +7,8 @@ let built: { host: AppHost; sdk: Balebase } | undefined;
 /**
  * The app's SDK: the API and the client state behind it, made from the host
  * `configureHost` set, so the two never disagree. Until a shell configures
- * one, as in tests, it is a browser's.
+ * one, as in tests, it is a browser's. `renderApp` configures the host once;
+ * only tests change it again, which starts a new SDK with no recorded state.
  */
 export function balebase() {
   const host = appHost();

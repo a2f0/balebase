@@ -76,6 +76,13 @@ describe("host-dependent API requests", () => {
     );
   });
 
+  it("keeps one SDK until the host changes", () => {
+    const sdk = balebase();
+    expect(balebase()).toBe(sdk);
+    configureHost({});
+    expect(balebase()).not.toBe(sdk);
+  });
+
   it("reads connectivity from the shell's source", () => {
     configureHost({
       network: { getOnline: () => false, subscribe: () => () => {} },

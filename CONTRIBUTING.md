@@ -82,10 +82,10 @@ it.
   `packages/api/src`.
 - `shared/` sits below every feature in both the API and the app: Biome's
   `noRestrictedImports` overrides in `biome.jsonc` let shared modules import
-  only each other and the entry-point types (`types.ts` and `auth/apiEnv.ts`
-  here, `host.ts` and `balebase.ts` in the app). Code that needs a feature
-  belongs in that feature, as the activity feed route does in
-  `activity/activity.ts` while the recording helpers stay in
+  only each other and the entry points (the types in `types.ts` and
+  `auth/apiEnv.ts` here, `host.ts` and the SDK in `balebase.ts` in the app).
+  Code that needs a feature belongs in that feature, as the activity feed
+  route does in `activity/activity.ts` while the recording helpers stay in
   `shared/activity.ts` and `shared/systemActivity.ts`.
 - Send JSON with `respond(context, route, body)`, and read input with
   `readBody(context, route, message)` and `readQuery` from
