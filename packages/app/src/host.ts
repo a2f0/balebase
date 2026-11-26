@@ -1,3 +1,5 @@
+import type { NetworkStatusSource } from "@balebase/client-sdk";
+
 /**
  * What the shell running the app provides. The web shell (packages/app-web)
  * leaves `native` unset; the Capacitor shell (packages/app-capacitor) fills it
@@ -8,7 +10,7 @@ export interface AppHost {
   native?: NativeHost | undefined;
   /**
    * Device connectivity, where the shell knows better than the WebView;
-   * otherwise the browser's (`shared/network.ts`).
+   * otherwise the browser's.
    */
   network?: NetworkStatusSource | undefined;
   captureError?:
@@ -45,30 +47,22 @@ export interface SavedSignIn {
   password: string;
 }
 
-/**
- * A source of connectivity: a synchronous best-known value, and changes. A
- * source that reads asynchronously starts from a guess and corrects it
- * through its first change.
- */
-export interface NetworkStatusSource {
-  getOnline(): boolean;
-  /** Calls `listener` with each change; returns an unsubscribe. */
-  subscribe(listener: (online: boolean) => void): () => void;
-}
-
 let host: AppHost = {};
 
-/** Set once by renderApp before the first render. */
+/**
+ * Set once by renderApp before the first render. The app's SDK
+ * (`balebase.ts`) is made from it.
+ */
 export function configureHost(next: AppHost) {
   host = next;
+}
+
+/** The host the shell configured, or an empty one in a browser test. */
+export function appHost() {
+  return host;
 }
 
 /** The native shell's services, or undefined in a browser. */
 export function nativeHost() {
   return host.native;
-}
-
-/** The shell's connectivity source, or undefined to use the browser's. */
-export function networkSource() {
-  return host.network;
 }

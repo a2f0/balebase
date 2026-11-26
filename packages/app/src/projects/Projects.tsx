@@ -12,8 +12,8 @@ import {
 } from "@balebase/ui/react";
 import type { NewProject, ProjectSummary } from "@balebase/validators/projects";
 import { useCallback, useReducer, useState } from "react";
+import { balebase } from "../balebase";
 import { useDevice } from "../offline/offlineContext";
-import { api } from "../shared/apiClient";
 import { ListRow } from "../shared/ListRow";
 import { countLabel } from "../shared/labels";
 import { useAction } from "../shared/useAction";
@@ -82,7 +82,10 @@ function useProjectListChanges(reload: () => Promise<boolean>) {
   ) {
     const { project } = edit;
     const saved = await action.run(async () => {
-      await api.projects.update(project.id, editedFields(project, input));
+      await balebase().api.projects.update(
+        project.id,
+        editedFields(project, input),
+      );
       await reload();
     }, "Project updated.");
     if (saved) dispatch({ form: edit, type: "editSaved" });
@@ -93,7 +96,7 @@ function useProjectListChanges(reload: () => Promise<boolean>) {
   async function remove(project: ProjectSummary) {
     if (!(await confirmProjectDeletion(project))) return;
     const deleted = await action.run(async () => {
-      await api.projects.delete(project.id);
+      await balebase().api.projects.delete(project.id);
       await reload();
     });
     if (deleted) setDeletions((count) => count + 1);
@@ -117,7 +120,7 @@ function ProjectListPage({
   onNavigate: (pathname: string) => void;
 }) {
   const loaded = useLoad(
-    useCallback(() => api.projects.list(), []),
+    useCallback(() => balebase().api.projects.list(), []),
     "Could not load projects.",
   );
   const creating = useAction("Could not create the project.");
@@ -129,7 +132,7 @@ function ProjectListPage({
 
   const add = (input: NewProject) =>
     creating.run(async () => {
-      const created = await api.projects.create(input);
+      const created = await balebase().api.projects.create(input);
       onNavigate(projectPath(created.id));
     });
 

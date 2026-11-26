@@ -19,12 +19,12 @@ import {
   isBackgroundCheck,
 } from "@balebase/validators/employeeForms";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { balebase } from "../balebase";
 import { useManagedRequirements } from "../employeeForms/EmployeeForms";
 import { RequirementSections } from "../employeeForms/OrganizationRequirementPage";
 import { requirementBadge } from "../employeeForms/requirementStatus";
 import { usePaidFeaturesEnabled } from "../organizations/PaidFeatures";
 import { AppButtonLink } from "../shared/AppLink";
-import { api } from "../shared/apiClient";
 import { ListRow } from "../shared/ListRow";
 import { countLabel, formatCalendarDate } from "../shared/labels";
 import { useLoad } from "../shared/useLoad";
@@ -115,9 +115,10 @@ function BackgroundCheckList({
               const tag = ++requestTag.current;
               let created: string | undefined;
               await action(async () => {
-                const { ids } = await api.employeeForms.create(target, [
-                  { dueDate, kind: "background_check", title },
-                ]);
+                const { ids } = await balebase().api.employeeForms.create(
+                  target,
+                  [{ dueDate, kind: "background_check", title }],
+                );
                 created = ids[0];
               }, "Background check added.");
               if (created && tag === requestTag.current)
@@ -209,7 +210,7 @@ type CheckTarget = { invitationId: string } | { memberId: string };
 function useCheckTargets() {
   return useLoad(
     useCallback(async () => {
-      const people = await api.organizationSettings.people();
+      const people = await balebase().api.organizationSettings.people();
       return [
         ...people.members.map((member) => ({
           label: member.user.name || member.user.email,

@@ -5,7 +5,7 @@ import type {
 } from "@balebase/validators/forms";
 import { discardedTemplateRetentionDays } from "@balebase/validators/rules";
 import type { ReactNode } from "react";
-import { api } from "../shared/apiClient";
+import { balebase } from "../balebase";
 import { formatLabel } from "../shared/labels";
 import { useAction } from "../shared/useAction";
 import { templateStatusTone } from "./TemplateCollections";
@@ -85,7 +85,7 @@ export function GlobalFormControls({
     )
       return;
     await run(async () => {
-      await api.adminFormTemplates.discard(template);
+      await balebase().api.adminFormTemplates.discard(template);
       onDiscarded();
     });
   }

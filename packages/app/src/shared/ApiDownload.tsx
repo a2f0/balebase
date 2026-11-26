@@ -1,6 +1,6 @@
 import { ButtonLink, Toast } from "@balebase/ui/react";
 import { type ComponentProps, type MouseEvent, useRef, useState } from "react";
-import { fetchApi } from "../apiVersion";
+import { balebase } from "../balebase";
 import { nativeHost } from "../host";
 import { saveFile } from "./saveFile";
 
@@ -20,7 +20,7 @@ export function ApiDownload({
   const [error, setError] = useState<string>();
   const download = async () => {
     try {
-      const response = await fetchApi(href, { credentials: "include" });
+      const response = await balebase().fetch(href, { credentials: "include" });
       if (!response.ok)
         throw new Error("Could not download the file. Please try again.");
       await saveFile(await response.blob(), filename);

@@ -14,8 +14,8 @@ import {
 } from "@balebase/ui/react";
 import type { FinanceAccountDetail } from "@balebase/validators/finance";
 import { useCallback } from "react";
+import { balebase } from "../balebase";
 import { AppLink } from "../shared/AppLink";
-import { api } from "../shared/apiClient";
 import {
   formatCalendarDate,
   formatDateTime,
@@ -212,7 +212,7 @@ function RecentTransactions({
 function useAccount(id: string, givenScope: CacheScope | undefined) {
   return useGuardedLoad(
     givenScope,
-    useCallback(() => api.finance.account(id), [id]),
+    useCallback(() => balebase().api.finance.account(id), [id]),
     "Could not load account.",
   );
 }

@@ -15,7 +15,7 @@ import type {
 } from "@balebase/validators/forms";
 import { type ReactNode, useMemo } from "react";
 import { ActivityFeed } from "../activity/ActivityFeed";
-import { api } from "../shared/apiClient";
+import { balebase } from "../balebase";
 import { countLabel, formatDate } from "../shared/labels";
 import { useAction } from "../shared/useAction";
 import { FormQuestions } from "./FormQuestions";
@@ -61,7 +61,7 @@ export function FormRunPage({ id, onNavigate }: FormRunPageProps) {
     if (!detail) return;
     const { revision } = detail.form;
     await perform(
-      () => api.forms.saveRun(id, responses, status, revision),
+      () => balebase().api.forms.saveRun(id, responses, status, revision),
       status === "completed" ? "Form completed." : "Form saved.",
       { keepSince: responses },
     );
@@ -70,7 +70,7 @@ export function FormRunPage({ id, onNavigate }: FormRunPageProps) {
   async function discard() {
     if (!detail || !(await confirmDiscard(detail.form.templateName))) return;
     await perform(async () => {
-      const { deletedAt } = await api.forms.discardRun(id);
+      const { deletedAt } = await balebase().api.forms.discardRun(id);
       dispatch({ deletedAt, type: "discarded" });
     }, "Form discarded.");
   }

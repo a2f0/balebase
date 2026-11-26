@@ -14,7 +14,7 @@ import type {
   ExpenseReportCurrency,
 } from "@balebase/validators/finance";
 import { useEffect, useState } from "react";
-import { api } from "../shared/apiClient";
+import { balebase } from "../balebase";
 import { errorMessage } from "../shared/errors";
 import { countLabel, formatCalendarDate } from "../shared/labels";
 import { financeOverviewPath } from "../workspace/workspacePaths";
@@ -80,8 +80,8 @@ function useExpenseReport(
     let current = true;
     setReport(undefined);
     setError(undefined);
-    api.finance
-      .expenseReport({ from, to })
+    balebase()
+      .api.finance.expenseReport({ from, to })
       .then((next) => {
         if (current) setReport(next);
       })

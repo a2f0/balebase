@@ -1,11 +1,11 @@
 {
   "name": "@balebase/app",
-  "version": "0.1.170",
+  "version": "0.1.171",
   "private": true,
   "license": "UNLICENSED",
   "type": "module",
   "exports": {
-    "./apiVersion": "./src/apiVersion.ts",
+    "./balebase": "./src/balebase.ts",
     "./client": "./src/client.tsx",
     "./host": "./src/host.ts",
     "./vite": "./vite.ts"
@@ -16,7 +16,7 @@
     "test:browser": "bun test browser"
   },
   "dependencies": {
-    "@balebase/api-client": "workspace:*",
+    "@balebase/client-sdk": "workspace:*",
     "@balebase/ui": "workspace:*",
     "@balebase/validators": "workspace:*",
     "@stripe/stripe-js": "9.17.0",

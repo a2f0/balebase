@@ -1,3 +1,4 @@
+import type { ApiClient } from "@balebase/client-sdk";
 import {
   Badge,
   Banner,
@@ -8,8 +9,8 @@ import {
   Toast,
 } from "@balebase/ui/react";
 import { useCallback } from "react";
+import { balebase } from "../balebase";
 import { AppLink } from "../shared/AppLink";
-import { api } from "../shared/apiClient";
 import { countLabel } from "../shared/labels";
 import { useAction } from "../shared/useAction";
 import { useLoad } from "../shared/useLoad";
@@ -35,7 +36,7 @@ export function TemplateProjects({
   const loaded = useLoad(
     // biome-ignore lint/correctness/useExhaustiveDependencies: refreshKey reloads after a save.
     useCallback(
-      () => api.projects.templateProjects(templateId),
+      () => balebase().api.projects.templateProjects(templateId),
       [templateId, refreshKey],
     ),
     "Could not load projects.",
@@ -45,7 +46,7 @@ export function TemplateProjects({
 
   const toggle = (projectId: string, on: boolean) =>
     action.run(async () => {
-      await api.projects.setForm(projectId, templateId, on);
+      await balebase().api.projects.setForm(projectId, templateId, on);
       await loaded.reload();
     });
 
@@ -72,7 +73,7 @@ export function TemplateProjects({
   );
 }
 
-type Listing = Awaited<ReturnType<typeof api.projects.templateProjects>>;
+type Listing = Awaited<ReturnType<ApiClient["projects"]["templateProjects"]>>;
 
 function OnCount({ projects }: { projects: Listing["projects"] }) {
   return (

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from "react";
+import { balebase } from "../balebase";
 import { DeviceProjects } from "../projects/DeviceProjects";
-import { isOnline } from "../shared/network";
 import {
   isWithin,
   projectFormForPath,
@@ -158,7 +158,7 @@ function useDeviceSync(identity: OfflineIdentity | undefined, online: boolean) {
     const current = attempt.current;
     if (!identity || !online || !current) return;
     const pull = () => {
-      if (current.running || !isOnline()) return;
+      if (current.running || !balebase().network.online) return;
       current.running = true;
       pullOfflineWorkspace(identity, current.epoch)
         .then(() => pullOfflineForms(identity, current.epoch))

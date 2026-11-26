@@ -9,8 +9,8 @@ import {
   Toast,
 } from "@balebase/ui/react";
 import type { ContractDetail } from "@balebase/validators/contracts";
+import { balebase } from "../balebase";
 import { ApiDownload } from "../shared/ApiDownload";
-import { api } from "../shared/apiClient";
 import { formatCalendarDate, formatDateTime } from "../shared/labels";
 import { useAction } from "../shared/useAction";
 import { contractPath } from "../workspace/workspacePaths";
@@ -64,8 +64,8 @@ export function ContractSummary({
             key={contract.status}
             load={() =>
               (contract.status === "completed"
-                ? api.contracts.final(contract.id)
-                : api.contracts.document(contract.id)
+                ? balebase().api.contracts.final(contract.id)
+                : balebase().api.contracts.document(contract.id)
               ).then((response) => response.arrayBuffer())
             }
             renderOverlay={(page) =>
@@ -114,7 +114,7 @@ function useSummaryActions(
     remind: () =>
       run(
         async () => {
-          const result = await api.contracts.remind(contract.id);
+          const result = await balebase().api.contracts.remind(contract.id);
           onChanged(result.contract);
           if (result.reminded === 0)
             throw new Error("No reminder could be delivered. See Activity.");
@@ -128,7 +128,7 @@ function useSummaryActions(
     remove: async () => {
       if (!(await confirmContractDeletion(contract.title))) return;
       void run(async () => {
-        await api.contracts.delete(contract.id);
+        await balebase().api.contracts.delete(contract.id);
         onNavigate(contractPath());
       });
     },
@@ -136,7 +136,7 @@ function useSummaryActions(
       const reason = await askVoidReason(contract.title);
       if (reason === null) return;
       void run(async () => {
-        onChanged(await api.contracts.void(contract.id, reason));
+        onChanged(await balebase().api.contracts.void(contract.id, reason));
       }, "Contract voided.");
     },
   };
@@ -220,7 +220,7 @@ function SummaryActions({
       {contract.status === "completed" && (
         <ApiDownload
           filename={`signed-${contract.document.filename}`}
-          href={api.contracts.finalUrl(contract.id)}
+          href={balebase().api.contracts.finalUrl(contract.id)}
           icon="download"
           variant="primary"
         >
@@ -229,7 +229,7 @@ function SummaryActions({
       )}
       <ApiDownload
         filename={contract.document.filename}
-        href={api.contracts.documentUrl(contract.id)}
+        href={balebase().api.contracts.documentUrl(contract.id)}
         icon="download"
       >
         Original

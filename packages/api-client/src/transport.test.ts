@@ -100,6 +100,12 @@ const endpoints = {
     path: "/api/file",
     response: "file",
   }),
+  slow: endpoint<typeof contract.list>({
+    method: "GET",
+    path: "/api/things",
+    response: "json",
+    timeoutMs: 5,
+  }),
 };
 
 it("rejects an endpoint that disagrees with its contract", () => {
@@ -129,6 +135,26 @@ it("fills path parameters, the query, and a JSON body", async () => {
     headers: { "Content-Type": "application/json" },
     method: "PATCH",
   });
+});
+
+it("abandons a request after its endpoint's timeout", async () => {
+  const slow = new Transport({
+    baseUrl: "https://api.test",
+    fetch: (_url, init) =>
+      new Promise((_resolve, reject) =>
+        init.signal?.addEventListener("abort", () =>
+          reject(init.signal?.reason),
+        ),
+      ),
+  });
+  const error = await slow
+    .call(endpoints.slow)
+    .catch((cause: unknown) => cause);
+  expect(error).toBeInstanceOf(DOMException);
+  expect((error as DOMException).name).toBe("TimeoutError");
+
+  await transport.call(endpoints.list);
+  expect(sent[0]?.init.signal).toBeUndefined();
 });
 
 it("sends no cookies to a route its path token authorizes", async () => {

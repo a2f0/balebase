@@ -1,9 +1,10 @@
+import type { ApiClient } from "@balebase/client-sdk";
 import { Banner, Button, LoadingState, Toast } from "@balebase/ui/react";
 import { useEffect, useRef, useState } from "react";
-import { api } from "../shared/apiClient";
+import { balebase } from "../balebase";
 import { errorMessage } from "../shared/errors";
 
-type Detail = Awaited<ReturnType<typeof api.adminJobs.detail>>;
+type Detail = Awaited<ReturnType<ApiClient["adminJobs"]["detail"]>>;
 
 /** How long a queued or running job waits between reads of its output. */
 export const runPollMs = 5_000;
@@ -23,8 +24,8 @@ function useRunDetail(runId: string, before: string) {
     let timer: ReturnType<typeof setTimeout>;
     setError(undefined);
     function load() {
-      return api.adminJobs
-        .detail(runId, before || undefined)
+      return balebase()
+        .api.adminJobs.detail(runId, before || undefined)
         .then((result) => {
           if (!active) return;
           polling =

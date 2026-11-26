@@ -10,8 +10,8 @@ import {
 } from "@balebase/ui/react";
 import type { ScreeningForm as ScreeningFormData } from "@balebase/validators/employeeForms";
 import { type FormEvent, type ReactNode, useCallback, useState } from "react";
+import { balebase } from "../balebase";
 import { AppButtonLink } from "../shared/AppLink";
-import { api } from "../shared/apiClient";
 import { useAction } from "../shared/useAction";
 import { useLoad } from "../shared/useLoad";
 import { downloadScreeningConsent } from "./employeeFormDownloads";
@@ -63,7 +63,7 @@ export function ScreeningForm({
 }) {
   const { data: form, error } = useLoad(
     useCallback(
-      () => api.employeeForms.screeningForm(requirementId),
+      () => balebase().api.employeeForms.screeningForm(requirementId),
       [requirementId],
     ),
     "Could not load the background check.",
@@ -125,7 +125,7 @@ function ScreeningSteps({
   };
   async function submit() {
     await run(async () => {
-      await api.employeeForms.submitScreening(
+      await balebase().api.employeeForms.submitScreening(
         requirementId,
         submission(answers, notices, form),
       );

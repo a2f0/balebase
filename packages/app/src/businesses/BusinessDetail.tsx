@@ -18,7 +18,7 @@ import {
   useState,
 } from "react";
 import { ActivityFeed } from "../activity/ActivityFeed";
-import { api } from "../shared/apiClient";
+import { balebase } from "../balebase";
 import { errorMessage } from "../shared/errors";
 import { formatCalendarDate } from "../shared/labels";
 import { useFocusWhenFolded } from "../shared/useFocusWhenFolded";
@@ -45,7 +45,7 @@ export function BusinessDetailPage({
   onNavigate: (pathname: string) => void;
 }) {
   const loaded = useLoad(
-    useCallback(() => api.businesses.get(id), [id]),
+    useCallback(() => balebase().api.businesses.get(id), [id]),
     "Could not load the business.",
   );
   const detail = loaded.data;
@@ -212,7 +212,7 @@ function BusinessEditCard({
     event.preventDefault();
     setBusy(true);
     try {
-      const result = await api.businesses.update(
+      const result = await balebase().api.businesses.update(
         business.id,
         changedBusinessInput(baseline, form),
       );

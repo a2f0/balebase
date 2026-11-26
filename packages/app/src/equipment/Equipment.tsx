@@ -19,8 +19,8 @@ import type {
 import type { Person } from "@balebase/validators/fields";
 import { isEquipmentType } from "@balebase/validators/rules";
 import { useCallback, useState } from "react";
+import { balebase } from "../balebase";
 import { AppLink } from "../shared/AppLink";
-import { api } from "../shared/apiClient";
 import { countLabel } from "../shared/labels";
 import { useAction } from "../shared/useAction";
 import { useLoad } from "../shared/useLoad";
@@ -60,7 +60,7 @@ export function Equipment({
 
 function useEquipmentListing() {
   const loaded = useLoad(
-    useCallback(() => api.equipment.list(), []),
+    useCallback(() => balebase().api.equipment.list(), []),
     "Could not load equipment.",
   );
   const { setData } = loaded;
@@ -72,7 +72,10 @@ function useEquipmentListing() {
     isEquipmentType(type) &&
     action.run(
       async () => {
-        const created = await api.equipment.create({ ...input, type });
+        const created = await balebase().api.equipment.create({
+          ...input,
+          type,
+        });
         setData((current) =>
           current
             ? { ...current, equipment: [created, ...current.equipment] }

@@ -4,9 +4,9 @@ import type {
   EmployeeRequirementKind,
 } from "@balebase/validators/employeeForms";
 import { type ReactNode, useCallback, useRef } from "react";
+import { balebase } from "../balebase";
 import { usePaidFeaturesEnabled } from "../organizations/PaidFeatures";
 import { AppButtonLink } from "../shared/AppLink";
-import { api } from "../shared/apiClient";
 import { useAction } from "../shared/useAction";
 import { useLoad } from "../shared/useLoad";
 import { myDocumentsPath } from "../workspace/workspacePaths";
@@ -37,7 +37,8 @@ export const requirementKinds: Record<
 export function useOwnRequirements() {
   const loaded = useLoad(
     useCallback(
-      async () => (await api.employeeForms.list({ own: true })).requirements,
+      async () =>
+        (await balebase().api.employeeForms.list({ own: true })).requirements,
       [],
     ),
     "Could not load your documents.",
@@ -121,7 +122,7 @@ export function MyRequirementActions({
         label={requirement.hasDocument ? "Replace file" : "Upload file"}
         onFile={(file) =>
           action(
-            () => api.employeeForms.upload(requirement.id, file),
+            () => balebase().api.employeeForms.upload(requirement.id, file),
             `${requirement.title} sent.`,
           )
         }

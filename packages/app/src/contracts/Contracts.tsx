@@ -15,8 +15,8 @@ import type {
   ContractSummary as ContractListItem,
 } from "@balebase/validators/contracts";
 import { useCallback, useRef, useState } from "react";
+import { balebase } from "../balebase";
 import { AppLink } from "../shared/AppLink";
-import { api } from "../shared/apiClient";
 import { countLabel, formatCalendarDate } from "../shared/labels";
 import { useAction } from "../shared/useAction";
 import { useLoad } from "../shared/useLoad";
@@ -64,13 +64,13 @@ export function Contracts({
 
 function useContractList(onNavigate: (pathname: string) => void) {
   const list = useLoad(
-    useCallback(() => api.contracts.list(), []),
+    useCallback(() => balebase().api.contracts.list(), []),
     "Could not load contracts.",
   );
   const uploader = useAction("Could not upload the contract.");
   const upload = (file: File) =>
     uploader.run(async () => {
-      const created = await api.contracts.upload(file);
+      const created = await balebase().api.contracts.upload(file);
       if (!created) throw new Error("Contract not found.");
       onNavigate(contractPath(created.id));
     });
@@ -264,7 +264,7 @@ function ContractPage({
     error,
     setData: setContract,
   } = useLoad<ContractDetail | null>(
-    useCallback(() => api.contracts.get(id), [id]),
+    useCallback(() => balebase().api.contracts.get(id), [id]),
     "Could not load the contract.",
   );
   return (

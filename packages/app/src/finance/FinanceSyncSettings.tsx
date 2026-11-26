@@ -1,5 +1,5 @@
 import { Banner, Card, PageSection } from "@balebase/ui/react";
-import { api } from "../shared/apiClient";
+import { balebase } from "../balebase";
 import { useAction } from "../shared/useAction";
 
 /** Plaid's cursor belongs to the connection, so all of its accounts share this setting. */
@@ -21,7 +21,8 @@ export function FinanceSyncSettings({
   const save = (next: boolean) =>
     run(async () =>
       onSaved(
-        (await guard(api.finance.updateSyncSettings(id, next))).dailySync,
+        (await guard(balebase().api.finance.updateSyncSettings(id, next)))
+          .dailySync,
       ),
     );
   return (

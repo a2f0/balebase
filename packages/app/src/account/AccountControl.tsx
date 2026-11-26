@@ -1,7 +1,7 @@
 import { Avatar, Icon, Toast } from "@balebase/ui/react";
-import { useId, useRef, useState } from "react";
+import { useId, useRef, useState, useSyncExternalStore } from "react";
 import { version as appVersion } from "../../package.json";
-import { useApiVersion } from "../apiVersion";
+import { balebase } from "../balebase";
 import { errorMessage } from "../shared/errors";
 import { useAction } from "../shared/useAction";
 import { useMenuDismissal } from "../shared/useMenuDismissal";
@@ -190,7 +190,9 @@ function AccountMenu({
 
 // The API version follows a deploy: it is whatever the latest response named.
 function AppVersions() {
-  const apiVersion = useApiVersion();
+  const { apiVersion: version } = balebase();
+  const read = () => version.current;
+  const apiVersion = useSyncExternalStore(version.subscribe, read, read);
   return (
     <p className="menuMeta">
       App v{appVersion} · API{" "}

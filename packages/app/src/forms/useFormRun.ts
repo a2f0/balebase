@@ -1,6 +1,6 @@
 import type { FormDetail } from "@balebase/validators/forms";
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
-import { api } from "../shared/apiClient";
+import { balebase } from "../balebase";
 import { errorMessage } from "../shared/errors";
 import {
   type FormRunFetch,
@@ -107,7 +107,7 @@ export function useFormRun(id: string) {
       const request = ++latest.current;
       send({ reload, request, type: "started" });
       try {
-        const next = await api.forms.getRun(id);
+        const next = await balebase().api.forms.getRun(id);
         // Unmounting retires every read in flight (the counter moves on).
         const state = fetching.current;
         if (request !== latest.current) return;

@@ -24,6 +24,7 @@ Every workspace lives under `packages/`, and infrastructure lives in
 | API routes, authorization, persistence (Hono on Workers, with D1 and R2), in a folder per feature | `packages/api/src` |
 | Request and response schemas for every route | `packages/validators/src` |
 | Typed client for those routes | `packages/api-client/src` |
+| Client runtime without React (the API, its version, connectivity) that hosts build on | [`packages/client-sdk`](packages/client-sdk/README.md) |
 | Database schema | `packages/api/migrations` |
 | Built-in form templates and their seed migrations | `packages/api/templateLibrary`, [residential template library](docs/residential-template-library.md) |
 | Application screens, in one folder per feature, and the host interface each shell fills in | `packages/app/src` |
@@ -81,10 +82,10 @@ it.
   `packages/api/src`.
 - `shared/` sits below every feature in both the API and the app: Biome's
   `noRestrictedImports` overrides in `biome.jsonc` let shared modules import
-  only each other and the entry-point types (`types.ts` and `auth/apiEnv.ts`
-  here, `host.ts` and `apiVersion.ts` in the app). Code that needs a feature
-  belongs in that feature, as the activity feed route does in
-  `activity/activity.ts` while the recording helpers stay in
+  only each other and the entry points (the types in `types.ts` and
+  `auth/apiEnv.ts` here, `host.ts` and the SDK in `balebase.ts` in the app).
+  Code that needs a feature belongs in that feature, as the activity feed
+  route does in `activity/activity.ts` while the recording helpers stay in
   `shared/activity.ts` and `shared/systemActivity.ts`.
 - Send JSON with `respond(context, route, body)`, and read input with
   `readBody(context, route, message)` and `readQuery` from
@@ -174,9 +175,11 @@ it.
   `workspace/` holds the shell, routes, paths, and navigation guard, and
   `shared/` the feature-neutral hooks and primitives that several features
   use. The entry points (`App.tsx`, `client.tsx`, and the exported `host.ts`
-  and `apiVersion.ts`), `styles/`, and `testing/` stay at the root.
-- Call the API through `api`, the `ApiClient` in `shared/apiClient.ts`;
-  [API client onboarding](docs/api-client.md) covers other hosts.
+  and `balebase.ts`), `styles/`, and `testing/` stay at the root.
+- Reach the API and client state through the app's one SDK, `balebase()` in
+  `balebase.ts`: `balebase().api` for routes, `balebase().fetch` for API files,
+  and `balebase().network` for connectivity.
+  [Using the client SDK](docs/client-sdk.md) covers other hosts.
 - Load with `useLoad`, mutate with `useAction`, and page cursor lists with
   `useCursorPages` and `InfiniteScroll`, all in `shared/`.
 - Give state whose fields change together one union and one reducer, as
@@ -396,9 +399,10 @@ as to `screens.ts`.
   Break one by moving the shared type or function to a lower module, never
   with a suppression. Packages depend in one direction: `validators`, `ui`,
   and `diagnostics` import no other workspace; `api-client` builds on
-  `validators`; `app` on those; the shells (`app-web`, `app-capacitor`) on
-  `app` and the leaf packages; and `api` and `website` on the leaf packages
-  only.
+  `validators`; `client-sdk` on `api-client`; `app` on those; the shells
+  (`app-web`, `app-capacitor`) on `app` and the leaf packages, with
+  `app-capacitor` also on `client-sdk` for the host contract it fills in; and
+  `api` and `website` on the leaf packages only.
 - Beyond its recommended set, Biome turns on bug-catching rules from
   `biome.jsonc`, among them floating promises, non-exhaustive `switch`
   statements, focused or skipped tests, and assignments nothing reads.

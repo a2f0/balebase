@@ -7,7 +7,7 @@ import {
 import type { JobScheduleChange } from "@balebase/validators/adminJobs";
 import { describeCron } from "@balebase/validators/cron";
 import { useCallback } from "react";
-import { api } from "../shared/apiClient";
+import { balebase } from "../balebase";
 import { InfiniteScroll } from "../shared/InfiniteScroll";
 import { formatDateTime } from "../shared/labels";
 import { useCursorPages } from "../shared/useCursorPages";
@@ -20,7 +20,10 @@ import { AdminIdentity } from "./AdminIdentity";
 export function AdminJobScheduleChanges({ jobId }: { jobId: string }) {
   const fetchPage = useCallback(
     async (cursor?: string) => {
-      const page = await api.adminJobs.scheduleChanges(jobId, cursor);
+      const page = await balebase().api.adminJobs.scheduleChanges(
+        jobId,
+        cursor,
+      );
       return { items: page.changes, nextCursor: page.nextCursor };
     },
     [jobId],

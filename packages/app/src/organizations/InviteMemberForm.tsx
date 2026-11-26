@@ -1,5 +1,6 @@
 import { Button, Card, Field, Select, Toast } from "@balebase/ui/react";
 import { type FormEvent, type Ref, useEffect, useRef, useState } from "react";
+import { balebase } from "../balebase";
 import { ErrorToast } from "../billing/ErrorToast";
 import { RequirementDraftEditor } from "../employeeForms/EmployeeForms";
 import {
@@ -7,7 +8,6 @@ import {
   RequirementAssignmentError,
   type RequirementDraft,
 } from "../employeeForms/employeeOnboarding";
-import { api } from "../shared/apiClient";
 import { authClient } from "../shared/authClient";
 import { useAction } from "../shared/useAction";
 import {
@@ -155,7 +155,7 @@ function useInviteSubmission({
   async function retryRequests() {
     if (!retry || !canSendRequirements) return;
     await run(async () => {
-      await api.employeeForms.create(
+      await balebase().api.employeeForms.create(
         { invitationId: retry.invitationId },
         requirements,
       );
@@ -284,7 +284,7 @@ async function sendInvitationWithRequirements({
 }) {
   return inviteWithRequirements({
     assign: (invitationId, drafts) =>
-      api.employeeForms.create({ invitationId }, drafts),
+      balebase().api.employeeForms.create({ invitationId }, drafts),
     invite: async () => {
       const result = await authClient.organization.inviteMember({
         email,

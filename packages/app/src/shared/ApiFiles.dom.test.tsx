@@ -27,6 +27,11 @@ async function render(element: ReactNode) {
   return view;
 }
 
+/** The native origin marker a request carried, or null. */
+function nativeMarker(init: RequestInit | undefined) {
+  return new Headers(init?.headers).get("X-Balebase-Native-Origin");
+}
+
 let fetchMock: Mock<(url: URL, init?: RequestInit) => Promise<Response>>;
 let save: Mock<typeof saving.saveFile>;
 let createUrl: Mock<typeof URL.createObjectURL>;
@@ -64,6 +69,7 @@ it("fetches protected native images and releases their local URL on unmount", as
     "blob:native-image",
   );
   expect(fetchMock.mock.calls[0]?.[1]?.credentials).toBe("include");
+  expect(nativeMarker(fetchMock.mock.calls[0]?.[1])).toBe("https://localhost");
   const imageBlob = createUrl.mock.calls[0]?.[0];
   if (!(imageBlob instanceof Blob))
     throw new Error("Expected downloaded image bytes");
@@ -95,6 +101,7 @@ it("shares downloaded bytes on native, blocks duplicate taps, and shows failures
   });
   expect(fetchMock).toHaveBeenCalledTimes(1);
   expect(fetchMock.mock.calls[0]?.[1]?.credentials).toBe("include");
+  expect(nativeMarker(fetchMock.mock.calls[0]?.[1])).toBe("https://localhost");
   expect(save.mock.calls[0]?.[1]).toBe("private.bin");
   expect(await save.mock.calls[0]?.[0].arrayBuffer()).toEqual(
     new Uint8Array([0, 255, 1]).buffer,

@@ -1,8 +1,8 @@
-import { ApiError } from "@balebase/api-client";
+import { ApiError } from "@balebase/client-sdk";
 import { confirmDialog } from "@balebase/ui/react";
 import type { AdminUser } from "@balebase/validators/adminUsers";
 import { useState } from "react";
-import { api } from "../shared/apiClient";
+import { balebase } from "../balebase";
 import { useAction } from "../shared/useAction";
 
 export function useAdminUserDeletion(reload: () => Promise<unknown>) {
@@ -16,8 +16,8 @@ export function useAdminUserDeletion(reload: () => Promise<unknown>) {
       async () => {
         try {
           await (user.deletionRequestedAt
-            ? api.adminUsers.cancelDeletion(user.id)
-            : api.adminUsers.markForDeletion(user.id, user.email));
+            ? balebase().api.adminUsers.cancelDeletion(user.id)
+            : balebase().api.adminUsers.markForDeletion(user.id, user.email));
         } catch (cause) {
           // A conflict means the list is out of date.
           if (cause instanceof ApiError && cause.status === 409) await reload();
@@ -37,7 +37,7 @@ export function useAdminUserDeletion(reload: () => Promise<unknown>) {
     setUserId(user.id);
     await run(async () => {
       try {
-        await api.adminUsers.revokeAdmin(user.id);
+        await balebase().api.adminUsers.revokeAdmin(user.id);
       } catch (cause) {
         // A conflict means the list is out of date.
         if (cause instanceof ApiError && cause.status === 409) await reload();

@@ -14,13 +14,13 @@ import type { FormTemplateSummary } from "@balebase/validators/forms";
 import { discardedTemplateRetentionDays } from "@balebase/validators/rules";
 import { useCallback, useState } from "react";
 import { ActivityFeed } from "../activity/ActivityFeed";
+import { balebase } from "../balebase";
 import { FormTemplateBuilder } from "../forms/FormTemplateBuilder";
 import {
   TemplateStats,
   templateStatusTone,
 } from "../forms/TemplateCollections";
 import { AppButtonLink } from "../shared/AppLink";
-import { api } from "../shared/apiClient";
 import { countLabel, formatDate, formatLabel } from "../shared/labels";
 import { useAction } from "../shared/useAction";
 import { useLoad } from "../shared/useLoad";
@@ -60,14 +60,15 @@ function GlobalFormList({
 }) {
   const loaded = useLoad(
     useCallback(
-      async () => (await api.adminFormTemplates.list()).templates,
+      async () => (await balebase().api.adminFormTemplates.list()).templates,
       [],
     ),
     "Could not load global templates.",
   );
   const discarded = useLoad(
     useCallback(
-      async () => (await api.adminFormTemplates.list("discarded")).templates,
+      async () =>
+        (await balebase().api.adminFormTemplates.list("discarded")).templates,
       [],
     ),
     "Could not load discarded templates.",
@@ -80,7 +81,8 @@ function GlobalFormList({
 
   async function restoreTemplate(template: FormTemplateSummary) {
     await restoring.run(
-      async () => (await api.adminFormTemplates.restore(template)).template,
+      async () =>
+        (await balebase().api.adminFormTemplates.restore(template)).template,
       (restored) =>
         `“${restored.name}” restored as ${restored.status === "draft" ? "a draft" : "an unpublished template"}.`,
     );
@@ -92,7 +94,7 @@ function GlobalFormList({
   async function createTemplate() {
     await creating.run(async () => {
       const { template } =
-        await api.adminFormTemplates.create("Untitled template");
+        await balebase().api.adminFormTemplates.create("Untitled template");
       onNavigate(globalTemplatesPath(template.id));
     });
   }

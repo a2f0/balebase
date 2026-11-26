@@ -12,8 +12,8 @@ import {
 } from "@balebase/ui/react";
 import type { AdminUser } from "@balebase/validators/adminUsers";
 import { useCallback, useState } from "react";
+import { balebase } from "../balebase";
 import { formatRoles, hasRole } from "../organizations/organizationState";
-import { api } from "../shared/apiClient";
 import { countLabel, formatDate } from "../shared/labels";
 import { useLoad } from "../shared/useLoad";
 import { adminUserIdForPath, adminUserPath } from "../workspace/workspacePaths";
@@ -61,7 +61,10 @@ function AdminUserList({
     reload,
     setData,
   } = useLoad<UserListing>(
-    useCallback(() => api.adminUsers.list(adminUserListQuery(page)), [page]),
+    useCallback(
+      () => balebase().api.adminUsers.list(adminUserListQuery(page)),
+      [page],
+    ),
     "Could not load users.",
   );
   const loadUsers = () => {

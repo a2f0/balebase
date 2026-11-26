@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { act } from "react";
 import { version as appVersion } from "../../package.json";
-import { fetchApi } from "../apiVersion";
+import { balebase } from "../balebase";
 import { installDom } from "../testing/dom";
 import { AccountControl } from "./AccountControl";
 
@@ -16,7 +16,7 @@ async function respondWith(version: string | null) {
     ),
   );
   await act(async () => {
-    await fetchApi("http://localhost:8787/health");
+    await balebase().fetch("http://localhost:8787/health");
   });
 }
 

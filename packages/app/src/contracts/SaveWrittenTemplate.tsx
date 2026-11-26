@@ -2,7 +2,7 @@ import { Button, promptDialog, Toast } from "@balebase/ui/react";
 import type { ContractAuthoringInput } from "@balebase/validators/contractAuthoring";
 import type { ContractTemplate } from "@balebase/validators/contractTemplates";
 import { contractLimits } from "@balebase/validators/rules";
-import { api } from "../shared/apiClient";
+import { balebase } from "../balebase";
 import { useUnsavedChanges } from "../workspace/unsavedChanges";
 import { contractTemplatePath } from "../workspace/workspacePaths";
 import { writtenTemplateInput } from "./contractTemplateAuthoring";
@@ -31,7 +31,7 @@ export function SaveWrittenTemplate({
     });
     if (!name?.trim()) return;
     creator.start(async () => {
-      const template = await api.contractTemplates.createAuthored(
+      const template = await balebase().api.contractTemplates.createAuthored(
         writtenTemplateInput(draft, name),
       );
       if (!template) throw new Error("Contract template not found.");

@@ -12,10 +12,10 @@ import {
   Toast,
 } from "@balebase/ui/react";
 import { type FormEvent, useState } from "react";
+import { balebase } from "../balebase";
 import { OrganizationBilling } from "../billing/OrganizationBilling";
 import { OrganizationRequirementPage } from "../employeeForms/OrganizationRequirementPage";
 import { AppLink } from "../shared/AppLink";
-import { api } from "../shared/apiClient";
 import { authClient } from "../shared/authClient";
 import { throwIfRefused } from "../shared/errors";
 import { useAction } from "../shared/useAction";
@@ -383,7 +383,7 @@ function useOrganizationGeneralActions(
   const remove = async () => {
     if (!(await confirmOrganizationDeletion(organization.name))) return;
     await perform("delete", async () => {
-      await api.organizationSettings.deleteCurrent();
+      await balebase().api.organizationSettings.deleteCurrent();
       await onWorkspaceChanged();
       onNavigate("/");
     });

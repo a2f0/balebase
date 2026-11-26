@@ -12,13 +12,13 @@ import type {
   InboundEmailLinkTarget,
 } from "@balebase/validators/inbox";
 import { type FormEvent, useEffect, useState } from "react";
+import { balebase } from "../balebase";
 import {
   equipmentName,
   equipmentTypeLabel,
 } from "../equipment/equipmentLabels";
 import { formatMoney } from "../finance/financeFormat";
 import { AppLink } from "../shared/AppLink";
-import { api } from "../shared/apiClient";
 import { errorMessage } from "../shared/errors";
 import { useLoad } from "../shared/useLoad";
 import { equipmentPath, libraryPath } from "../workspace/workspacePaths";
@@ -56,7 +56,7 @@ export function EmailLinks({
   async function link(target: InboundEmailLinkTarget) {
     setError(undefined);
     try {
-      const created = await api.inbox.link(emailId, target);
+      const created = await balebase().api.inbox.link(emailId, target);
       onChange((current) => [
         ...current.filter(({ id }) => id !== created.id),
         created,
@@ -71,7 +71,7 @@ export function EmailLinks({
     setWorkingId(link.id);
     setError(undefined);
     try {
-      await api.inbox.unlink(emailId, link.id);
+      await balebase().api.inbox.unlink(emailId, link.id);
       onChange((current) => current.filter(({ id }) => id !== link.id));
     } catch (cause) {
       setError(errorMessage(cause, "Could not update links."));
@@ -260,7 +260,7 @@ const equipmentPicker: PickerKind = {
   icon: "equipment",
   label: "Equipment",
   load: async () =>
-    (await api.equipment.list()).equipment.map((item) => ({
+    (await balebase().api.equipment.list()).equipment.map((item) => ({
       id: item.id,
       label: `${equipmentTypeLabel(item.type)}: ${equipmentName(item)}${
         item.serialNumber ? ` · ${item.serialNumber}` : ""
@@ -280,7 +280,7 @@ const folderPicker: PickerKind = {
   icon: "folderAdd",
   label: "Folder",
   load: async () =>
-    (await api.libraryFolders.list()).map(({ id, name }) => ({
+    (await balebase().api.libraryFolders.list()).map(({ id, name }) => ({
       id,
       label: name,
     })),
@@ -381,8 +381,8 @@ function TransactionPicker({
   useEffect(() => {
     let active = true;
     const timer = window.setTimeout(() => {
-      api.finance
-        .searchTransactions(query)
+      balebase()
+        .api.finance.searchTransactions(query)
         .then((results) => {
           if (!active) return;
           setError(undefined);

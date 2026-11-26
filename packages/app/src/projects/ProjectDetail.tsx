@@ -18,6 +18,7 @@ import type {
 } from "@balebase/validators/projects";
 import { useCallback, useState } from "react";
 import { ActivityFeed } from "../activity/ActivityFeed";
+import { balebase } from "../balebase";
 import {
   readFormTemplateView,
   storeFormTemplateView,
@@ -27,7 +28,6 @@ import {
   TemplateViewSwitcher,
 } from "../forms/TemplateCollections";
 import { useDevice } from "../offline/offlineContext";
-import { api } from "../shared/apiClient";
 import { ListRow } from "../shared/ListRow";
 import { countLabel } from "../shared/labels";
 import { useAction } from "../shared/useAction";
@@ -40,7 +40,7 @@ import { confirmProjectDeletion, editedFields } from "./projectChanges";
 
 function useProjectDetail(id: string, onNavigate: (pathname: string) => void) {
   const loaded = useLoad(
-    useCallback(() => api.projects.get(id), [id]),
+    useCallback(() => balebase().api.projects.get(id), [id]),
     "Could not load the project.",
   );
   const { reload, setData } = loaded;
@@ -60,7 +60,7 @@ function useProjectDetail(id: string, onNavigate: (pathname: string) => void) {
     input: { description: string; name: string },
   ) {
     const saved = await change(
-      () => api.projects.update(id, editedFields(base, input)),
+      () => balebase().api.projects.update(id, editedFields(base, input)),
       "Project updated.",
     );
     // A refused edit keeps the editor's text; reloading lets the next edit
@@ -73,7 +73,7 @@ function useProjectDetail(id: string, onNavigate: (pathname: string) => void) {
   async function remove(project: Project) {
     if (!(await confirmProjectDeletion(project))) return;
     await action.run(async () => {
-      await api.projects.delete(id);
+      await balebase().api.projects.delete(id);
       onNavigate(projectPath());
     });
   }
@@ -234,10 +234,10 @@ function ProjectSections({
           directory={detail.directory}
           members={detail.project.members}
           onAdd={(userId) =>
-            void change(() => api.projects.addMember(id, userId))
+            void change(() => balebase().api.projects.addMember(id, userId))
           }
           onRemove={(userId) =>
-            void change(() => api.projects.removeMember(id, userId))
+            void change(() => balebase().api.projects.removeMember(id, userId))
           }
         />,
       )}
@@ -257,7 +257,9 @@ function ProjectSections({
           canManage={detail.canManage}
           enabled={detail.project.templates}
           onToggle={(templateId, on) =>
-            void change(() => api.projects.setForm(id, templateId, on))
+            void change(() =>
+              balebase().api.projects.setForm(id, templateId, on),
+            )
           }
         />,
       )}

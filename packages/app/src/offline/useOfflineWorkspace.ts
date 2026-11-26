@@ -1,6 +1,7 @@
 import { useEffect, useReducer } from "react";
+import { balebase } from "../balebase";
 import { errorMessage } from "../shared/errors";
-import { isOnline, onNetworkChange, useOnline } from "../shared/network";
+import { useOnline } from "../shared/network";
 import {
   activeOfflineKey,
   type OfflineWorkspace,
@@ -67,7 +68,7 @@ export function useOfflineWorkspace(storage = deviceStorage) {
       }
     };
     const sync = async (key: string | null, activated: number) => {
-      if (!key || !isOnline()) return;
+      if (!key || !balebase().network.online) return;
       try {
         if (await storage.sync(key))
           send({ activation: activated, type: "syncSucceeded" });
@@ -92,7 +93,7 @@ export function useOfflineWorkspace(storage = deviceStorage) {
     window.addEventListener(offlineChanged, refresh);
     window.addEventListener("storage", refresh);
     window.addEventListener("focus", refresh);
-    const stopWatching = onNetworkChange(refresh);
+    const stopWatching = balebase().network.subscribe(refresh);
     const timer = window.setInterval(refresh, 30_000);
     return () => {
       current = false;

@@ -16,7 +16,7 @@ import type {
   InlineCheckoutSession,
 } from "@balebase/validators/billing";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api } from "../shared/apiClient";
+import { balebase } from "../balebase";
 import { errorMessage } from "../shared/errors";
 import { countLabel, formatLabel } from "../shared/labels";
 import { openCurrentBillingSession } from "./billingSession";
@@ -65,7 +65,7 @@ export function OrganizationBilling({
     const query = new URLSearchParams(window.location.search);
     const sessionId = query.get("session_id") ?? undefined;
     try {
-      const nextStatus = await api.billing.status(sessionId);
+      const nextStatus = await balebase().api.billing.status(sessionId);
       if (sequence !== loadSequence.current) return;
       setStatus(nextStatus);
       setNotice(checkoutNotice(query, nextStatus));
@@ -142,14 +142,14 @@ function createBillingAction(
     try {
       if (action === "portal") {
         await openCurrentBillingSession(
-          api.billing.createPortalSession,
+          balebase().api.billing.createPortalSession,
           isCurrent,
           (s) => window.location.assign(s.url),
         );
         return;
       }
       await openCurrentBillingSession(
-        api.billing.createCheckoutSession,
+        balebase().api.billing.createCheckoutSession,
         isCurrent,
         (s) => {
           if ("url" in s) {

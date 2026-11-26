@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { api } from "../shared/apiClient";
+import { balebase } from "../balebase";
 import { installFetch } from "../testing/fetch";
 
 const respond = installFetch();
@@ -29,12 +29,12 @@ describe("contracts API", () => {
       signingOrder: "parallel" as const,
       title: "Lease",
     };
-    const first = api.contracts.saveDraft("c1", draft);
-    const second = api.contracts.saveDraft("c1", {
+    const first = balebase().api.contracts.saveDraft("c1", draft);
+    const second = balebase().api.contracts.saveDraft("c1", {
       ...draft,
       title: "Lease v2",
     });
-    const read = api.contracts.get("c1");
+    const read = balebase().api.contracts.get("c1");
     await Bun.sleep(5);
     expect(log).toEqual(["start PUT"]);
     releaseFirst();

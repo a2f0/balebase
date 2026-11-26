@@ -1,6 +1,6 @@
 {
   "name": "@balebase/app-capacitor",
-  "version": "0.1.86",
+  "version": "0.1.87",
   "private": true,
   "license": "UNLICENSED",
   "type": "module",
@@ -41,6 +41,7 @@
   },
   "dependencies": {
     "@balebase/app": "workspace:*",
+    "@balebase/client-sdk": "workspace:*",
     "@balebase/diagnostics": "workspace:*",
     "@capacitor/app": "8.1.2",
     "@capacitor/core": "8.6.0",

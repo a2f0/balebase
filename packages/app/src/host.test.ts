@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { fetchApi } from "./apiVersion";
+import { balebase } from "./balebase";
 import { configureHost } from "./host";
 import { authCallbackUrl } from "./shared/config";
 import { installFetch } from "./testing/fetch";
@@ -23,7 +23,7 @@ async function sentHeaders(request: Request) {
     headers = new Headers(init?.headers);
     return new Response("{}");
   });
-  await fetchApi(request);
+  await balebase().fetch(request);
   return headers;
 }
 
@@ -74,5 +74,19 @@ describe("host-dependent API requests", () => {
     expect(authCallbackUrl("/?verified=true")).toBe(
       "https://mobile-app.example/?verified=true",
     );
+  });
+
+  it("keeps one SDK until the host changes", () => {
+    const sdk = balebase();
+    expect(balebase()).toBe(sdk);
+    configureHost({});
+    expect(balebase()).not.toBe(sdk);
+  });
+
+  it("reads connectivity from the shell's source", () => {
+    configureHost({
+      network: { getOnline: () => false, subscribe: () => () => {} },
+    });
+    expect(balebase().network.online).toBe(false);
   });
 });

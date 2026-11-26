@@ -12,7 +12,7 @@ import {
 import type { ExpenseCategory } from "@balebase/validators/finance";
 import { financeLimits } from "@balebase/validators/rules";
 import { type FormEvent, useEffect, useRef, useState } from "react";
-import { api } from "../shared/apiClient";
+import { balebase } from "../balebase";
 import { ListRow } from "../shared/ListRow";
 import { countLabel } from "../shared/labels";
 import { type CategoryTotals, periodTotals } from "./categoryYearCounts";
@@ -57,7 +57,7 @@ export function FinanceCategories({
     run(async () => {
       const before = categories?.length ?? 0;
       const { categories: after } =
-        await api.finance.addDefaultExpenseCategories();
+        await balebase().api.finance.addDefaultExpenseCategories();
       const added = after.length - before;
       return added > 0
         ? `Added ${countLabel(added, "common category", "common categories")}.`
@@ -72,7 +72,7 @@ export function FinanceCategories({
         busy={busy}
         onAdd={(name) =>
           run(async () => {
-            await api.finance.createExpenseCategory(name);
+            await balebase().api.finance.createExpenseCategory(name);
             return `Added “${name}”.`;
           })
         }
@@ -111,13 +111,16 @@ export function FinanceCategories({
           onAddDefaults={addDefaults}
           onDelete={(category) =>
             run(async () => {
-              await api.finance.deleteExpenseCategory(category.id);
+              await balebase().api.finance.deleteExpenseCategory(category.id);
               return `Deleted “${category.name}”.`;
             })
           }
           onRename={(category, name) =>
             run(async () => {
-              await api.finance.renameExpenseCategory(category.id, name);
+              await balebase().api.finance.renameExpenseCategory(
+                category.id,
+                name,
+              );
               return `Renamed to “${name}”.`;
             })
           }

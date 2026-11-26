@@ -1,7 +1,7 @@
 import { Banner, Button, Card, LoadingState, Toast } from "@balebase/ui/react";
 import { paidFeatures } from "@balebase/validators/rules";
 import { useCallback, useEffect, useRef } from "react";
-import { api } from "../shared/apiClient";
+import { balebase } from "../balebase";
 import { useAction } from "../shared/useAction";
 import { useLoad } from "../shared/useLoad";
 
@@ -14,7 +14,7 @@ export function OrganizationPaidFeatures({
   onAccessChanged: () => Promise<void>;
 }) {
   const loaded = useLoad(
-    useCallback(() => api.organizationSettings.current(), []),
+    useCallback(() => balebase().api.organizationSettings.current(), []),
     "Could not load paid features.",
   );
   const action = useAction("Could not update paid features.");
@@ -30,7 +30,7 @@ export function OrganizationPaidFeatures({
     if (!canManage || saving.current || loaded.loading || !loaded.data) return;
     saving.current = true;
     await action.run(async () => {
-      const settings = await api.organizationSettings.updateCurrent({
+      const settings = await balebase().api.organizationSettings.updateCurrent({
         paidFeaturesEnabled,
       });
       if (!active.current) return;

@@ -24,6 +24,8 @@ it("preserves native CSRF markers through Capacitor's real browser fetch patch",
         fileURLToPath(new URL("./nativeHttpFixture.ts", import.meta.url)),
       ],
       target: "browser",
+      // The app reads its API origin from Vite's env, which Bun.build lacks.
+      define: { "import.meta.env": "{}" },
     });
     if (!bundle.success)
       throw new Error(`Native HTTP fixture failed: ${bundle.logs.join("\n")}`);

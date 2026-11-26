@@ -1,6 +1,6 @@
 import { Button, Card, PageSection, Toast } from "@balebase/ui/react";
 import { useCallback, useEffect, useReducer, useRef } from "react";
-import { api } from "../shared/apiClient";
+import { balebase } from "../balebase";
 import { errorMessage } from "../shared/errors";
 import { ListRow } from "../shared/ListRow";
 import { countLabel, formatDate } from "../shared/labels";
@@ -19,7 +19,7 @@ export function DeletedEquipment({
   onNavigate: (pathname: string) => void;
 }) {
   const loaded = useLoad(
-    useCallback(() => api.equipment.listDeleted(), []),
+    useCallback(() => balebase().api.equipment.listDeleted(), []),
     "Could not load deleted equipment.",
   );
   const { reload } = loaded;
@@ -51,7 +51,7 @@ export function DeletedEquipment({
     const request = requests.current;
     dispatch({ request, type: "restoreStarted" });
     try {
-      const item = await api.equipment.restore(id);
+      const item = await balebase().api.equipment.restore(id);
       dispatch({ id: item.id, request, type: "restoreSucceeded" });
     } catch (cause) {
       dispatch({

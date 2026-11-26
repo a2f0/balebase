@@ -1,4 +1,4 @@
-import { ApiError } from "@balebase/api-client";
+import { ApiError } from "@balebase/client-sdk";
 import type {
   FinanceData,
   FinanceTransaction,

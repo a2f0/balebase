@@ -1,9 +1,9 @@
-import { api } from "../shared/apiClient";
+import { balebase } from "../balebase";
 import { saveFile } from "../shared/saveFile";
 
 /** Saves the signed background check authorization behind a report. */
 export async function downloadScreeningConsent(id: string) {
-  const response = await api.employeeForms.screeningConsent(id);
+  const response = await balebase().api.employeeForms.screeningConsent(id);
   if (
     !(await saveFile(
       await response.blob(),
@@ -16,7 +16,7 @@ export async function downloadScreeningConsent(id: string) {
 
 /** Saves a submitted form, and returns the revision the manager saw. */
 export async function downloadEmployeeForm(id: string, filename: string) {
-  const response = await api.employeeForms.document(id);
+  const response = await balebase().api.employeeForms.document(id);
   const revision = Number(response.headers.get("X-Document-Revision"));
   if (!Number.isSafeInteger(revision) || revision < 1) {
     throw new Error("The downloaded form has no review version.");

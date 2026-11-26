@@ -12,7 +12,7 @@ import type {
 } from "@balebase/validators/contractTemplates";
 import { contractLimits } from "@balebase/validators/rules";
 import { useCallback, useEffect, useState } from "react";
-import { api } from "../shared/apiClient";
+import { balebase } from "../balebase";
 import { countLabel } from "../shared/labels";
 import { useUnsavedChanges } from "../workspace/unsavedChanges";
 import { ContractAuthoringContent } from "./ContractAuthoringContent";
@@ -132,7 +132,7 @@ export function ContractTemplateEditor({
               </p>
               <ContractPages
                 load={() =>
-                  api.contractTemplates.loadDocument(
+                  balebase().api.contractTemplates.loadDocument(
                     template.id,
                     template.version,
                   )
@@ -142,7 +142,7 @@ export function ContractTemplateEditor({
           ) : (
             <ContractPages
               load={() =>
-                api.contractTemplates.loadDocument(
+                balebase().api.contractTemplates.loadDocument(
                   template.id,
                   template.version,
                 )
@@ -219,7 +219,7 @@ function useTemplateEditor(
   }
   function refresh() {
     if (busy) return;
-    refresher.start(() => api.contractTemplates.get(template.id));
+    refresher.start(() => balebase().api.contractTemplates.get(template.id));
   }
   async function removeRole(key: string) {
     if (busy) return;
@@ -280,7 +280,7 @@ async function saveTemplateVersion(
   const { draft, authoring, description, status } = input;
   const definition = definitionFrom(draft);
   if (authoring) definition.fields = [];
-  const saved = await api.contractTemplates.saveVersion(
+  const saved = await balebase().api.contractTemplates.saveVersion(
     { ...template, currentVersion },
     {
       definition,
