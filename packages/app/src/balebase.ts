@@ -1,5 +1,5 @@
 import { Balebase } from "@balebase/client-sdk";
-import type { AppHost } from "./host";
+import { type AppHost, configureHost } from "./host";
 import { apiUrl } from "./shared/config";
 
 function create(host: AppHost) {
@@ -21,9 +21,11 @@ export function balebase() {
 }
 
 /**
- * Makes the SDK from the shell's host. `renderApp` calls it before the first
- * render, so no screen holds the browser's.
+ * Configures the shell's host and makes the SDK from it, so the two never
+ * disagree. `renderApp` calls it before the first render, so no screen holds
+ * the browser's.
  */
 export function startBalebase(host: AppHost) {
+  configureHost(host);
   current = create(host);
 }

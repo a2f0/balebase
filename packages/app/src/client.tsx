@@ -4,7 +4,7 @@ import { createRoot } from "react-dom/client";
 import "@balebase/ui/styles.css";
 import { App } from "./App";
 import { startBalebase } from "./balebase";
-import { type AppHost, configureHost } from "./host";
+import type { AppHost } from "./host";
 import { AppBoundary } from "./workspace/AppBoundary";
 import "./styles/app.css";
 import { startThemeSync } from "./account/theme";
@@ -16,7 +16,6 @@ export function renderApp(host: AppHost = {}, notices?: ReactNode) {
     throw new Error("Root element not found.");
   }
 
-  configureHost(host);
   startBalebase(host);
   startThemeSync();
 

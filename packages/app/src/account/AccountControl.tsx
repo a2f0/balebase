@@ -191,7 +191,8 @@ function AccountMenu({
 // The API version follows a deploy: it is whatever the latest response named.
 function AppVersions() {
   const { apiVersion: api } = balebase();
-  const apiVersion = useSyncExternalStore(api.subscribe, () => api.current);
+  const read = () => api.current;
+  const apiVersion = useSyncExternalStore(api.subscribe, read, read);
   return (
     <p className="menuMeta">
       App v{appVersion} · API{" "}

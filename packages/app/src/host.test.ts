@@ -1,21 +1,11 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import { balebase, startBalebase } from "./balebase";
-import { type AppHost, configureHost } from "./host";
 import { authCallbackUrl } from "./shared/config";
 import { installFetch } from "./testing/fetch";
 
 const respond = installFetch();
 
-afterEach(() => {
-  configureHost({});
-  startBalebase({});
-});
-
-/** Starts the app with `host`, as renderApp does. */
-function start(host: AppHost) {
-  configureHost(host);
-  startBalebase(host);
-}
+afterEach(() => startBalebase({}));
 
 const nativeHost = (origin: string) => ({
   native: {
@@ -59,7 +49,7 @@ describe("host-dependent API requests", () => {
 
   it("sends the native shell's origin and preserves request headers", async () => {
     for (const origin of ["capacitor://localhost", "https://localhost"]) {
-      start(nativeHost(origin));
+      startBalebase(nativeHost(origin));
       const headers = await sentHeaders(
         new Request("https://api.test/api/me", {
           headers: { "X-Test": "preserved" },
@@ -76,7 +66,7 @@ describe("host-dependent API requests", () => {
   });
 
   it("keeps emailed links on the hosted app in a native shell", () => {
-    start(nativeHost("https://localhost"));
+    startBalebase(nativeHost("https://localhost"));
     expect(authCallbackUrl("/reset-password")).toBe(
       "https://mobile-app.example/reset-password",
     );
@@ -87,7 +77,7 @@ describe("host-dependent API requests", () => {
 
   it("reads connectivity from the shell when it has a source", () => {
     let listener: ((online: boolean) => void) | undefined;
-    start({
+    startBalebase({
       network: {
         getOnline: () => false,
         subscribe(next) {

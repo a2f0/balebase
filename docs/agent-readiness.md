@@ -43,7 +43,7 @@ separate the effect of the documentation from model variation.
   tests use fixtures rather than live services or credentials.
 - README explains when the local API refuses to start, and how that differs
   from running tests.
-- [API client onboarding](client-sdk.md) covers public imports, a typed
+- [Using the client SDK](client-sdk.md) covers public imports, a typed
   example, cookies and CORS, `fetch` outside a browser, and the shared and
   native wrappers.
 - CONTRIBUTING links the issue and offline product documentation and names the
