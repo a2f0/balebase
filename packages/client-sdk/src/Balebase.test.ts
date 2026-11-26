@@ -52,7 +52,9 @@ describe("API requests", () => {
   });
 
   it("sends a page's API key only to the page's origin without an API origin", async () => {
-    // Bun cannot build a Request for a relative URL, so read what was sent.
+    // Keys never belong in a page; this covers only how the API's origin is
+    // found without apiBaseUrl. Bun cannot build a Request for a relative
+    // URL, so read what was sent.
     const sent: (string | null)[] = [];
     await onPage("https://app.test", async () => {
       const balebase = new Balebase({
@@ -73,6 +75,14 @@ describe("API requests", () => {
     for (const apiKey of ["", "  "]) {
       expect(() => new Balebase({ apiBaseUrl, apiKey })).toThrow(
         "apiKey is blank",
+      );
+    }
+  });
+
+  it("refuses an API origin that is not an absolute URL", () => {
+    for (const apiBaseUrl of ["api.balebase.com", "/api"]) {
+      expect(() => new Balebase({ apiBaseUrl })).toThrow(
+        "apiBaseUrl must be an absolute URL",
       );
     }
   });

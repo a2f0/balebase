@@ -158,22 +158,23 @@ it("abandons a request after its endpoint's timeout", async () => {
 });
 
 it("ends requests when the caller's signal aborts, keeping each timeout", async () => {
+  // Answers a request with no signal; holds one with a signal until it aborts.
+  const signals: (AbortSignal | null | undefined)[] = [];
   const hanging = new Transport({
     baseUrl: "https://api.test",
     fetch: (_url, init) =>
-      new Promise((_resolve, reject) => {
+      new Promise((resolve, reject) => {
         const { signal } = init;
-        if (signal?.aborted) reject(signal.reason);
-        signal?.addEventListener("abort", () => reject(signal.reason));
+        signals.push(signal);
+        if (!signal) resolve(Response.json({}));
+        else if (signal.aborted) reject(signal.reason);
+        else signal.addEventListener("abort", () => reject(signal.reason));
       }),
   });
   const leaving = new AbortController();
-  const left = hanging
-    .withSignal(leaving.signal)
-    .call(endpoints.list)
-    .catch((cause: unknown) => cause);
+  const left = hanging.withSignal(leaving.signal).call(endpoints.list);
   leaving.abort();
-  expect((await left) as DOMException).toHaveProperty("name", "AbortError");
+  await expect(left).rejects.toHaveProperty("name", "AbortError");
   // Aborted before a call, the signal ends it before anything is sent.
   await expect(
     hanging.withSignal(leaving.signal).call(endpoints.list),
@@ -192,12 +193,12 @@ it("ends requests when the caller's signal aborts, keeping each timeout", async 
   const both = hanging
     .withSignal(first.signal)
     .withSignal(new AbortController().signal)
-    .call(endpoints.list)
-    .catch((cause: unknown) => cause);
+    .call(endpoints.list);
   first.abort();
-  expect((await both) as DOMException).toHaveProperty("name", "AbortError");
-  await transport.call(endpoints.list);
-  expect(sent[0]?.init.signal).toBeUndefined();
+  await expect(both).rejects.toHaveProperty("name", "AbortError");
+  signals.length = 0;
+  await hanging.call(endpoints.list);
+  expect(signals).toEqual([undefined]);
 });
 
 it("sends no cookies to a route its path token authorizes", async () => {

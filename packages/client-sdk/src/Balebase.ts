@@ -44,6 +44,11 @@ export class Balebase {
         "Set apiBaseUrl: outside a browser there is no page origin to send API requests to.",
       );
     }
+    if (apiBaseUrl && !URL.canParse(apiBaseUrl)) {
+      throw new Error(
+        `apiBaseUrl must be an absolute URL, such as https://api.balebase.com, not "${apiBaseUrl}".`,
+      );
+    }
     const { apiKey } = options;
     if (apiKey !== undefined && !apiKey.trim())
       throw new Error("apiKey is blank: pass an API key, or leave it unset.");
@@ -74,8 +79,9 @@ export class Balebase {
 
   /**
    * The Better Auth client: sign-in, sessions, two-factor, and
-   * organizations. Made on first use, since it starts watching the session
-   * (focus, other tabs) as soon as it exists.
+   * organizations. Made on first use. It watches the session (focus,
+   * connectivity, other tabs) only while something reads `useSession`, and
+   * stops a second after its last reader leaves.
    */
   get auth(): BalebaseAuthClient {
     this.#auth ??= createBalebaseAuthClient(this.#apiBaseUrl, this.fetch);
