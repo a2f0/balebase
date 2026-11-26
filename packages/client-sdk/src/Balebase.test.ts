@@ -51,6 +51,32 @@ describe("API requests", () => {
     ).toBe(JSON.stringify(["https://api.test", "user", "org"]));
   });
 
+  it("sends a page's API key only to the page's origin without an API origin", async () => {
+    // Bun cannot build a Request for a relative URL, so read what was sent.
+    const sent: (string | null)[] = [];
+    await onPage("https://app.test", async () => {
+      const balebase = new Balebase({
+        apiKey: "tlk_test_key",
+        fetch: async (_input, init) => {
+          sent.push(new Headers(init?.headers).get("Authorization"));
+          return Response.json({});
+        },
+      });
+      await balebase.fetch("/api/me");
+      await balebase.fetch("https://app.test/api/me");
+      await balebase.fetch("https://api.test/api/me");
+    });
+    expect(sent).toEqual(["Bearer tlk_test_key", "Bearer tlk_test_key", null]);
+  });
+
+  it("refuses a blank API key, such as an environment variable set empty", () => {
+    for (const apiKey of ["", "  "]) {
+      expect(() => new Balebase({ apiBaseUrl, apiKey })).toThrow(
+        "apiKey is blank",
+      );
+    }
+  });
+
   it("refuses to start outside a browser without an API origin", () => {
     for (const missing of [undefined, "", "/"]) {
       expect(() => new Balebase({ apiBaseUrl: missing })).toThrow(
@@ -114,11 +140,18 @@ describe("API requests", () => {
     await balebase.fetch("https://api.test/api/me", {
       headers: { Authorization: "Bearer tlk_other_key" },
     });
+    // Another origin, such as a presigned upload, never sees the key.
+    await balebase.fetch("https://uploads.example.test/api/me");
+    await balebase.fetch(new URL("http://api.test/api/me"));
+    await balebase.fetch("https://api.test:8443/api/me");
     expect(sent.map(({ headers }) => headers.get("Authorization"))).toEqual([
       "Bearer tlk_test_key",
       "Bearer tlk_test_key",
       "Bearer tlk_test_key",
       "Bearer tlk_other_key",
+      null,
+      null,
+      null,
     ]);
     expect(sent[1]?.headers.get("X-Test")).toBe("preserved");
     for (const { headers } of sent) {

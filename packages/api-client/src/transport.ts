@@ -41,17 +41,22 @@ export class Transport {
   }
 
   /**
-   * This client with every request also ending when `signal` aborts, such as
-   * when the screen that asked for it goes away. Each route's own timeout
-   * still applies, so a request ends at whichever comes first.
+   * This transport with every request also ending when `signal` aborts, such
+   * as when the screen that asked for it goes away. Each route's own timeout
+   * still applies, so a request ends at whichever comes first. A subclass
+   * returns its own kind by overriding it with `optionsWithSignal`.
    */
-  withSignal(signal: AbortSignal): this {
+  withSignal(signal: AbortSignal): Transport {
+    return new Transport(this.optionsWithSignal(signal));
+  }
+
+  /** These options, with `signal` ending requests as well as any signal before. */
+  protected optionsWithSignal(signal: AbortSignal): ApiClientOptions {
     const current = this.#options.signal;
-    const Client = this.constructor as new (options: ApiClientOptions) => this;
-    return new Client({
+    return {
       ...this.#options,
       signal: current ? AbortSignal.any([current, signal]) : signal,
-    });
+    };
   }
 
   /** The absolute URL of a route, for links and downloads the browser opens. */

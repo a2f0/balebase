@@ -95,13 +95,13 @@ browser CORS headers. Do not set it for an ordinary browser. The host's
 Outside a browser there is no page origin, so `new Balebase` throws without
 `apiBaseUrl`, and default `fetch` has no session cookie jar. A script or
 server authenticates with an organization API key, which the `apiKey` option
-sends as `Authorization: Bearer` with every request. A key reaches the
-workspace routes with its own access level; account settings, billing,
-organization settings, and Better Auth stay session-only
-([API keys and MCP](product.md#api-keys-and-mcp)). Keep keys out of pages and
-apps others can open. For anything else, the `fetch` option replaces the
-transport, and the caller implements its environment's authentication and
-cookie handling. Standard `fetch` already matches the option's signature.
+sends as `Authorization: Bearer` with every request to the API's origin, and
+never to another host's. A key reaches only the routes and access level that
+[API keys and MCP](product.md#api-keys-and-mcp) describes; the rest stay
+session-only. Keep keys out of pages and apps others can open. For anything
+else, the `fetch` option replaces the transport, and the caller implements
+its environment's authentication and cookie handling. Standard `fetch`
+already matches the option's signature.
 Neither package alone establishes a signed-in Node/Bun or native session.
 
 ## Verification

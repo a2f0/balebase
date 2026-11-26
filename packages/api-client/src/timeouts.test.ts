@@ -61,6 +61,7 @@ it("keeps every area of the client under a caller's signal", async () => {
   const leaving = new AbortController();
   const scoped = api.withSignal(leaving.signal);
   expect(scoped).toBeInstanceOf(ApiClient);
+  expect(scoped.withSignal(leaving.signal)).toBeInstanceOf(ApiClient);
   await scoped.session.me();
   await scoped.adminJobs.detail("run-1");
   await api.session.me();

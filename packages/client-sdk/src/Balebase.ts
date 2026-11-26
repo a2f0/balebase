@@ -44,8 +44,18 @@ export class Balebase {
         "Set apiBaseUrl: outside a browser there is no page origin to send API requests to.",
       );
     }
+    const { apiKey } = options;
+    if (apiKey !== undefined && !apiKey.trim())
+      throw new Error("apiKey is blank: pass an API key, or leave it unset.");
     this.fetch = createApiFetch({
-      apiKey: options.apiKey,
+      apiKey:
+        apiKey === undefined
+          ? undefined
+          : // Outside a browser, apiBaseUrl is set (checked above).
+            {
+              origin: new URL(apiBaseUrl || location.origin).origin,
+              value: apiKey,
+            },
       apiVersion: this.apiVersion,
       fetch: options.fetch,
       nativeOrigin: options.nativeOrigin,
