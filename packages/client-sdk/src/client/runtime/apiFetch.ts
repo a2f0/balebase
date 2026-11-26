@@ -67,7 +67,7 @@ export function createApiFetch(options: ApiFetchOptions): ApiFetch {
  * Better Auth's routes, which take a session and never an API key: the
  * API's mount in `packages/api/src/app.ts`.
  */
-const authRoutes = "/api/auth";
+export const authRoutes = "/api/auth";
 
 /**
  * Whether `input` goes under the key's base, to a route an API key may
@@ -101,16 +101,19 @@ function decoded(path: string) {
 
 /**
  * The URL `input` goes to. `fetch` resolves a relative URL against the
- * page; outside one, it cannot send it at all.
+ * document's base URL, which a `<base>` element can move off the page's
+ * origin; outside a page, it cannot send one at all.
  */
 function urlOf(input: RequestInfo | URL) {
   const url = input instanceof Request ? input.url : input;
   try {
-    return new URL(
-      url,
-      typeof location === "undefined" ? undefined : location.href,
-    );
+    return new URL(url, pageBase());
   } catch {
     return undefined;
   }
+}
+
+function pageBase() {
+  if (typeof document !== "undefined") return document.baseURI;
+  return typeof location === "undefined" ? undefined : location.href;
 }

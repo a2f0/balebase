@@ -120,7 +120,7 @@ function apiKeyScope(apiBaseUrl: string, value: string): ApiKeyScope {
   const url = base === "null" ? undefined : new URL(base);
   if (url === undefined || url.origin === "null")
     throw new Error(
-      'Set apiBaseUrl to use apiKey: this page\'s origin is "null", as for a file:// page or a sandboxed iframe, so the key has no API origin to go to.',
+      "Set apiBaseUrl to use apiKey: this page's origin names no host (a file:// page, a sandboxed iframe, or a custom scheme), so the key has no API origin to go to.",
     );
   // https, or http to a loopback address, as a local API is.
   if (

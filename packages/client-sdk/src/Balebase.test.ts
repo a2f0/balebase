@@ -71,6 +71,31 @@ describe("API requests", () => {
     expect(sent).toEqual(["Bearer tlk_test_key", "Bearer tlk_test_key", null]);
   });
 
+  it("sends no key where a page's <base> sends a relative URL", async () => {
+    // A page's fetch resolves relative URLs against document.baseURI.
+    const sent: (string | null)[] = [];
+    Object.defineProperty(globalThis, "document", {
+      configurable: true,
+      value: { baseURI: "https://cdn.test/assets/" },
+    });
+    try {
+      await onPage("https://app.test", async () => {
+        const balebase = new Balebase({
+          apiKey: "tlk_test_key",
+          fetch: async (_input, init) => {
+            sent.push(new Headers(init?.headers).get("Authorization"));
+            return Response.json({});
+          },
+        });
+        await balebase.fetch("/api/me");
+        await balebase.fetch("https://app.test/api/me");
+      });
+    } finally {
+      Reflect.deleteProperty(globalThis, "document");
+    }
+    expect(sent).toEqual([null, "Bearer tlk_test_key"]);
+  });
+
   it("sends no key to a page's own origin when the API is elsewhere", async () => {
     // `fetch` resolves a relative URL against the page, not the API.
     const sent: (string | null)[] = [];
@@ -250,7 +275,7 @@ describe("API requests", () => {
       });
       try {
         expect(() => new Balebase({ apiKey: "tlk_k" })).toThrow(
-          'Set apiBaseUrl to use apiKey: this page\'s origin is "null"',
+          "Set apiBaseUrl to use apiKey: this page's origin names no host",
         );
         // Without a key, nothing about the page's origin matters.
         expect(() => new Balebase()).not.toThrow();
