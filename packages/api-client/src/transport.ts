@@ -92,7 +92,9 @@ export class Transport {
     if (this.#options.signal) signals.push(this.#options.signal);
     if (route.timeoutMs !== undefined)
       signals.push(AbortSignal.timeout(route.timeoutMs));
-    if (signals.length > 0) init.signal = AbortSignal.any(signals);
+    const [only] = signals;
+    if (signals.length > 1) init.signal = AbortSignal.any(signals);
+    else if (only) init.signal = only;
     if (route.body === "form") init.body = body as FormData;
     else if (route.body === "file") {
       const file = body as Blob;

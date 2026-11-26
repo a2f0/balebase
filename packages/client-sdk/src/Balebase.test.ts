@@ -80,9 +80,14 @@ describe("API requests", () => {
   });
 
   it("refuses an API origin that is not an absolute URL", () => {
-    for (const apiBaseUrl of ["api.balebase.com", "/api"]) {
+    for (const apiBaseUrl of [
+      "api.balebase.com",
+      "/api",
+      "localhost:8787",
+      "ftp://api.test",
+    ]) {
       expect(() => new Balebase({ apiBaseUrl })).toThrow(
-        "apiBaseUrl must be an absolute URL",
+        "apiBaseUrl must be an absolute http(s) URL",
       );
     }
   });

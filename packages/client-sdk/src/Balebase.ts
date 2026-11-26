@@ -44,9 +44,9 @@ export class Balebase {
         "Set apiBaseUrl: outside a browser there is no page origin to send API requests to.",
       );
     }
-    if (apiBaseUrl && !URL.canParse(apiBaseUrl)) {
+    if (apiBaseUrl && !isWebOrigin(apiBaseUrl)) {
       throw new Error(
-        `apiBaseUrl must be an absolute URL, such as https://api.balebase.com, not "${apiBaseUrl}".`,
+        `apiBaseUrl must be an absolute http(s) URL, such as https://api.balebase.com, not "${apiBaseUrl}".`,
       );
     }
     const { apiKey } = options;
@@ -80,11 +80,23 @@ export class Balebase {
   /**
    * The Better Auth client: sign-in, sessions, two-factor, and
    * organizations. Made on first use. It watches the session (focus,
-   * connectivity, other tabs) only while something reads `useSession`, and
-   * stops a second after its last reader leaves.
+   * connectivity, other tabs) only while something reads `useSession`;
+   * Better Auth stops that shortly after the last reader leaves.
    */
   get auth(): BalebaseAuthClient {
     this.#auth ??= createBalebaseAuthClient(this.#apiBaseUrl, this.fetch);
     return this.#auth;
+  }
+}
+
+/**
+ * Whether `url` is an absolute http(s) URL. "localhost:8787" parses too, with
+ * "localhost:" as its scheme, so the scheme is checked.
+ */
+function isWebOrigin(url: string) {
+  try {
+    return /^https?:$/.test(new URL(url).protocol);
+  } catch {
+    return false;
   }
 }

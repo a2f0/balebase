@@ -23,8 +23,8 @@ export function offlineShellWait(
  * one, as in tests, it is a browser's. `renderApp` configures the host once;
  * only tests change it again, which starts a new SDK with no recorded API
  * version and a new auth client with no session yet. The old SDK needs no
- * closing: its auth client stops watching the session a second after the
- * last screen reading it moves to the new one. Offline locks and the tab's
+ * closing: Better Auth stops its session watching shortly after the last
+ * screen reading it moves to the new one. Offline locks and the tab's
  * change and clearing subscribers carry over.
  */
 export function balebase() {

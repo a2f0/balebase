@@ -58,7 +58,8 @@ client would wrap.
 
 An instance needs no closing. It starts nothing when made: the auth client
 watches the session (focus, other tabs) only while something reads
-`auth.useSession`, and stops a second after its last reader leaves. The
+`auth.useSession`, and Better Auth stops that shortly after the last reader
+leaves. The
 offline and finance subscriptions belong to whoever subscribed, and every
 `subscribe` returns its own unsubscribe.
 
