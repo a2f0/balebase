@@ -1,4 +1,5 @@
 import { answerBase, offlineAnswers } from "@balebase/client-sdk";
+import { OfflineStore } from "@balebase/client-sdk/testing";
 import { DialogHost } from "@balebase/ui/react";
 import type { FormTemplate } from "@balebase/validators/forms";
 import { useState } from "react";
@@ -7,6 +8,7 @@ import { balebase } from "../src/balebase";
 import { DeviceContext } from "../src/offline/offlineContext";
 import { useOfflineWorkspace } from "../src/offline/useOfflineWorkspace";
 import { DeviceProjects } from "../src/projects/DeviceProjects";
+import { apiUrl } from "../src/shared/config";
 import { useWorkspaceNavigation } from "../src/workspace/navigationGuard";
 
 const user = {
@@ -16,6 +18,8 @@ const user = {
 };
 const scope = { userId: user.id, organizationId: "org-1" };
 const key = balebase().offline.scopeKey(scope);
+// Seeds the device directly, sharing the SDK's storage and subscribers.
+const store = new OfflineStore(apiUrl);
 const project = {
   id: "project-1",
   name: "Site",
@@ -75,11 +79,11 @@ const testApi = {
     `/projects/${project.id}/forms/${encodeURIComponent(formId)}`,
   /** Stores a synced project and its template, then starts a form from it. */
   async seed() {
-    await balebase().offline.change(
+    await store.change(
       key,
       (current) =>
         current ?? {
-          ...balebase().offline.emptyWorkspace({
+          ...store.emptyWorkspace({
             scope,
             user,
             organizationName: "Test team",
@@ -152,7 +156,7 @@ const testApi = {
       balebase().offline.scopeKey({ ...scope, userId: "other" }),
     ),
   abort: () =>
-    balebase().offline.change(key, (workspace) => {
+    store.change(key, (workspace) => {
       if (workspace) workspace.templates = [];
       throw new Error("Simulated storage failure");
     }),
