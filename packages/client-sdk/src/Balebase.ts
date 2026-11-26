@@ -39,6 +39,7 @@ export class Balebase {
   readonly offline: Offline;
   readonly #apiBaseUrl: string;
   #auth: BalebaseAuthClient | undefined;
+  readonly #authFetch: ApiFetch;
 
   constructor(options: BalebaseOptions = {}) {
     // One spelling, since saved data on the device is keyed by it.
@@ -58,13 +59,19 @@ export class Balebase {
     const apiKey = options.apiKey?.trim();
     if (apiKey === "")
       throw new Error("apiKey is blank: pass an API key, or leave it unset.");
-    this.fetch = createApiFetch({
-      apiKey:
-        apiKey === undefined ? undefined : apiKeyScope(apiBaseUrl, apiKey),
+    const transport = {
       apiVersion: this.apiVersion,
       fetch: options.fetch,
       nativeOrigin: options.nativeOrigin,
+    };
+    this.fetch = createApiFetch({
+      ...transport,
+      apiKey:
+        apiKey === undefined ? undefined : apiKeyScope(apiBaseUrl, apiKey),
     });
+    // `fetch` withholds the key from Better Auth's routes too; the auth
+    // client never holds it at all, whatever URLs it builds.
+    this.#authFetch = createApiFetch({ ...transport, apiKey: undefined });
     this.#apiBaseUrl = apiBaseUrl;
     this.api = new ApiClient({ baseUrl: apiBaseUrl, fetch: this.fetch });
     this.financeCache = new FinanceCache(apiBaseUrl);
@@ -79,14 +86,14 @@ export class Balebase {
 
   /**
    * The Better Auth client: sign-in, sessions, two-factor, and
-   * organizations. Made on first use; its requests go through `fetch`, which
-   * marks a native shell and records the API version but never sends
-   * `apiKey` to these session-only routes. It watches the session (focus,
+   * organizations. Made on first use; its requests mark a native shell and
+   * record the API version like `fetch`, but never carry `apiKey`, since
+   * those routes are session-only. It watches the session (focus,
    * connectivity, other tabs) only while something reads `useSession`;
    * Better Auth stops that shortly after the last reader leaves.
    */
   get auth(): BalebaseAuthClient {
-    this.#auth ??= createBalebaseAuthClient(this.#apiBaseUrl, this.fetch);
+    this.#auth ??= createBalebaseAuthClient(this.#apiBaseUrl, this.#authFetch);
     return this.#auth;
   }
 }
@@ -111,16 +118,17 @@ function isApiBase(url: string) {
 /**
  * Where an API key may go: under `apiBaseUrl`, or the page's origin without
  * one. Refuses a base the key would cross the network to unencrypted, and an
- * opaque origin ("null", as for a file:// page, a sandboxed iframe, or a
- * custom scheme), which names no host to limit it to. Outside a browser,
- * apiBaseUrl is set (`Balebase` checks first).
+ * opaque origin ("null", as a page's URL has in a srcdoc or data: frame,
+ * under a custom scheme, and in some browsers for a file: page), which names
+ * no host to limit it to. Outside a browser, apiBaseUrl is set (`Balebase`
+ * checks first).
  */
 function apiKeyScope(apiBaseUrl: string, value: string): ApiKeyScope {
   const base = apiBaseUrl || location.origin;
   const url = base === "null" ? undefined : new URL(base);
   if (url === undefined || url.origin === "null")
     throw new Error(
-      "Set apiBaseUrl to use apiKey: this page's origin names no host (a file:// page, a sandboxed iframe, or a custom scheme), so the key has no API origin to go to.",
+      "Set apiBaseUrl to use apiKey: this page's origin names no host (as for a file:// page, a srcdoc or data: frame, or a custom scheme), so the key has no API origin to go to.",
     );
   // https, or http to a loopback address, as a local API is.
   if (

@@ -73,7 +73,8 @@ export const authRoutes = "/api/auth";
  * Whether `input` goes under the key's base, to a route an API key may
  * reach. Paths compare as `fetch` sends them, with dot segments resolved;
  * the route, as the API matches it, with percent-escapes decoded, so
- * `/api/%61uth` is Better Auth's too. A route with a malformed escape gets
+ * `/api/%61uth` is Better Auth's too, and with repeated slashes merged, as
+ * proxies often do. A route with a malformed escape gets
  * no key, whatever route it is: the API decodes around the bad escape, so
  * it may be Better Auth's. The typed client never sends one.
  */
@@ -83,7 +84,10 @@ function receivesKey(input: RequestInfo | URL, key: ApiKeyScope) {
   const { pathname } = url;
   if (pathname !== key.path && !pathname.startsWith(`${key.path}/`))
     return false;
-  const route = decoded(pathname.slice(key.path.length));
+  const route = decoded(pathname.slice(key.path.length))?.replace(
+    /\/{2,}/g,
+    "/",
+  );
   return (
     route !== undefined &&
     route !== authRoutes &&

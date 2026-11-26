@@ -215,13 +215,15 @@ describe("API requests", () => {
     await balebase.fetch("https://api.test/api/auth/get-session");
     await balebase.fetch(new Request("https://api.test/api/auth"));
     await balebase.fetch("https://api.test/api/me/../auth/sign-out");
-    // The API routes the decoded path.
+    // The API routes the decoded path, and proxies often merge slashes.
     await balebase.fetch("https://api.test/api/%61uth/get-session");
+    await balebase.fetch("https://api.test//api//auth/get-session");
     await balebase.fetch("https://api.test/api/objects/%E0%A4%A");
     // Only the routes under /api/auth are Better Auth's.
     await balebase.fetch("https://api.test/api/authors");
     await balebase.fetch("https://api.test/auth/get-session");
     expect(sent.map(({ headers }) => headers.get("Authorization"))).toEqual([
+      null,
       null,
       null,
       null,
@@ -243,6 +245,7 @@ describe("API requests", () => {
     await balebase.api.session.me();
     await balebase.fetch("https://example.test/balebase/api/objects/1");
     await balebase.fetch("https://example.test/balebase/api/auth/get-session");
+    await balebase.fetch("https://example.test/balebase//api/auth/get-session");
     await balebase.fetch("https://example.test/api/me");
     await balebase.fetch("https://example.test/balebase-old/api/me");
     await balebase.fetch("https://example.test/balebase/../other/api/me");
@@ -256,17 +259,21 @@ describe("API requests", () => {
       null,
       null,
       null,
+      null,
     ]);
   });
 
   it("asks for an API origin when a page with a key has none", async () => {
-    // file:// pages and custom schemes have an opaque origin, "null";
-    // sandboxed iframes report "null" whatever their URL. WKWebView names a
-    // custom scheme's page origin, but its URL's origin is still opaque.
+    // A page's location has its URL's origin: opaque, "null", for srcdoc
+    // and data: frames, custom schemes, and file: in some browsers. Chrome
+    // names a file: page's origin "file://", and WKWebView a custom
+    // scheme's, but neither names a host.
     for (const page of [
       new URL("file:///Users/sam/report.html"),
+      new URL("about:srcdoc"),
+      new URL("data:text/html,<p>Report</p>"),
       new URL("capacitor://localhost/"),
-      { href: "https://app.test/", origin: "null" },
+      { href: "file:///Users/sam/report.html", origin: "file://" },
       { href: "capacitor://localhost/", origin: "capacitor://localhost" },
     ]) {
       Object.defineProperty(globalThis, "location", {

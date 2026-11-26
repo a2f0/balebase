@@ -99,8 +99,10 @@ server authenticates with an organization API key, which the `apiKey` option
 sends as `Authorization: Bearer` with every request under `apiBaseUrl` (its
 origin and any proxy path). It never goes to another host or path, or to
 Better Auth's session-only routes under `/api/auth`, whether the `auth` client
-or `fetch` sends them. It needs an https `apiBaseUrl`, or http to this
-machine. A key reaches only the routes and access level that
+or `fetch` sends them. Like any `Authorization` header, it follows a
+redirect within the API's origin and is dropped on one to another. It needs
+an https `apiBaseUrl`, or http to this machine. A key reaches only the
+routes and access level that
 [API keys and MCP](product.md#api-keys-and-mcp) describes; the rest stay
 session-only. Keep keys out of pages and apps others can open. For anything
 else, the `fetch` option replaces the transport, and the caller implements
