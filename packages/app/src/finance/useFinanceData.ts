@@ -147,6 +147,7 @@ function useCachedLoad(
           onProgress: (saved) => {
             if (current()) setSaving(saved);
           },
+          pull: balebase().financeCache.pull,
           summary: () => balebase().api.finance.summary(),
         },
       );

@@ -68,6 +68,7 @@ function failure(status: number) {
 const sources = {
   changes: async () => feed("a", "b"),
   onProgress: () => undefined,
+  pull: balebase().financeCache.pull,
   summary: async () => summary,
 };
 
@@ -304,6 +305,44 @@ describe("loading cached finances", () => {
     const loaded = await load;
     expect(ids(loaded.data)).toEqual(["a", "b"]);
     expect(loaded.savedAt).toBeString();
+  });
+
+  it("names the summary when it times out with no saved copy to show", async () => {
+    const store = balebase().financeCache.memoryStore();
+    const timeouts: (() => void)[] = [];
+    const realSetTimeout = globalThis.setTimeout;
+    const spy = spyOn(globalThis, "setTimeout").mockImplementation(((
+      handler: () => void,
+      delay?: number,
+    ) => {
+      if (delay !== 60_000) return realSetTimeout(handler, delay);
+      timeouts.push(handler);
+      return 0;
+    }) as unknown as typeof setTimeout);
+    const load = loadFinance(store, scope, false, {
+      ...sources,
+      summary: () => new Promise<FinanceData>(() => {}),
+    });
+    await Bun.sleep(0);
+    spy.mockRestore();
+    for (const fire of timeouts.splice(0)) fire();
+    await expect(load).rejects.toThrow(
+      "Loading finances timed out. Try again.",
+    );
+  });
+
+  it("brings the saved copy up to date through the pull it is given", async () => {
+    const store = balebase().financeCache.memoryStore();
+    const pulled: CacheScope[] = [];
+    const loaded = await loadFinance(store, scope, true, {
+      ...sources,
+      pull: (...args) => {
+        pulled.push(args[0]);
+        return sources.pull(...args);
+      },
+    });
+    expect(pulled).toEqual([scope]);
+    expect(ids(loaded.data)).toEqual(["a", "b"]);
   });
 
   it("saves nothing read in another account's session", async () => {
