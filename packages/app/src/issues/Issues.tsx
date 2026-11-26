@@ -1,5 +1,4 @@
-import type { IssueFilters } from "@balebase/client-sdk";
-import { errorMessage } from "@balebase/client-sdk";
+import { errorMessage, type IssueFilters } from "@balebase/client-sdk";
 import {
   Banner,
   Button,

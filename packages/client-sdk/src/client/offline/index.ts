@@ -69,6 +69,7 @@ export class Offline {
     this.#runtime.store.lockOther(userId, organizationId);
   }
 
+  /** The workspace stored under `key`, if this device has one. */
   read(key: string) {
     return this.#runtime.store.read(key);
   }
@@ -92,6 +93,10 @@ export class Offline {
     return startOfflineForm(this.#runtime.store, key, template, projectId);
   }
 
+  /**
+   * Saves an answer to one of a form's items on the device, given over the
+   * server answer `base`; it syncs with the form's next save or completion.
+   */
   saveAnswer(
     key: string,
     id: string,
@@ -106,6 +111,10 @@ export class Offline {
     return saveOfflineProgress(this.#runtime.store, key, id);
   }
 
+  /**
+   * Completes a form and queues the completion, with any answers not yet
+   * shared; refuses while a required item is unanswered.
+   */
   completeForm(key: string, id: string) {
     return completeOfflineForm(this.#runtime.store, key, id);
   }

@@ -66,6 +66,12 @@ that show a form's progress. The database name, version, and key shapes, the
 localStorage pointer, and the lock names are what devices already hold work
 under; changing them strands it.
 
+Offline work needs a browser or WebView: IndexedDB, localStorage, and Web
+Locks. Make one `Balebase` per tab. An instance keeps its own lock epoch and
+change subscribers, so a second one in the same tab would neither see the
+first's locks while storage fails nor tell its subscribers of the first's
+changes.
+
 [Using the client SDK](../../docs/client-sdk.md) covers cookies, CORS, native
 hosts, and use outside a browser.
 

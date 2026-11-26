@@ -1,5 +1,4 @@
-import type { FinanceFilters } from "@balebase/client-sdk";
-import { errorMessage } from "@balebase/client-sdk";
+import { errorMessage, type FinanceFilters } from "@balebase/client-sdk";
 import type { FinanceData } from "@balebase/validators/finance";
 import type { FinancePeriod } from "@balebase/validators/rules";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
