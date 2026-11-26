@@ -89,6 +89,36 @@ describe("API requests", () => {
     expect(sent).toEqual([null, "Bearer tlk_test_key"]);
   });
 
+  it("lets no key follow a redirect off the API's origin", async () => {
+    // Pins the runtime's fetch: the Fetch spec drops Authorization on a
+    // cross-origin redirect, as a file download's signed URL would be.
+    const storage = Bun.serve({
+      fetch: (request) =>
+        Response.json({ authorization: request.headers.get("Authorization") }),
+      port: 0,
+    });
+    const toApi: (string | null)[] = [];
+    const api = Bun.serve({
+      fetch: (request) => {
+        toApi.push(request.headers.get("Authorization"));
+        return Response.redirect(`${storage.url}file`, 302);
+      },
+      port: 0,
+    });
+    try {
+      const balebase = new Balebase({
+        apiBaseUrl: api.url.origin,
+        apiKey: "tlk_test_key",
+      });
+      const response = await balebase.fetch(`${api.url}api/objects/1`);
+      expect(toApi).toEqual(["Bearer tlk_test_key"]);
+      expect(await response.json()).toEqual({ authorization: null });
+    } finally {
+      api.stop();
+      storage.stop();
+    }
+  });
+
   it("sends a key read with a trailing newline without it", async () => {
     const { fetch, sent } = recordRequests(() => Response.json({ user: null }));
     await new Balebase({

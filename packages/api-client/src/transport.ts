@@ -36,7 +36,8 @@ export class Transport {
   readonly #fetch: NonNullable<ApiClientOptions["fetch"]>;
 
   constructor(options: ApiClientOptions) {
-    this.#options = options;
+    // A copy, so changing the caller's object later changes no client.
+    this.#options = { ...options };
     this.#fetch = options.fetch ?? ((input, init) => fetch(input, init));
   }
 

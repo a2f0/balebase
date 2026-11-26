@@ -60,7 +60,7 @@ export class Balebase {
       !sendsSecretsSafely(apiBaseUrl || location.origin)
     )
       throw new Error(
-        "apiKey needs an https apiBaseUrl: over http the key would cross the network unencrypted.",
+        "apiKey needs an https apiBaseUrl, or http to localhost, 127.0.0.1, or [::1]: over http elsewhere the key would cross the network unencrypted.",
       );
     const transport = {
       apiVersion: this.apiVersion,
