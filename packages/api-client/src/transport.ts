@@ -11,6 +11,11 @@ export interface ApiClientOptions {
   baseUrl: string;
   /** Sends each request. The default looks the global fetch up per call. */
   fetch?: (input: string, init: RequestInit) => Promise<Response>;
+  /**
+   * Ends every request when it aborts, as well as at each route's own
+   * timeout. Usually set through `withSignal`.
+   */
+  signal?: AbortSignal | undefined;
 }
 
 /** A route's input, optional when every part of it is. */
@@ -27,12 +32,32 @@ interface LooseInput {
 
 /** Sends requests for the contract's routes. Area clients build on it. */
 export class Transport {
-  readonly #baseUrl: string;
+  readonly #options: ApiClientOptions;
   readonly #fetch: NonNullable<ApiClientOptions["fetch"]>;
 
   constructor(options: ApiClientOptions) {
-    this.#baseUrl = options.baseUrl;
+    // A copy, so changing the caller's object later changes no client.
+    this.#options = { ...options };
     this.#fetch = options.fetch ?? ((input, init) => fetch(input, init));
+  }
+
+  /**
+   * This transport with every request also ending when `signal` aborts, such
+   * as when the screen that asked for it goes away. Each route's own timeout
+   * still applies, so a request ends at whichever comes first. A subclass
+   * returns its own kind by overriding it with `optionsWithSignal`.
+   */
+  withSignal(signal: AbortSignal): Transport {
+    return new Transport(this.optionsWithSignal(signal));
+  }
+
+  /** These options, with `signal` ending requests as well as any signal before. */
+  protected optionsWithSignal(signal: AbortSignal): ApiClientOptions {
+    const current = this.#options.signal;
+    return {
+      ...this.#options,
+      signal: current ? AbortSignal.any([current, signal]) : signal,
+    };
   }
 
   /** The absolute URL of a route, for links and downloads the browser opens. */
@@ -51,7 +76,7 @@ export class Transport {
           search.append(key, String(item));
       }
     }
-    return `${this.#baseUrl}${path}${search.size ? `?${search}` : ""}`;
+    return `${this.#options.baseUrl}${path}${search.size ? `?${search}` : ""}`;
   }
 
   /** Sends a route's request. A response that isn't OK throws an ApiError. */
@@ -64,8 +89,13 @@ export class Transport {
       credentials: route.credentials ?? "include",
       method: route.method,
     };
+    const signals: AbortSignal[] = [];
+    if (this.#options.signal) signals.push(this.#options.signal);
     if (route.timeoutMs !== undefined)
-      init.signal = AbortSignal.timeout(route.timeoutMs);
+      signals.push(AbortSignal.timeout(route.timeoutMs));
+    const [only] = signals;
+    if (signals.length > 1) init.signal = AbortSignal.any(signals);
+    else if (only) init.signal = only;
     if (route.body === "form") init.body = body as FormData;
     else if (route.body === "file") {
       const file = body as Blob;

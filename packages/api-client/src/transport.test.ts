@@ -157,6 +157,50 @@ it("abandons a request after its endpoint's timeout", async () => {
   expect(sent[0]?.init.signal).toBeUndefined();
 });
 
+it("ends requests when the caller's signal aborts, keeping each timeout", async () => {
+  // Answers a request with no signal; holds one with a signal until it aborts.
+  const signals: (AbortSignal | null | undefined)[] = [];
+  const hanging = new Transport({
+    baseUrl: "https://api.test",
+    fetch: (_url, init) =>
+      new Promise((resolve, reject) => {
+        const { signal } = init;
+        signals.push(signal);
+        if (!signal) resolve(Response.json({}));
+        else if (signal.aborted) reject(signal.reason);
+        else signal.addEventListener("abort", () => reject(signal.reason));
+      }),
+  });
+  const leaving = new AbortController();
+  const left = hanging.withSignal(leaving.signal).call(endpoints.list);
+  leaving.abort();
+  await expect(left).rejects.toHaveProperty("name", "AbortError");
+  // Aborted before a call, the signal ends it at once.
+  await expect(
+    hanging.withSignal(leaving.signal).call(endpoints.list),
+  ).rejects.toHaveProperty("name", "AbortError");
+
+  // A signal that never aborts leaves the route's own timeout in place.
+  const staying = hanging.withSignal(new AbortController().signal);
+  await expect(staying.call(endpoints.slow)).rejects.toHaveProperty(
+    "name",
+    "TimeoutError",
+  );
+
+  // Signals added one after another all apply, and the client they came
+  // from keeps none of them.
+  const first = new AbortController();
+  const both = hanging
+    .withSignal(first.signal)
+    .withSignal(new AbortController().signal)
+    .call(endpoints.list);
+  first.abort();
+  await expect(both).rejects.toHaveProperty("name", "AbortError");
+  signals.length = 0;
+  await hanging.call(endpoints.list);
+  expect(signals).toEqual([undefined]);
+});
+
 it("sends no cookies to a route its path token authorizes", async () => {
   await transport.call(endpoints.link, { params: { token: "t" } });
   expect(sent[0]?.init.credentials).toBe("omit");

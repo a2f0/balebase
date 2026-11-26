@@ -50,7 +50,11 @@ See `src/session.ts`, `src/transport.ts`, and `src/ApiError.ts` in the
 `status`, `code`, and the original `response`. Network or CORS failures can
 reject before an HTTP response exists and need not be `ApiError` instances. An
 endpoint with a `timeoutMs` (offline sync and job output reads) rejects with a
-`TimeoutError` `DOMException` when it runs out.
+`TimeoutError` `DOMException` when it runs out. To end requests sooner, such
+as when the screen that asked for them closes, call them through
+`api.withSignal(signal)`: each then ends at whichever comes first, the
+signal's abort (rejecting with its reason, an `AbortError` unless `abort`
+was given another) or its own timeout.
 
 Requests default to `credentials: "include"`; this does not sign the user in.
 The browser must already have a valid API session cookie. The API's CORS
@@ -89,11 +93,18 @@ reads it. That marker is not authentication and is deliberately excluded from
 browser CORS headers. Do not set it for an ordinary browser. The host's
 `network`, OS connectivity on a device, becomes the SDK's `network` source.
 
-Outside a browser, default `fetch` does not provide a browser session cookie
-jar. The `fetch` option replaces the transport, but the caller must
-explicitly implement its environment's authentication and cookie handling.
-Standard `fetch` already matches the option's signature; a narrowing wrapper
-is not required. Add a wrapper when you need additional behavior.
+Outside a browser there is no page origin, so `new Balebase` throws without
+`apiBaseUrl`, and default `fetch` has no session cookie jar. A script or
+server authenticates with an organization API key, which the `apiKey` option
+sends as `Authorization: Bearer` with every request to the API's origin, and
+never to another host's or with the `auth` client's requests. It needs an
+https `apiBaseUrl`, or http to this machine. A key reaches only the routes and
+access level that
+[API keys and MCP](product.md#api-keys-and-mcp) describes; the rest stay
+session-only. Keep keys out of pages and apps others can open. For anything
+else, the `fetch` option replaces the transport, and the caller implements
+its environment's authentication and cookie handling. Standard `fetch`
+already matches the option's signature.
 Neither package alone establishes a signed-in Node/Bun or native session.
 
 ## Verification

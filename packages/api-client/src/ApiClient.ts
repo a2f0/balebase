@@ -55,4 +55,13 @@ export class ApiClient extends Transport {
   readonly projects = projectsApi(this);
   readonly session = sessionApi(this);
   readonly signing = signingApi(this);
+
+  /**
+   * This client with every request also ending when `signal` aborts, such as
+   * when the screen that asked for it goes away. Each route's own timeout
+   * still applies, so a request ends at whichever comes first.
+   */
+  override withSignal(signal: AbortSignal): ApiClient {
+    return new ApiClient(this.optionsWithSignal(signal));
+  }
 }

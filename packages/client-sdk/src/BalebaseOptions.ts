@@ -1,18 +1,33 @@
 import type { ApiFetch } from "./client/runtime/apiFetch";
 import type { NetworkStatusSource } from "./client/runtime/network";
 
-/** What a host passes to `new Balebase(options)`; every field is optional. */
+/**
+ * What a host passes to `new Balebase(options)`. In a browser every field is
+ * optional; elsewhere `apiBaseUrl` is required.
+ */
 export interface BalebaseOptions {
   /**
    * The API origin, such as `https://api.balebase.com`, without a trailing
-   * slash or `/api`. Defaults to the page's own origin; outside a browser,
-   * where relative URLs cannot be fetched, set it.
+   * slash or `/api`, a query, or credentials; a path in front of the API's
+   * own, as behind a proxy, is kept. Defaults to the page's own origin.
+   * Outside a browser, where there is no page and relative URLs cannot be
+   * fetched, it is required: `new Balebase` throws without it.
    */
   apiBaseUrl?: string | undefined;
   /**
+   * An organization API key, for scripts and servers that have no browser
+   * session. It is sent as a bearer token with every request to the API's
+   * origin, never another host's, except the requests the `auth` client
+   * makes, since Better Auth's routes are session-only. It needs an https
+   * `apiBaseUrl` (or http to this machine). The key's access and the routes
+   * API keys may reach still apply. It is a secret: never put one in a page
+   * or an app others can open.
+   */
+  apiKey?: string | undefined;
+  /**
    * Sends each request. Defaults to the global `fetch`, looked up per call.
-   * Outside a browser it must supply the authentication a browser's session
-   * cookie would.
+   * Outside a browser, without `apiKey`, it must supply the authentication a
+   * browser's session cookie would.
    */
   fetch?: ApiFetch | undefined;
   /**

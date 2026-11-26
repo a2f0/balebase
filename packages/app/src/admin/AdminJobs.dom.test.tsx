@@ -276,6 +276,7 @@ it("queues confirmed maintenance, exposes persisted output after remount, and fi
 
 it("shows failed saved runs and guards against a stale detail response", async () => {
   let finishFirst: ((response: Response) => void) | undefined;
+  let firstSignal: AbortSignal | null | undefined;
   const failed: JobRun = {
     ...queued,
     runId: "run-2",
@@ -283,11 +284,13 @@ it("shows failed saved runs and guards against a stale detail response", async (
     errorCode: "INTERRUPTED",
     error: "Review completed work before retrying.",
   };
-  respond(async (url) => {
-    if (url.pathname.endsWith("/runs/run-1"))
+  respond(async (url, init) => {
+    if (url.pathname.endsWith("/runs/run-1")) {
+      firstSignal = init?.signal;
       return new Promise<Response>((resolve) => {
         finishFirst = resolve;
       });
+    }
     if (url.pathname.endsWith("/runs/run-2"))
       return Response.json({ run: failed, logs: [], nextBefore: null });
     if (url.pathname.endsWith("/runs"))
@@ -299,7 +302,10 @@ it("shows failed saved runs and guards against a stale detail response", async (
     (item) => item.textContent === "View run",
   );
   await act(async () => views[0]?.click());
+  expect(firstSignal?.aborted).toBe(false);
   await act(async () => views[1]?.click());
+  // Closing a run cancels its read, not only what it would show.
+  expect(firstSignal?.aborted).toBe(true);
   expect(views[0]?.getAttribute("aria-expanded")).toBe("false");
   expect(views[1]?.getAttribute("aria-expanded")).toBe("true");
   expect(container.textContent).toContain("INTERRUPTED");
