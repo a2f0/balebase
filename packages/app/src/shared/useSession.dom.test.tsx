@@ -1,7 +1,7 @@
-import { expect, it } from "bun:test";
+import { expect, it, spyOn } from "bun:test";
 import { act } from "react";
 import { configureHost } from "../host";
-import { installDom } from "../testing/dom";
+import { holdTimers, installDom } from "../testing/dom";
 import { useSession } from "./useSession";
 
 const { mount, respond } = installDom({ url: "http://localhost:5173/" });
@@ -26,7 +26,11 @@ async function until(done: () => boolean) {
   expect(done()).toBe(true);
 }
 
-it("reads the session from the SDK's auth client and refetches it", async () => {
+it("reads the session, refetches it, and stops watching after the last reader leaves", async () => {
+  // The session store unmounts a second after its last reader leaves
+  // (nanostores); held here, it runs when fired, while this file's window
+  // exists.
+  using storeUnmounts = holdTimers(1_000);
   // A fresh SDK, so another file's session store cannot answer first.
   configureHost({});
   const requests: string[] = [];
@@ -45,9 +49,25 @@ it("reads the session from the SDK's auth client and refetches it", async () => 
   });
   expect(requests).toEqual(["/api/auth/get-session", "/api/auth/get-session"]);
 
-  // The store stops watching the session (window listeners, other tabs) a
-  // second after its last reader leaves (nanostores' STORE_UNMOUNT_DELAY).
-  // Let that happen while this file's window exists, not in a later file.
-  await unmount();
-  await new Promise((resolve) => setTimeout(resolve, 1_050));
+  // Better Auth stops watching the session (focus, connectivity, other
+  // tabs) once the store unmounts, which the SDK's docs rely on: nothing to
+  // dispose.
+  const fromWindow = spyOn(window, "removeEventListener");
+  const fromDocument = spyOn(document, "removeEventListener");
+  try {
+    await unmount();
+    const watching = ["visibilitychange", "storage", "online", "offline"];
+    const stopped = () =>
+      new Set(
+        [...fromWindow.mock.calls, ...fromDocument.mock.calls]
+          .map(([type]) => type)
+          .filter((type) => watching.includes(type)),
+      );
+    expect(stopped()).toEqual(new Set());
+    await storeUnmounts.fire();
+    expect(stopped()).toEqual(new Set(watching));
+  } finally {
+    fromWindow.mockRestore();
+    fromDocument.mockRestore();
+  }
 });

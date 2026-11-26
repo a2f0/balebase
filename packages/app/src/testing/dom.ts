@@ -68,6 +68,13 @@ export function installDom({ globals, url }: DomOptions = {}) {
   const respond = installFetch();
 
   afterAll(async () => {
+    // Some libraries finish tearing down on a short timer after unmounting:
+    // TipTap destroys an editor, and removes its window listeners, 1 ms
+    // later. A timer due after theirs runs after them, so wait for one while
+    // the window still exists; otherwise that teardown runs in the next
+    // file, with no window. Longer delays, such as a nanostores store's 1 s
+    // unmount, need `holdTimers` in the file that starts them.
+    await new Promise((resolve) => setTimeout(resolve, 5));
     for (const [key, descriptor] of saved) {
       if (descriptor) Object.defineProperty(globalThis, key, descriptor);
       else Reflect.deleteProperty(globalThis, key);
