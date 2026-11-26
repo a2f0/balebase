@@ -49,9 +49,17 @@ export interface SavedSignIn {
 
 let host: AppHost = {};
 
-/** Set once by renderApp before the first render. */
+/**
+ * Set once by renderApp before the first render. The app's SDK
+ * (`balebase.ts`) is made from it.
+ */
 export function configureHost(next: AppHost) {
   host = next;
+}
+
+/** The host the shell configured, or an empty one in a browser test. */
+export function appHost() {
+  return host;
 }
 
 /** The native shell's services, or undefined in a browser. */

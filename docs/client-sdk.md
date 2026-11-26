@@ -71,8 +71,9 @@ Inside `packages/app`, use the app's one SDK, `balebase()` from
 `src/balebase.ts`, rather than making another: `balebase().api` for routes,
 `balebase().fetch` for API files outside them, `balebase().network` for
 connectivity, and `balebase().apiVersion` for the version the API last
-reported. `renderApp` builds it from the shell's host with `startBalebase`
-before the first render; until then, as in tests, it is a browser's.
+reported. It is made from the host `configureHost` set, which `renderApp`
+does before the first render, and is made again if the host changes; until a
+shell configures one, as in tests, it is a browser's.
 
 The native shell supplies its host in `packages/app-capacitor/src/host.ts`
 and enables `CapacitorHttp` in `capacitor.config.ts`. The host's

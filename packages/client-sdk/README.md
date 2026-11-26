@@ -14,7 +14,8 @@ const { user } = await balebase.api.session.me();
 ```
 
 With no options, requests go to the page's own origin through the global
-`fetch`, and connectivity comes from the browser.
+`fetch`, and connectivity comes from the browser. Outside a browser there is
+no page origin, so set `apiBaseUrl`.
 
 ## Options
 

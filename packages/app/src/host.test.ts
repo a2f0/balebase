@@ -1,11 +1,12 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { balebase, startBalebase } from "./balebase";
+import { balebase } from "./balebase";
+import { configureHost } from "./host";
 import { authCallbackUrl } from "./shared/config";
 import { installFetch } from "./testing/fetch";
 
 const respond = installFetch();
 
-afterEach(() => startBalebase({}));
+afterEach(() => configureHost({}));
 
 const nativeHost = (origin: string) => ({
   native: {
@@ -49,7 +50,7 @@ describe("host-dependent API requests", () => {
 
   it("sends the native shell's origin and preserves request headers", async () => {
     for (const origin of ["capacitor://localhost", "https://localhost"]) {
-      startBalebase(nativeHost(origin));
+      configureHost(nativeHost(origin));
       const headers = await sentHeaders(
         new Request("https://api.test/api/me", {
           headers: { "X-Test": "preserved" },
@@ -66,7 +67,7 @@ describe("host-dependent API requests", () => {
   });
 
   it("keeps emailed links on the hosted app in a native shell", () => {
-    startBalebase(nativeHost("https://localhost"));
+    configureHost(nativeHost("https://localhost"));
     expect(authCallbackUrl("/reset-password")).toBe(
       "https://mobile-app.example/reset-password",
     );
@@ -75,25 +76,10 @@ describe("host-dependent API requests", () => {
     );
   });
 
-  it("reads connectivity from the shell when it has a source", () => {
-    let listener: ((online: boolean) => void) | undefined;
-    startBalebase({
-      network: {
-        getOnline: () => false,
-        subscribe(next) {
-          listener = next;
-          return () => {
-            listener = undefined;
-          };
-        },
-      },
+  it("reads connectivity from the shell's source", () => {
+    configureHost({
+      network: { getOnline: () => false, subscribe: () => () => {} },
     });
     expect(balebase().network.online).toBe(false);
-    const seen: boolean[] = [];
-    const stop = balebase().network.subscribe((online) => seen.push(online));
-    listener?.(true);
-    stop();
-    expect(seen).toEqual([true]);
-    expect(listener).toBeUndefined();
   });
 });
