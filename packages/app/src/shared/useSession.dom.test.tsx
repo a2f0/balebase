@@ -26,7 +26,7 @@ async function until(done: () => boolean) {
   expect(done()).toBe(true);
 }
 
-it("reads the session from the SDK's auth client and refetches it", async () => {
+it("reads the session, refetches it, and stops watching after the last reader leaves", async () => {
   // The session store unmounts a second after its last reader leaves
   // (nanostores); held here, it runs when fired, while this file's window
   // exists.
@@ -49,20 +49,25 @@ it("reads the session from the SDK's auth client and refetches it", async () => 
   });
   expect(requests).toEqual(["/api/auth/get-session", "/api/auth/get-session"]);
 
-  // Better Auth stops watching the session (other tabs, connectivity) once
-  // the store unmounts, which the SDK's docs rely on: nothing to dispose.
-  const removed = spyOn(window, "removeEventListener");
+  // Better Auth stops watching the session (focus, connectivity, other
+  // tabs) once the store unmounts, which the SDK's docs rely on: nothing to
+  // dispose.
+  const fromWindow = spyOn(window, "removeEventListener");
+  const fromDocument = spyOn(document, "removeEventListener");
   try {
     await unmount();
-    const watching = ["storage", "online", "offline"];
+    const watching = ["visibilitychange", "storage", "online", "offline"];
     const stopped = () =>
-      removed.mock.calls
-        .map(([type]) => type)
-        .filter((type) => watching.includes(type));
-    expect(stopped()).toEqual([]);
+      new Set(
+        [...fromWindow.mock.calls, ...fromDocument.mock.calls]
+          .map(([type]) => type)
+          .filter((type) => watching.includes(type)),
+      );
+    expect(stopped()).toEqual(new Set());
     await storeUnmounts.fire();
-    expect(stopped().sort()).toEqual(["offline", "online", "storage"]);
+    expect(stopped()).toEqual(new Set(watching));
   } finally {
-    removed.mockRestore();
+    fromWindow.mockRestore();
+    fromDocument.mockRestore();
   }
 });
