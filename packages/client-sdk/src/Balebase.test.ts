@@ -71,6 +71,24 @@ describe("API requests", () => {
     expect(sent).toEqual(["Bearer tlk_test_key", "Bearer tlk_test_key", null]);
   });
 
+  it("sends no key to a page's own origin when the API is elsewhere", async () => {
+    // `fetch` resolves a relative URL against the page, not the API.
+    const sent: (string | null)[] = [];
+    await onPage("https://app.test", async () => {
+      const balebase = new Balebase({
+        apiBaseUrl,
+        apiKey: "tlk_test_key",
+        fetch: async (_input, init) => {
+          sent.push(new Headers(init?.headers).get("Authorization"));
+          return Response.json({});
+        },
+      });
+      await balebase.fetch("/api/me");
+      await balebase.fetch("https://api.test/api/me");
+    });
+    expect(sent).toEqual([null, "Bearer tlk_test_key"]);
+  });
+
   it("refuses a blank API key, such as an environment variable set empty", () => {
     for (const apiKey of ["", "  "]) {
       expect(() => new Balebase({ apiBaseUrl, apiKey })).toThrow(
@@ -150,6 +168,7 @@ describe("API requests", () => {
         headers: { "X-Test": "preserved" },
       }),
     );
+    // Better Auth's routes are session-only, so they never get the key.
     await balebase.auth.getSession();
     // A request that names its own credentials keeps them.
     await balebase.fetch("https://api.test/api/me", {
@@ -162,7 +181,7 @@ describe("API requests", () => {
     expect(sent.map(({ headers }) => headers.get("Authorization"))).toEqual([
       "Bearer tlk_test_key",
       "Bearer tlk_test_key",
-      "Bearer tlk_test_key",
+      null,
       "Bearer tlk_other_key",
       null,
       null,

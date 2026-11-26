@@ -33,7 +33,7 @@ export function createApiFetch(options: ApiFetchOptions): ApiFetch {
       if (
         apiKey !== undefined &&
         !headers.has("Authorization") &&
-        originOf(input, apiKey.origin) === apiKey.origin
+        originOf(input) === apiKey.origin
       )
         headers.set("Authorization", `Bearer ${apiKey.value}`);
       // Request strips the forbidden Origin header before Capacitor forwards
@@ -50,11 +50,17 @@ export function createApiFetch(options: ApiFetchOptions): ApiFetch {
   };
 }
 
-/** The origin `input` goes to, resolving a relative URL against `base`. */
-function originOf(input: RequestInfo | URL, base: string) {
+/**
+ * The origin `input` goes to. `fetch` resolves a relative URL against the
+ * page; outside one, it cannot send it at all.
+ */
+function originOf(input: RequestInfo | URL) {
   const url = input instanceof Request ? input.url : input;
   try {
-    return new URL(url, base).origin;
+    return new URL(
+      url,
+      typeof location === "undefined" ? undefined : location.href,
+    ).origin;
   } catch {
     return undefined;
   }

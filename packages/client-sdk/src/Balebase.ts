@@ -35,6 +35,7 @@ export class Balebase {
   readonly offline: Offline;
   readonly #apiBaseUrl: string;
   #auth: BalebaseAuthClient | undefined;
+  readonly #authFetch: ApiFetch;
 
   constructor(options: BalebaseOptions = {}) {
     // One spelling, since saved data on the device is keyed by it.
@@ -52,7 +53,13 @@ export class Balebase {
     const { apiKey } = options;
     if (apiKey !== undefined && !apiKey.trim())
       throw new Error("apiKey is blank: pass an API key, or leave it unset.");
+    const transport = {
+      apiVersion: this.apiVersion,
+      fetch: options.fetch,
+      nativeOrigin: options.nativeOrigin,
+    };
     this.fetch = createApiFetch({
+      ...transport,
       apiKey:
         apiKey === undefined
           ? undefined
@@ -61,10 +68,9 @@ export class Balebase {
               origin: new URL(apiBaseUrl || location.origin).origin,
               value: apiKey,
             },
-      apiVersion: this.apiVersion,
-      fetch: options.fetch,
-      nativeOrigin: options.nativeOrigin,
     });
+    // Better Auth's routes are session-only, so they never get the key.
+    this.#authFetch = createApiFetch({ ...transport, apiKey: undefined });
     this.#apiBaseUrl = apiBaseUrl;
     this.api = new ApiClient({ baseUrl: apiBaseUrl, fetch: this.fetch });
     this.financeCache = new FinanceCache(apiBaseUrl);
@@ -79,12 +85,14 @@ export class Balebase {
 
   /**
    * The Better Auth client: sign-in, sessions, two-factor, and
-   * organizations. Made on first use. It watches the session (focus,
+   * organizations. Made on first use; its requests mark a native shell and
+   * record the API version like `fetch`, but never carry `apiKey`, since
+   * those routes are session-only. It watches the session (focus,
    * connectivity, other tabs) only while something reads `useSession`;
    * Better Auth stops that shortly after the last reader leaves.
    */
   get auth(): BalebaseAuthClient {
-    this.#auth ??= createBalebaseAuthClient(this.#apiBaseUrl, this.fetch);
+    this.#auth ??= createBalebaseAuthClient(this.#apiBaseUrl, this.#authFetch);
     return this.#auth;
   }
 }

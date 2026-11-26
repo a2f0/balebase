@@ -175,7 +175,7 @@ it("ends requests when the caller's signal aborts, keeping each timeout", async 
   const left = hanging.withSignal(leaving.signal).call(endpoints.list);
   leaving.abort();
   await expect(left).rejects.toHaveProperty("name", "AbortError");
-  // Aborted before a call, the signal ends it before anything is sent.
+  // Aborted before a call, the signal ends it at once.
   await expect(
     hanging.withSignal(leaving.signal).call(endpoints.list),
   ).rejects.toHaveProperty("name", "AbortError");
