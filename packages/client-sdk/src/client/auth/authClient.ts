@@ -6,7 +6,7 @@ import {
   organizationClient,
   twoFactorClient,
 } from "better-auth/client/plugins";
-import type { ApiFetch } from "../runtime/apiFetch";
+import { type ApiFetch, authRoutes } from "../runtime/apiFetch";
 
 /**
  * The Better Auth client for the API's auth routes, with the plugins the API
@@ -18,7 +18,7 @@ export function createBalebaseAuthClient(apiBaseUrl: string, fetch: ApiFetch) {
     // Without an origin, Better Auth uses the page's, as the API client does.
     // Better Auth takes a base URL with a path as its whole route prefix, so
     // a proxy's path must come with the auth routes' own.
-    baseURL: apiBaseUrl ? `${apiBaseUrl}/api/auth` : undefined,
+    baseURL: apiBaseUrl ? `${apiBaseUrl}${authRoutes}` : undefined,
     fetchOptions: {
       customFetchImpl: (input, init) => fetch(input, init),
     },

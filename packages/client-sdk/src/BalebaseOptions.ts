@@ -16,12 +16,17 @@ export interface BalebaseOptions {
   apiBaseUrl?: string | undefined;
   /**
    * An organization API key, for scripts and servers that have no browser
-   * session. It is sent as a bearer token with every request to the API's
-   * origin, never another host's, except the requests the `auth` client
-   * makes, since Better Auth's routes are session-only. It needs an https
-   * `apiBaseUrl` (or http to this machine). The key's access and the routes
-   * API keys may reach still apply. It is a secret: never put one in a page
-   * or an app others can open.
+   * session. It is sent as a bearer token with every request under
+   * `apiBaseUrl` (its origin and any proxy path). The SDK never sends it to
+   * another host or path, or to Better Auth's session-only routes at the
+   * base's `/api/auth`, as the API or a proxy that decodes paths reads them
+   * (where the API ignores or refuses a key anyway). A redirect is the
+   * transport's to follow, though: `fetch` keeps the header on one within
+   * the API's origin, wherever it leads, and drops it on one to another
+   * origin. It needs an https `apiBaseUrl` (or http to this machine); a page
+   * not served over http(s), such as a file:// page, must set one. The key's
+   * access and the routes API keys may reach still apply. It is a secret:
+   * never put one in a page or an app others can open.
    */
   apiKey?: string | undefined;
   /**
