@@ -47,7 +47,8 @@ export class Balebase {
     }
     if (apiBaseUrl && !isApiBase(apiBaseUrl)) {
       throw new Error(
-        `apiBaseUrl must be an http(s) URL with no query or credentials, such as https://api.balebase.com, not "${apiBaseUrl}".`,
+        // Not echoed: the value may hold credentials.
+        "apiBaseUrl must be an http(s) URL with no query or credentials, such as https://api.balebase.com.",
       );
     }
     // A key read from a file can end in a newline, which no header allows.

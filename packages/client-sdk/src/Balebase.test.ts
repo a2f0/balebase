@@ -121,6 +121,10 @@ describe("API requests", () => {
         "apiBaseUrl must be an http(s) URL with no query or credentials",
       );
     }
+    // The message leaves the value out, since it may hold a password.
+    expect(
+      () => new Balebase({ apiBaseUrl: "https://user:secret@api.test" }),
+    ).toThrow(/^apiBaseUrl must be (?!.*secret)/);
   });
 
   it("keeps an API base's path and spelling, which key saved data", async () => {
