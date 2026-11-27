@@ -472,8 +472,9 @@ dependency changes before pushing them.
 
 The skills in `.claude/skills` and `.agents/skills` are installed from the
 pinned `@a2f0/agent-tool` package; do not edit them. The pinned package also
-generates the Claude Code and Codex permission rules in `.claude/settings.json`
-and `.codex/rules/agent-tool.rules` from the `permissions` section of
+generates the Claude Code, Codex, and Gemini CLI permission rules in
+`.claude/settings.json`, `.codex/rules/agent-tool.rules`, and
+`.gemini/policies/agent-tool.toml` from the `permissions` section of
 `agent-tool.json`; do not edit those rules either. After changing the pin or
 that section, run `bun run agents:sync` and commit the lockfile, skills,
 permission rules, `.agent-tool-skills.json`, and `.agent-tool-permissions.json`
