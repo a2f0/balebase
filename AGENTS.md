@@ -62,12 +62,12 @@ status columns (job runs, Plaid items, contracts and recipients) change only
 through conditional `UPDATE ... WHERE status = <from>` writes; keep new ones so.
 
 The skills in `.claude/skills` and `.agents/skills`, and the permission rules
-in `.claude/settings.json` and `.codex/rules/agent-tool.rules`, come from the
-pinned `@a2f0/agent-tool`; do not edit them. Classify the executables agents
-run through `agent-tool bun x` in `permissions.executables` in
-`agent-tool.json` instead. After changing the pin or that section, run
-`bun run agents:sync` and commit the lockfile, skills, permission rules, and
-their manifests together.
+in `.claude/settings.json`, `.codex/rules/agent-tool.rules`, and
+`.gemini/policies/agent-tool.toml`, come from the pinned `@a2f0/agent-tool`; do
+not edit them. Classify the executables agents run through `agent-tool bun x`
+in `permissions.executables` in `agent-tool.json` instead. After changing the
+pin or that section, run `bun run agents:sync` and commit the lockfile, skills,
+permission rules, and their manifests together.
 
 The managed `audit-trails`, `app-store-readiness`, and `seo-optimization`
 skills keep Balebase's own detail in its docs, not in the installed copies. An
